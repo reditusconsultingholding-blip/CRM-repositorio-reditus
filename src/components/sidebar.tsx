@@ -38,10 +38,12 @@ export function Sidebar({
   role,
   name,
   userId,
+  avatarUrl,
 }: {
   role: UserRole;
   name: string;
   userId: string;
+  avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
   const links = ALL_LINKS.filter((l) => !l.roles || (l.roles as readonly string[]).includes(role));
@@ -94,9 +96,24 @@ export function Sidebar({
         {role === "ceo" && <RentabilidadWidget />}
 
         <div className="flex items-center justify-between gap-2">
-          <Link href="/perfil" className="min-w-0 leading-tight hover:opacity-80">
-            <p className="truncate text-sm font-medium">{name}</p>
-            <p className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</p>
+          <Link href="/perfil" className="flex min-w-0 items-center gap-2 hover:opacity-80">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarUrl} alt={name} className="size-8 shrink-0 rounded-full object-cover" />
+            ) : (
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+                {name
+                  .split(" ")
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </span>
+            )}
+            <span className="min-w-0 leading-tight">
+              <p className="truncate text-sm font-medium">{name}</p>
+              <p className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</p>
+            </span>
           </Link>
           <NotificationBell userId={userId} />
         </div>

@@ -27,7 +27,9 @@ type RequerimientoRow = {
   nombre_producto: string | null;
   pais_acento: string | null;
   f_entrega_prometida: string | null;
+  programador_id: string | null;
   encargado: { name: string } | null;
+  programador: { name: string } | null;
 };
 
 export default async function RequerimientosPage() {
@@ -37,12 +39,19 @@ export default async function RequerimientosPage() {
     supabase
       .from("requerimientos")
       .select(
-        "id, pipeline, estado, nombre_producto, pais_acento, f_entrega_prometida, encargado:users(name)",
+        "id, pipeline, estado, nombre_producto, pais_acento, f_entrega_prometida, programador_id, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name)",
       )
       .order("created_at", { ascending: false })
       .returns<RequerimientoRow[]>(),
     supabase.from("users").select("id, name").eq("active", true).order("name"),
   ]);
+
+  // Cola del Programador: landing pages listas para publicar o ya con
+  // programador asignado — no es un pipeline nuevo en la base de datos,
+  // es una vista filtrada del pipeline "landing" para ese rol específico.
+  const programadorRows = (requerimientos ?? []).filter(
+    (r) => r.pipeline === "landing" && (r.estado === "Por subir" || r.programador_id != null),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -55,6 +64,7 @@ export default async function RequerimientosPage() {
               {p.label}
             </TabsTrigger>
           ))}
+          <TabsTrigger value="programador">Programador</TabsTrigger>
         </TabsList>
 
         {PIPELINES.map((p) => {
@@ -114,6 +124,57 @@ export default async function RequerimientosPage() {
             </TabsContent>
           );
         })}
+
+        <TabsContent value="programador" className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Landing pages en &quot;Por subir&quot; o ya asignadas a un programador.
+          </p>
+          <div className="overflow-x-auto rounded-md border bg-background">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Diseñadora</TableHead>
+                  <TableHead>Programador</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {programadorRows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.nombre_producto}</TableCell>
+                    <TableCell>{row.encargado?.name ?? "—"}</TableCell>
+                    <TableCell>{row.programador?.name ?? "Sin asignar"}</TableCell>
+                    <TableCell>
+                      <EstadoSelect
+                        value={row.estado as RequerimientoEstado}
+                        estados={REQUERIMIENTO_ESTADOS}
+                        colors={REQUERIMIENTO_ESTADO_COLORS}
+                        onChange={updateRequerimientoEstado.bind(null, row.id)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/requerimientos/${row.id}`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Ver
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {programadorRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      Nada pendiente de publicar por ahora.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   );

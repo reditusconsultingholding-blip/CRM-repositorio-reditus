@@ -12,6 +12,9 @@ export type Profile = {
   email: string;
   role: UserRole;
   active: boolean;
+  avatar_url: string | null;
+  birthdate: string | null;
+  phone: string | null;
 };
 
 /** Server-side helper: returns the signed-in user's profile or redirects to /login. */
@@ -25,7 +28,7 @@ export async function requireProfile(): Promise<Profile> {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("id, name, email, role, active")
+    .select("id, name, email, role, active, avatar_url, birthdate, phone")
     .eq("id", user.id)
     .single();
 

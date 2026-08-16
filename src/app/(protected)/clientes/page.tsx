@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getUsdCopRate } from "@/lib/ceo-report";
 import {
   Table,
   TableBody,
@@ -14,19 +15,26 @@ function fmtUsd(n: number) {
   return n.toLocaleString("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 }
 
+function fmtCop(n: number) {
+  return `${Math.round(n).toLocaleString("es-CO")} COP`;
+}
+
 export default async function ClientesPage() {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) redirect("/dashboard");
 
   const supabase = await createClient();
 
-  const [{ data: clients }, { data: ingresos }, { data: historicos }] = await Promise.all([
+  const [{ data: clients }, { data: ingresos }, { data: historicos }, usdCop] = await Promise.all([
     supabase.from("clients").select("id, name, whatsapp_number, country, tax_id").order("name"),
     supabase.from("ingresos").select("client_id, precio_final_descuento"),
     // Puede no existir todavía si la migración 0002b/histórica no se ha corrido —
     // se maneja con gracia en vez de romper la página.
     supabase.from("historical_ingresos").select("client_id, precio_usd_aprox"),
+    getUsdCopRate(),
   ]);
+
+  const rateCop = usdCop ?? 4000;
 
   const actualByClient = new Map<string, { total: number; count: number }>();
   for (const r of ingresos ?? []) {
@@ -70,7 +78,8 @@ export default async function ClientesPage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Base de datos de clientes</h1>
         <p className="text-sm text-muted-foreground">
-          {rows.length} clientes · {fmtUsd(granTotal)} en gasto total (actual + histórico)
+          {rows.length} clientes · {fmtUsd(granTotal)} · {fmtCop(granTotal * rateCop)} en gasto total (actual +
+          histórico)
         </p>
       </div>
 
@@ -104,8 +113,14 @@ export default async function ClientesPage() {
                 <TableCell>{r.pedidosActuales}</TableCell>
                 <TableCell>{fmtUsd(r.gastoActual)}</TableCell>
                 <TableCell>{r.pedidosHistoricos}</TableCell>
-                <TableCell>{fmtUsd(r.gastoHistorico)}</TableCell>
-                <TableCell className="font-semibold">{fmtUsd(r.gastoTotal)}</TableCell>
+                <TableCell>
+                  <div>{fmtUsd(r.gastoHistorico)}</div>
+                  <div className="text-xs text-muted-foreground">{fmtCop(r.gastoHistorico * rateCop)}</div>
+                </TableCell>
+                <TableCell className="font-semibold">
+                  <div>{fmtUsd(r.gastoTotal)}</div>
+                  <div className="text-xs font-normal text-muted-foreground">{fmtCop(r.gastoTotal * rateCop)}</div>
+                </TableCell>
               </TableRow>
             ))}
             {rows.length === 0 && (

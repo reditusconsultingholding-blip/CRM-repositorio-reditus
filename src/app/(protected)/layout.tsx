@@ -10,7 +10,7 @@ export default async function ProtectedLayout({
 
   return (
     <div className="flex min-h-screen w-full">
-      <Sidebar role={profile.role} name={profile.name} userId={profile.id} />
+      <Sidebar role={profile.role} name={profile.name} userId={profile.id} avatarUrl={profile.avatar_url} />
       <main className="mx-auto w-full max-w-6xl flex-1 p-6">{children}</main>
     </div>
   );

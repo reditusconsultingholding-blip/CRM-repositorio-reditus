@@ -10,7 +10,7 @@ export default async function ChatPage() {
     supabase.from("chat_channels").select("id, slug, name").order("name"),
     supabase
       .from("users")
-      .select("id, name")
+      .select("id, name, avatar_url")
       .eq("active", true)
       .neq("id", profile.id)
       .order("name"),
