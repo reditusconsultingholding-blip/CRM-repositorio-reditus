@@ -1,0 +1,6 @@
+-- DEPRECATED — este archivo se dividió en dos porque Postgres no permite
+-- usar un valor de enum recién agregado (ALTER TYPE ... ADD VALUE) en la
+-- misma transacción en que se agrega ("unsafe use of new value").
+-- Usar en su lugar, en este orden:
+--   1. 0003a_programador_role.sql
+--   2. 0003b_items_chat.sql

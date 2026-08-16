@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { IngresoEstado, EstadoPago } from "@/lib/statuses";
 
+type ItemInput = {
+  servicio: string;
+  producto: string;
+  cantidad: number;
+  precio_unitario: number;
+};
+
 export async function createIngreso(formData: FormData) {
   const supabase = await createClient();
 
@@ -14,6 +21,30 @@ export async function createIngreso(formData: FormData) {
 
   if (!whatsappNumber || !clientName) {
     throw new Error("Número de WhatsApp y nombre del cliente son obligatorios.");
+  }
+
+  // Servicios combinados: una o varias líneas (ej. 10 landing pages + 10
+  // videos en un mismo pedido, cada una con su propio precio).
+  let items: ItemInput[] = [];
+  try {
+    const raw = JSON.parse(String(formData.get("items_json") ?? "[]")) as unknown[];
+    items = (Array.isArray(raw) ? raw : [])
+      .map((it) => {
+        const o = it as Record<string, unknown>;
+        return {
+          servicio: String(o.servicio ?? "").trim(),
+          producto: String(o.producto ?? "").trim(),
+          cantidad: Number(o.cantidad) || 1,
+          precio_unitario: Number(o.precio_unitario) || 0,
+        };
+      })
+      .filter((it) => it.producto);
+  } catch {
+    items = [];
+  }
+
+  if (items.length === 0) {
+    throw new Error("Agrega al menos un servicio/producto al ingreso.");
   }
 
   // Find-or-create the client by WhatsApp number (the unique client identifier).
@@ -40,20 +71,39 @@ export async function createIngreso(formData: FormData) {
   }
 
   const responsableId = String(formData.get("responsable_id") ?? "") || null;
-  const cantidad = Number(formData.get("cantidad") ?? 1) || 1;
 
-  const { error } = await supabase.from("ingresos").insert({
-    client_id: clientId,
-    servicio: String(formData.get("servicio") ?? "") || null,
-    pais: country,
-    producto: String(formData.get("producto") ?? "") || null,
-    cantidad,
-    precio_total: Number(formData.get("precio_total") ?? 0) || null,
-    precio_final_descuento: Number(formData.get("precio_final_descuento") ?? 0) || null,
-    responsable_id: responsableId,
-  });
+  const cantidadTotal = items.reduce((sum, it) => sum + it.cantidad, 0);
+  const precioTotal = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
+  const precioFinalOverride = Number(formData.get("precio_final_descuento") ?? 0) || null;
+
+  const { data: ingreso, error } = await supabase
+    .from("ingresos")
+    .insert({
+      client_id: clientId,
+      servicio: items.map((it) => it.servicio).filter(Boolean).join(", ") || null,
+      pais: country,
+      producto: items.map((it) => it.producto).join(", ") || null,
+      cantidad: cantidadTotal,
+      precio_total: precioTotal,
+      precio_final_descuento: precioFinalOverride ?? precioTotal,
+      responsable_id: responsableId,
+    })
+    .select("id")
+    .single();
 
   if (error) throw new Error(error.message);
+
+  const { error: itemsError } = await supabase.from("ingreso_items").insert(
+    items.map((it) => ({
+      ingreso_id: ingreso.id,
+      servicio: it.servicio || null,
+      producto: it.producto,
+      cantidad: it.cantidad,
+      precio_unitario: it.precio_unitario,
+    })),
+  );
+
+  if (itemsError) throw new Error(itemsError.message);
 
   revalidatePath("/ingresos");
 }

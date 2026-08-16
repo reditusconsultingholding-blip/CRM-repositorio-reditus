@@ -7,7 +7,8 @@ export type UserRole =
   | "gerente_comercial"
   | "directora_operativa"
   | "editor_video"
-  | "disenador_landing";
+  | "disenador_landing"
+  | "programador";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   ceo: "CEO",
@@ -15,6 +16,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   directora_operativa: "Directora Operativa",
   editor_video: "Editor de Video",
   disenador_landing: "Diseñador de Landing",
+  programador: "Programador",
 };
 
 export const INGRESOS_ROLES: UserRole[] = ["ceo", "gerente_comercial"];

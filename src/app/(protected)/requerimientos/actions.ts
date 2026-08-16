@@ -80,6 +80,66 @@ export async function updateRequerimientoEstado(id: string, estado: Requerimient
     }
   }
 
+  if (estado === "Por subir") {
+    const { data: req } = await supabase
+      .from("requerimientos")
+      .select("nombre_producto, pipeline, programador_id")
+      .eq("id", id)
+      .single();
+
+    if (req?.pipeline === "landing") {
+      if (req.programador_id) {
+        await notify(
+          supabase,
+          req.programador_id,
+          "asignado",
+          `Lista para subir: ${req.nombre_producto ?? "landing page"}`,
+          `/requerimientos/${id}`,
+        );
+      } else {
+        const { data: programadores } = await supabase
+          .from("users")
+          .select("id")
+          .eq("role", "programador")
+          .eq("active", true);
+
+        for (const p of programadores ?? []) {
+          await notify(
+            supabase,
+            p.id,
+            "asignado",
+            `Lista para subir: ${req.nombre_producto ?? "landing page"}`,
+            `/requerimientos/${id}`,
+          );
+        }
+      }
+    }
+  }
+
+  revalidatePath("/requerimientos");
+  revalidatePath(`/requerimientos/${id}`);
+}
+
+export async function assignProgramador(id: string, programadorId: string) {
+  const supabase = await createClient();
+
+  const { data: req, error } = await supabase
+    .from("requerimientos")
+    .update({ programador_id: programadorId })
+    .eq("id", id)
+    .select("nombre_producto")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  await notify(
+    supabase,
+    programadorId,
+    "asignado",
+    `Se te asignó para subir: ${req?.nombre_producto ?? "requerimiento"}`,
+    `/requerimientos/${id}`,
+  );
+
   revalidatePath("/requerimientos");
   revalidatePath(`/requerimientos/${id}`);
 }

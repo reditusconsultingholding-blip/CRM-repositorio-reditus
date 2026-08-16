@@ -3,8 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { updateRequerimientoEstado } from "../actions";
 import { EstadoSelect } from "@/components/estado-select";
 import { AssignSelect } from "@/components/requerimientos/assign-select";
+import { ProgramadorSelect } from "@/components/requerimientos/programador-select";
+import { NextPhaseButton } from "@/components/requerimientos/next-phase-button";
 import { CommentForm } from "@/components/requerimientos/comment-form";
-import { REQUERIMIENTO_ESTADOS, REQUERIMIENTO_ESTADO_COLORS, type RequerimientoEstado } from "@/lib/statuses";
+import {
+  REQUERIMIENTO_ESTADOS,
+  REQUERIMIENTO_ESTADO_COLORS,
+  getNextEstado,
+  type RequerimientoEstado,
+} from "@/lib/statuses";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
@@ -24,32 +31,47 @@ export default async function RequerimientoDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: requerimiento }, { data: users }, { data: comments }] = await Promise.all([
-    supabase.from("requerimientos").select("*").eq("id", id).single(),
-    supabase.from("users").select("id, name").eq("active", true).order("name"),
-    supabase
-      .from("requerimiento_comments")
-      .select(
-        "id, body, created_at, author:users!requerimiento_comments_author_id_fkey(name), mentioned:users!requerimiento_comments_mentioned_user_id_fkey(name)",
-      )
-      .eq("requerimiento_id", id)
-      .order("created_at", { ascending: true })
-      .returns<CommentRow[]>(),
-  ]);
+  const [{ data: requerimiento }, { data: users }, { data: programadores }, { data: comments }] =
+    await Promise.all([
+      supabase.from("requerimientos").select("*").eq("id", id).single(),
+      supabase.from("users").select("id, name").eq("active", true).order("name"),
+      supabase
+        .from("users")
+        .select("id, name")
+        .eq("active", true)
+        .eq("role", "programador")
+        .order("name"),
+      supabase
+        .from("requerimiento_comments")
+        .select(
+          "id, body, created_at, author:users!requerimiento_comments_author_id_fkey(name), mentioned:users!requerimiento_comments_mentioned_user_id_fkey(name)",
+        )
+        .eq("requerimiento_id", id)
+        .order("created_at", { ascending: true })
+        .returns<CommentRow[]>(),
+    ]);
 
   if (!requerimiento) notFound();
+
+  const nextEstado = getNextEstado(
+    requerimiento.pipeline as "video" | "landing",
+    requerimiento.estado as RequerimientoEstado,
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <Card className="lg:col-span-2">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>{requerimiento.nombre_producto}</CardTitle>
-          <EstadoSelect
-            value={requerimiento.estado as RequerimientoEstado}
-            estados={REQUERIMIENTO_ESTADOS}
-            colors={REQUERIMIENTO_ESTADO_COLORS}
-            onChange={updateRequerimientoEstado.bind(null, id)}
-          />
+          <div className="flex items-center gap-2">
+            <NextPhaseButton requerimientoId={id} nextEstado={nextEstado} />
+            <EstadoSelect
+              value={requerimiento.estado as RequerimientoEstado}
+              estados={REQUERIMIENTO_ESTADOS}
+              colors={REQUERIMIENTO_ESTADO_COLORS}
+              onChange={updateRequerimientoEstado.bind(null, id)}
+            />
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           <p className="text-muted-foreground">{requerimiento.requerimiento_texto || "Sin descripción."}</p>
@@ -85,6 +107,16 @@ export default async function RequerimientoDetailPage({
                 people={users ?? []}
               />
             </div>
+            {requerimiento.pipeline === "landing" && (
+              <div>
+                <p className="text-xs text-muted-foreground">Programador (publica)</p>
+                <ProgramadorSelect
+                  requerimientoId={id}
+                  currentProgramadorId={requerimiento.programador_id ?? null}
+                  people={programadores ?? []}
+                />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

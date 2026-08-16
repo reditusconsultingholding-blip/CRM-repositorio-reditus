@@ -153,6 +153,13 @@ export type DocumentoIngreso = {
   created_at: string;
 };
 
+export type DocumentoItem = {
+  producto: string;
+  servicio: string | null;
+  cantidad: number;
+  precio_unitario: number;
+};
+
 export type DocumentoCliente = {
   name: string;
   tax_id: string | null;
@@ -162,10 +169,12 @@ export function DocumentoReditus({
   tipo,
   ingreso,
   cliente,
+  items,
 }: {
   tipo: DocumentoTipo;
   ingreso: DocumentoIngreso;
   cliente: DocumentoCliente;
+  items?: DocumentoItem[];
 }) {
   const isCuentaCobro = tipo === "cuenta_cobro";
   const fecha = new Date(ingreso.created_at);
@@ -173,10 +182,28 @@ export function DocumentoReditus({
   const mes = String(fecha.getMonth() + 1).padStart(2, "0");
   const dia = String(fecha.getDate()).padStart(2, "0");
 
-  const concepto = ingreso.producto || ingreso.servicio || "Servicio Reditus";
-  const total = ingreso.precio_final_descuento ?? 0;
-  const cantidad = ingreso.cantidad || 1;
-  const precioUnitario = cantidad > 0 ? total / cantidad : total;
+  // Ingresos con servicios combinados traen varias líneas (ingreso_items).
+  // Los ingresos antiguos (creados antes de esta función) no tienen filas en
+  // ingreso_items — para esos, se arma una sola línea con los campos legacy
+  // del ingreso.
+  const lineas: DocumentoItem[] =
+    items && items.length > 0
+      ? items
+      : [
+          {
+            producto: ingreso.producto || ingreso.servicio || "Servicio Reditus",
+            servicio: ingreso.servicio,
+            cantidad: ingreso.cantidad || 1,
+            precio_unitario:
+              (ingreso.cantidad || 1) > 0
+                ? (ingreso.precio_final_descuento ?? 0) / (ingreso.cantidad || 1)
+                : (ingreso.precio_final_descuento ?? 0),
+          },
+        ];
+
+  const total = items && items.length > 0
+    ? items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0)
+    : ingreso.precio_final_descuento ?? 0;
   const numeroConsecutivo = isCuentaCobro ? ingreso.cuenta_cobro_numero : ingreso.cotizacion_numero;
 
   return (
@@ -267,12 +294,16 @@ export function DocumentoReditus({
               <Text style={styles.tableHeaderCell}>Precio</Text>
               <Text style={styles.tableHeaderCell}>Total</Text>
             </View>
-            <View style={styles.tableRow}>
-              <Text style={styles.tableCell}>{concepto}</Text>
-              <Text style={styles.tableCell}>{cantidad}</Text>
-              <Text style={styles.tableCell}>{formatCOP(precioUnitario)}</Text>
-              <Text style={styles.tableCell}>{formatCOP(total)}</Text>
-            </View>
+            {lineas.map((linea, i) => (
+              <View key={i} style={styles.tableRow}>
+                <Text style={styles.tableCell}>{linea.producto}</Text>
+                <Text style={styles.tableCell}>{linea.cantidad}</Text>
+                <Text style={styles.tableCell}>{formatCOP(linea.precio_unitario)}</Text>
+                <Text style={styles.tableCell}>
+                  {formatCOP(linea.cantidad * linea.precio_unitario)}
+                </Text>
+              </View>
+            ))}
           </View>
 
           <Text style={styles.totalRow}>Total a pagar: {formatCOP(total)}</Text>

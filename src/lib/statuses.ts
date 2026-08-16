@@ -80,3 +80,30 @@ export const PIPELINES = [
 ] as const;
 
 export type Pipeline = (typeof PIPELINES)[number]["value"];
+
+// Secuencia "normal" de avance por pipeline, para el botón de "pasar a la
+// siguiente fase". No incluye los estados de excepción (Corregir, Sin nada,
+// POR CONFIRMAR, ESPERA INFO) — esos se siguen eligiendo a mano desde el
+// selector de estado.
+export const PIPELINE_FLOW: Record<Pipeline, RequerimientoEstado[]> = {
+  video: ["Nuevo pedido", "Asignado", "En progreso", "Por revisión", "Terminado", "ENTREGADO"],
+  landing: [
+    "Nuevo pedido",
+    "Asignado",
+    "En progreso",
+    "Por revisión",
+    "Por subir",
+    "Terminado",
+    "ENTREGADO",
+  ],
+};
+
+export function getNextEstado(
+  pipeline: Pipeline,
+  current: RequerimientoEstado,
+): RequerimientoEstado | null {
+  const flow = PIPELINE_FLOW[pipeline];
+  const idx = flow.indexOf(current);
+  if (idx === -1 || idx === flow.length - 1) return null;
+  return flow[idx + 1];
+}

@@ -22,13 +22,20 @@ export async function GET(
   }
 
   const supabase = await createClient();
-  const { data: ingreso, error } = await supabase
-    .from("ingresos")
-    .select(
-      "tracking_id, cantidad, servicio, producto, precio_final_descuento, cotizacion_numero, cuenta_cobro_numero, created_at, client:clients(name, tax_id)",
-    )
-    .eq("id", ingresoId)
-    .single();
+  const [{ data: ingreso, error }, { data: items }] = await Promise.all([
+    supabase
+      .from("ingresos")
+      .select(
+        "tracking_id, cantidad, servicio, producto, precio_final_descuento, cotizacion_numero, cuenta_cobro_numero, created_at, client:clients(name, tax_id)",
+      )
+      .eq("id", ingresoId)
+      .single(),
+    supabase
+      .from("ingreso_items")
+      .select("producto, servicio, cantidad, precio_unitario")
+      .eq("ingreso_id", ingresoId)
+      .order("created_at", { ascending: true }),
+  ]);
 
   if (error || !ingreso) {
     return NextResponse.json({ error: "Ingreso no encontrado." }, { status: 404 });
@@ -50,6 +57,7 @@ export async function GET(
       tipo: documentoTipo,
       ingreso,
       cliente: cliente ?? { name: "Cliente", tax_id: null },
+      items: items ?? [],
     }),
   );
 
