@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { notify } from "@/lib/notify";
+import { syncCalendlyBookings } from "@/lib/calendly";
 
 export const runtime = "nodejs";
 
@@ -82,6 +83,15 @@ export async function GET(request: NextRequest) {
       }
       tasks.push("nomina_lista");
     }
+  }
+
+  // Sincroniza reuniones agendadas en Calendly a /prospectos — no hace nada
+  // si CALENDLY_API_TOKEN no está configurado todavía.
+  try {
+    const synced = await syncCalendlyBookings();
+    if (synced) tasks.push(`calendly_sync:${synced.synced}`);
+  } catch (e) {
+    tasks.push(`calendly_sync_error:${e instanceof Error ? e.message.slice(0, 80) : "?"}`);
   }
 
   return NextResponse.json({ ok: true, pingedAt: now.toISOString(), tasks });

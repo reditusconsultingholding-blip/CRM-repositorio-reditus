@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Bot, Users } from "lucide-react";
+import { MessageCircle, Bot, Users, CalendarCheck } from "lucide-react";
 
 export default async function WhatsAppPage() {
   const profile = await requireProfile();
@@ -49,8 +50,26 @@ export default async function WhatsAppPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarCheck className="size-4" />
+            Ya listo: Prospectos + Calendly
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
+          <p>
+            Mientras se activa WhatsApp, el terreno ya está construido: cada vez que alguien agenda tu
+            &quot;Llamada Estratégica de Crecimiento Digital&quot; en Calendly, aparece automáticamente
+            en <Link href="/prospectos" className="text-primary hover:underline">Prospectos</Link>, con
+            sus 5 respuestas de calificación. El agente de ventas, cuando esté conectado, va a compartir
+            ese mismo link en vez de calificar todo por chat.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
             <MessageCircle className="size-4" />
-            Qué falta para activarlo
+            Qué falta para activar WhatsApp
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
@@ -62,7 +81,8 @@ export default async function WhatsAppPage() {
           <p>
             Apenas tengas esas credenciales, aquí se activa la bandeja de mensajes en tiempo real para
             ambos números, con el historial de conversación, asignación de responsables y el agente de
-            ventas siguiendo el protocolo de tu documento maestro.
+            ventas ya diseñado (<code>src/lib/whatsapp-agent.ts</code>) siguiendo el protocolo de tu
+            documento maestro.
           </p>
         </CardContent>
       </Card>

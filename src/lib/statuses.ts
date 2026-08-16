@@ -67,6 +67,24 @@ export const REQUERIMIENTO_ESTADO_COLORS: Record<RequerimientoEstado, string> = 
   "ESPERA INFO": "bg-neutral-800 text-white",
 };
 
+export const PROSPECTO_ESTADOS = [
+  "nuevo",
+  "calificando",
+  "agendado",
+  "calificado",
+  "descartado",
+  "convertido",
+] as const;
+export type ProspectoEstado = (typeof PROSPECTO_ESTADOS)[number];
+export const PROSPECTO_ESTADO_COLORS: Record<ProspectoEstado, string> = {
+  nuevo: "bg-yellow-300 text-yellow-950",
+  calificando: "bg-orange-300 text-orange-950",
+  agendado: "bg-indigo-300 text-indigo-950",
+  calificado: "bg-emerald-300 text-emerald-950",
+  descartado: "bg-neutral-300 text-neutral-700",
+  convertido: "bg-green-500 text-white",
+};
+
 export const ESTADOS_PAGO = ["Pendiente", "Pagado"] as const;
 export type EstadoPago = (typeof ESTADOS_PAGO)[number];
 export const ESTADO_PAGO_COLORS: Record<EstadoPago, string> = {
