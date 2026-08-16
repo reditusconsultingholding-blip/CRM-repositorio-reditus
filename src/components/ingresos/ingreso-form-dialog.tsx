@@ -71,6 +71,10 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
             <Input id="producto" name="producto" />
           </div>
           <div className="flex flex-col gap-2">
+            <Label htmlFor="cantidad">Cantidad</Label>
+            <Input id="cantidad" name="cantidad" type="number" min={1} step="1" defaultValue={1} />
+          </div>
+          <div className="flex flex-col gap-2">
             <Label htmlFor="precio_total">Precio total</Label>
             <Input id="precio_total" name="precio_total" type="number" step="0.01" />
           </div>
@@ -78,9 +82,9 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
             <Label htmlFor="precio_final_descuento">Precio final (con descuento)</Label>
             <Input id="precio_final_descuento" name="precio_final_descuento" type="number" step="0.01" />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="estado_pago">Estado de pago</Label>
-            <Input id="estado_pago" name="estado_pago" placeholder="Ej. Pagado, Pendiente" />
+          <div className="col-span-2 flex flex-col gap-2">
+            <Label htmlFor="client_tax_id">NIT o Cédula del cliente (opcional)</Label>
+            <Input id="client_tax_id" name="client_tax_id" placeholder="Para la cuenta de cobro/factura" />
           </div>
           <div className="col-span-2 flex flex-col gap-2">
             <Label>Responsable</Label>

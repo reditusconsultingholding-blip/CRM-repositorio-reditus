@@ -1,8 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
-import { updateIngresoEstado } from "./actions";
+import { updateIngresoEstado, updateEstadoPago } from "./actions";
 import { IngresoFormDialog } from "@/components/ingresos/ingreso-form-dialog";
 import { EstadoSelect } from "@/components/estado-select";
-import { INGRESO_ESTADOS, INGRESO_ESTADO_COLORS, type IngresoEstado } from "@/lib/statuses";
+import {
+  INGRESO_ESTADOS,
+  INGRESO_ESTADO_COLORS,
+  ESTADOS_PAGO,
+  ESTADO_PAGO_COLORS,
+  type IngresoEstado,
+  type EstadoPago,
+} from "@/lib/statuses";
 import {
   Table,
   TableBody,
@@ -22,7 +29,9 @@ type IngresoRow = {
   producto: string | null;
   precio_total: number | null;
   precio_final_descuento: number | null;
-  estado_pago: string | null;
+  estado_pago: EstadoPago;
+  cotizacion_numero: string | null;
+  cuenta_cobro_numero: string | null;
   client: { name: string; whatsapp_number: string } | null;
   responsable: { name: string } | null;
 };
@@ -34,7 +43,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, estado_pago, client:clients(name, whatsapp_number), responsable:users(name)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, estado_pago, cotizacion_numero, cuenta_cobro_numero, client:clients(name, whatsapp_number), responsable:users(name)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -62,6 +71,7 @@ export default async function IngresosPage() {
               <TableHead>Pago</TableHead>
               <TableHead>Responsable</TableHead>
               <TableHead>Estado</TableHead>
+              <TableHead>Documentos</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -83,7 +93,14 @@ export default async function IngresosPage() {
                       })
                     : "—"}
                 </TableCell>
-                <TableCell>{row.estado_pago ?? "—"}</TableCell>
+                <TableCell>
+                  <EstadoSelect
+                    value={row.estado_pago}
+                    estados={ESTADOS_PAGO}
+                    colors={ESTADO_PAGO_COLORS}
+                    onChange={updateEstadoPago.bind(null, row.id)}
+                  />
+                </TableCell>
                 <TableCell>{row.responsable?.name ?? "—"}</TableCell>
                 <TableCell>
                   <EstadoSelect
@@ -93,11 +110,30 @@ export default async function IngresosPage() {
                     onChange={updateIngresoEstado.bind(null, row.id)}
                   />
                 </TableCell>
+                <TableCell className="whitespace-nowrap text-xs">
+                  <a
+                    href={`/api/documentos/${row.id}/cotizacion`}
+                    className="text-primary hover:underline"
+                  >
+                    Cotización
+                  </a>
+                  {row.cuenta_cobro_numero && (
+                    <>
+                      {" · "}
+                      <a
+                        href={`/api/documentos/${row.id}/cuenta_cobro`}
+                        className="text-primary hover:underline"
+                      >
+                        Cuenta de cobro
+                      </a>
+                    </>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {(ingresos ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground">
+                <TableCell colSpan={11} className="text-center text-muted-foreground">
                   Todavía no hay ingresos registrados.
                 </TableCell>
               </TableRow>

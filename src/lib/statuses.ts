@@ -67,6 +67,13 @@ export const REQUERIMIENTO_ESTADO_COLORS: Record<RequerimientoEstado, string> = 
   "ESPERA INFO": "bg-neutral-800 text-white",
 };
 
+export const ESTADOS_PAGO = ["Pendiente", "Pagado"] as const;
+export type EstadoPago = (typeof ESTADOS_PAGO)[number];
+export const ESTADO_PAGO_COLORS: Record<EstadoPago, string> = {
+  Pendiente: "bg-amber-200 text-amber-950",
+  Pagado: "bg-green-300 text-green-950",
+};
+
 export const PIPELINES = [
   { value: "video", label: "Videos Creativos" },
   { value: "landing", label: "Landing Pages" },
