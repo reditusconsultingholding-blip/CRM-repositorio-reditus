@@ -16,6 +16,7 @@ import { signOut } from "@/app/(protected)/actions";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { CurrencyWidget } from "@/components/currency-widget";
+import { RentabilidadWidget } from "@/components/ceo/rentabilidad-widget";
 import { ROLE_LABELS, type UserRole } from "@/lib/roles";
 
 const ALL_LINKS = [
@@ -82,6 +83,7 @@ export function Sidebar({
 
       <div className="flex flex-col gap-3 border-t p-3">
         <CurrencyWidget />
+        {role === "ceo" && <RentabilidadWidget />}
 
         <div className="flex items-center justify-between gap-2">
           <Link href="/perfil" className="min-w-0 leading-tight hover:opacity-80">

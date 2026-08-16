@@ -26,3 +26,5 @@ create index if not exists idx_ingreso_items_ingreso_id on public.ingreso_items 
 
 create index if not exists idx_chat_messages_channel_created
   on public.chat_messages (channel_id, created_at);
+create index if not exists idx_chat_messages_dm
+  on public.chat_messages (author_id, recipient_id, created_at);

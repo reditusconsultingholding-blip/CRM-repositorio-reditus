@@ -29,10 +29,7 @@ export function CeoAssistant() {
 
     startTransition(async () => {
       try {
-        const reply = await askCeoAssistant(
-          next,
-          "Ver las cifras de rentabilidad semanal y mensual mostradas en este mismo panel (arriba).",
-        );
+        const reply = await askCeoAssistant(next);
         setMessages((prev) => [...prev, reply]);
       } catch (e) {
         setMessages((prev) => [

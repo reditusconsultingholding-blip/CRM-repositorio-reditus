@@ -1,15 +1,18 @@
 "use server";
 
 import { requireProfile } from "@/lib/auth";
+import { computeCeoReport, formatCeoReportText } from "@/lib/ceo-report";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
 const SYSTEM_PROMPT = `Eres el asistente de negocio privado del CEO de Reditus Consulting, una agencia
 de marketing en LatAm. Solo el CEO puede verte. Respondes en español, de forma directa y ejecutiva,
 sobre el estado del negocio, rentabilidad, nómina y equipo, usando los datos que se te dan en cada
-mensaje. Si no tienes un dato, dilo claramente en vez de inventarlo. Sé breve salvo que te pidan detalle.`;
+mensaje — esos datos se recalculan en vivo desde la base de datos justo antes de responderte, así que
+siempre reflejan el estado actual, no una foto vieja. Si no tienes un dato, dilo claramente en vez de
+inventarlo. Sé breve salvo que te pidan detalle.`;
 
-export async function askCeoAssistant(history: ChatMsg[], businessContext: string) {
+export async function askCeoAssistant(history: ChatMsg[]) {
   const profile = await requireProfile();
   if (profile.role !== "ceo") {
     throw new Error("Solo el CEO puede usar este asistente.");
@@ -24,6 +27,9 @@ export async function askCeoAssistant(history: ChatMsg[], businessContext: strin
     };
   }
 
+  const report = await computeCeoReport();
+  const businessContext = formatCeoReportText(report);
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -34,7 +40,7 @@ export async function askCeoAssistant(history: ChatMsg[], businessContext: strin
     body: JSON.stringify({
       model: "claude-sonnet-5",
       max_tokens: 1024,
-      system: `${SYSTEM_PROMPT}\n\nDatos actuales del negocio:\n${businessContext}`,
+      system: `${SYSTEM_PROMPT}\n\nDatos actuales del negocio (calculados justo ahora):\n${businessContext}`,
       messages: history.map((m) => ({ role: m.role, content: m.content })),
     }),
   });

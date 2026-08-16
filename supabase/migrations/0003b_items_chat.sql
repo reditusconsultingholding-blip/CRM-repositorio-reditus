@@ -43,12 +43,19 @@ insert into public.chat_channels (slug, name) values
   ('editores-landing', 'Editores de Landing'),
   ('programador', 'Programador');
 
+-- Un mensaje pertenece a un canal (channel_id) O es un mensaje directo entre
+-- dos usuarios (recipient_id) — nunca ambos ni ninguno.
 create table public.chat_messages (
   id uuid primary key default gen_random_uuid(),
-  channel_id uuid not null references public.chat_channels (id) on delete cascade,
+  channel_id uuid references public.chat_channels (id) on delete cascade,
+  recipient_id uuid references public.users (id),
   author_id uuid not null references public.users (id),
   body text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint chat_messages_target_check check (
+    (channel_id is not null and recipient_id is null) or
+    (channel_id is null and recipient_id is not null)
+  )
 );
 
 alter table public.chat_channels enable row level security;
@@ -57,9 +64,22 @@ alter table public.chat_messages enable row level security;
 create policy "chat_channels_select_all_authenticated" on public.chat_channels
   for select using (auth.uid() is not null);
 
-create policy "chat_messages_all_authenticated" on public.chat_messages
-  for all using (auth.uid() is not null)
-  with check (auth.uid() is not null);
+-- Mensajes de canal: cualquier autenticado los lee y escribe (canales
+-- públicos internos, como en Slack).
+create policy "chat_messages_channel_select" on public.chat_messages
+  for select using (channel_id is not null and auth.uid() is not null);
+
+create policy "chat_messages_channel_insert" on public.chat_messages
+  for insert with check (channel_id is not null and author_id = auth.uid());
+
+-- Mensajes directos: solo emisor y destinatario pueden verlos.
+create policy "chat_messages_dm_select" on public.chat_messages
+  for select using (
+    recipient_id is not null and (author_id = auth.uid() or recipient_id = auth.uid())
+  );
+
+create policy "chat_messages_dm_insert" on public.chat_messages
+  for insert with check (recipient_id is not null and author_id = auth.uid());
 
 -- Realtime for the chat (notifications table is already enabled from 0001).
 alter publication supabase_realtime add table public.chat_messages;

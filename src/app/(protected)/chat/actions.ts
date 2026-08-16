@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-export async function sendChatMessage(channelId: string, body: string) {
+export async function sendChannelMessage(channelId: string, body: string) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -21,6 +21,35 @@ export async function sendChatMessage(channelId: string, body: string) {
   });
 
   if (error) throw new Error(error.message);
+
+  revalidatePath("/chat");
+}
+
+export async function sendDirectMessage(recipientId: string, body: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("No autenticado.");
+
+  const text = body.trim();
+  if (!text) return;
+
+  const { error } = await supabase.from("chat_messages").insert({
+    recipient_id: recipientId,
+    author_id: user.id,
+    body: text,
+  });
+
+  if (error) throw new Error(error.message);
+
+  await supabase.from("notifications").insert({
+    user_id: recipientId,
+    type: "mensaje_directo",
+    title: "Tienes un mensaje nuevo",
+    link: "/chat",
+  });
 
   revalidatePath("/chat");
 }
