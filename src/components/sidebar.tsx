@@ -8,6 +8,9 @@ import {
   ClipboardList,
   Users,
   MessageSquare,
+  MessageCircle,
+  Contact,
+  HelpCircle,
   Crown,
   LogOut,
 } from "lucide-react";
@@ -25,7 +28,10 @@ const ALL_LINKS = [
   { href: "/ingresos", label: "Ingresos", icon: DollarSign, roles: ["ceo", "gerente_comercial"] },
   { href: "/requerimientos", label: "Requerimientos", icon: ClipboardList, roles: null },
   { href: "/chat", label: "Chat interno", icon: MessageSquare, roles: null },
+  { href: "/clientes", label: "Clientes", icon: Contact, roles: ["ceo", "gerente_comercial"] },
+  { href: "/whatsapp", label: "WhatsApp Business", icon: MessageCircle, roles: ["ceo", "gerente_comercial"] },
   { href: "/admin/usuarios", label: "Usuarios", icon: Users, roles: ["ceo"] },
+  { href: "/ayuda", label: "¿Cómo funciona?", icon: HelpCircle, roles: null },
 ] as const;
 
 export function Sidebar({
