@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { computeCeoReport } from "@/lib/ceo-report";
-import { PAYROLL, SEMANAS_POR_MES } from "@/lib/payroll";
+import { getPayrollSettings } from "@/lib/payroll-settings";
+import { getWeeklyPayrollChecklist } from "@/lib/payroll-checklist";
+import { SEMANAS_POR_MES } from "@/lib/payroll";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { CeoAssistant } from "@/components/ceo/ceo-assistant";
+import { PayrollSettingsForm } from "@/components/ceo/payroll-settings-form";
+import { PayrollChecklist } from "@/components/ceo/payroll-checklist";
 
 function fmtUsd(n: number) {
   return n.toLocaleString("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -14,7 +18,11 @@ export default async function CeoPage() {
   const profile = await requireProfile();
   if (profile.role !== "ceo") redirect("/dashboard");
 
-  const r = await computeCeoReport();
+  const [r, payrollSettings, checklist] = await Promise.all([
+    computeCeoReport(),
+    getPayrollSettings(),
+    getWeeklyPayrollChecklist(),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -41,11 +49,11 @@ export default async function CeoPage() {
               value={`-${fmtUsd(r.costoFijoProrrateadoSemana)}`}
             />
             <Row
-              label={`Editor de video (${r.videosSemana} entregados × $${PAYROLL.editorVideoUsdPorVideo})`}
+              label={`Editor de video (${r.videosSemana} entregados × $${r.editorVideoUsdPorVideo})`}
               value={`-${fmtUsd(r.costoVideoSemana)}`}
             />
             <Row
-              label={`Programador (${r.landingsSemana} páginas × $${PAYROLL.programadorCopPorPagina.toLocaleString("es-CO")} COP)`}
+              label={`Programador (${r.landingsSemana} páginas × $${r.programadorCopPorPagina.toLocaleString("es-CO")} COP)`}
               value={`-${fmtUsd(r.costoProgramadorSemanaUsd)}`}
             />
             <Separator className="my-1" />
@@ -74,11 +82,11 @@ export default async function CeoPage() {
               value={`-${fmtUsd(r.costoFijoMensual)}`}
             />
             <Row
-              label={`Editor de video (${r.videosMes} entregados × $${PAYROLL.editorVideoUsdPorVideo})`}
+              label={`Editor de video (${r.videosMes} entregados × $${r.editorVideoUsdPorVideo})`}
               value={`-${fmtUsd(r.costoVideoMes)}`}
             />
             <Row
-              label={`Programador (${r.landingsMes} páginas × $${PAYROLL.programadorCopPorPagina.toLocaleString("es-CO")} COP)`}
+              label={`Programador (${r.landingsMes} páginas × $${r.programadorCopPorPagina.toLocaleString("es-CO")} COP)`}
               value={`-${fmtUsd(r.costoProgramadorMesUsd)}`}
             />
             <Separator className="my-1" />
@@ -96,9 +104,42 @@ export default async function CeoPage() {
       <p className="text-xs text-muted-foreground">
         Tasa USD→COP usada: {Math.round(r.rateCop).toLocaleString("es-CO")}
         {!r.rateCopIsLive && " (no se pudo consultar en vivo, se usó un valor de respaldo)"}.{" "}
-        &quot;Entregado&quot; = requerimiento en estado &quot;Terminado&quot; esta semana/mes. Ajusta
-        las cifras de nómina en <code>src/lib/payroll.ts</code> si cambian.
+        &quot;Entregado&quot; = requerimiento en estado &quot;Terminado&quot; esta semana/mes.
       </p>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Nómina y costos fijos</CardTitle>
+          <PayrollSettingsForm settings={payrollSettings} />
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+          <Row label="Diseñadora Landing" value={`$${payrollSettings.disenadoraLandingUsdDia}/día`} />
+          <Row label="Gerente Comercial" value={`$${payrollSettings.gerenteComercialUsdDia}/día`} />
+          <Row label="Directora Operativa" value={`$${payrollSettings.projectManagerUsdDia}/día`} />
+          <Row label="Días/semana" value={`${payrollSettings.diasPorSemana}`} />
+          <Row label="Editor de Video" value={`$${payrollSettings.editorVideoUsdPorVideo}/video`} />
+          <Row
+            label="Programador"
+            value={`${payrollSettings.programadorCopPorPagina.toLocaleString("es-CO")} COP/página`}
+          />
+          <Row label="ElevenLabs" value={`$${payrollSettings.elevenLabsUsdMes}/mes`} />
+          <Row label="Google Storage" value={`$${payrollSettings.googleStorageUsdMes}/mes`} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Checklist de pago — semana pasada</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PayrollChecklist
+            weekStart={checklist.weekStart}
+            weekEnd={checklist.weekEnd}
+            dueDate={checklist.dueDate}
+            items={checklist.items}
+          />
+        </CardContent>
+      </Card>
 
       <CeoAssistant />
     </div>

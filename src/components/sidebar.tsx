@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { signOut } from "@/app/(protected)/actions";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
+import { ChatBadge } from "@/components/chat/chat-badge";
 import { CurrencyWidget } from "@/components/currency-widget";
 import { RentabilidadWidget } from "@/components/ceo/rentabilidad-widget";
 import { ROLE_LABELS, type UserRole } from "@/lib/roles";
@@ -60,6 +61,7 @@ export function Sidebar({
             >
               <Icon className="size-4" />
               {link.label}
+              {link.href === "/chat" && <ChatBadge userId={userId} />}
             </Link>
           );
         })}

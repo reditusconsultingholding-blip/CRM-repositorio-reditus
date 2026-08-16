@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { IngresoEstado, EstadoPago } from "@/lib/statuses";
+import { notifyNewIngreso } from "@/lib/notify-new-ingreso";
 
 type ItemInput = {
   servicio: string;
@@ -104,6 +105,12 @@ export async function createIngreso(formData: FormData) {
   );
 
   if (itemsError) throw new Error(itemsError.message);
+
+  await notifyNewIngreso({
+    producto: items.map((it) => it.producto).join(", "),
+    totalUsd: precioFinalOverride ?? precioTotal,
+    clienteNombre: clientName,
+  });
 
   revalidatePath("/ingresos");
 }

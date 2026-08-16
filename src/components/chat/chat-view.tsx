@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Hash, Send, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { sendChannelMessage, sendDirectMessage } from "@/app/(protected)/chat/actions";
+import { sendChannelMessage, sendDirectMessage, markChatRead } from "@/app/(protected)/chat/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,10 @@ export function ChatView({
   const [pending, startTransition] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
+
+  useEffect(() => {
+    markChatRead();
+  }, []);
 
   useEffect(() => {
     if (!selection) return;

@@ -53,3 +53,15 @@ export async function sendDirectMessage(recipientId: string, body: string) {
 
   revalidatePath("/chat");
 }
+
+/** Marca el chat como leído "ahora" para el usuario actual — resetea la
+ * burbuja de mensajes pendientes en la barra lateral. */
+export async function markChatRead() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("users").update({ last_chat_read_at: new Date().toISOString() }).eq("id", user.id);
+}
