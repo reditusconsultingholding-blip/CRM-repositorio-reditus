@@ -2,17 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { notify } from "@/lib/notify";
 import type { RequerimientoEstado, Pipeline } from "@/lib/statuses";
-
-async function notify(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  type: "nuevo_pedido" | "asignado" | "correccion" | "mencion" | "terminado",
-  title: string,
-  link: string,
-) {
-  await supabase.from("notifications").insert({ user_id: userId, type, title, link });
-}
 
 export async function createRequerimiento(formData: FormData) {
   const supabase = await createClient();

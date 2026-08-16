@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -23,6 +23,15 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "Reditus CRM",
   description: "Reditus Consulting — ingresos, producción y equipo",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Reditus CRM",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1a3a7a",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

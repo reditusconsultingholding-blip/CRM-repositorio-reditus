@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { notify } from "@/lib/notify";
 
 export async function sendChannelMessage(channelId: string, body: string, replyToId?: string | null) {
   const supabase = await createClient();
@@ -46,12 +47,7 @@ export async function sendDirectMessage(recipientId: string, body: string, reply
 
   if (error) throw new Error(error.message);
 
-  await supabase.from("notifications").insert({
-    user_id: recipientId,
-    type: "mensaje_directo",
-    title: "Tienes un mensaje nuevo",
-    link: "/chat",
-  });
+  await notify(supabase, recipientId, "mensaje_directo", `Mensaje nuevo: ${text.slice(0, 80)}`, "/chat");
 
   revalidatePath("/chat");
 }

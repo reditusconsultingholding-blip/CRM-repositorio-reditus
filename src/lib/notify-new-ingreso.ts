@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { notify } from "@/lib/notify";
 
 /** Notifica a CEO y Gerente Comercial cuánto se ganó y qué se vendió cada
  * vez que se crea un ingreso (desde el formulario o desde el chat del
@@ -23,11 +24,6 @@ export async function notifyNewIngreso(params: { producto: string; totalUsd: num
   const title = `Nuevo ingreso: ${params.producto || "servicio"} — ${monto} — ${params.clienteNombre}`;
 
   for (const d of destinatarios ?? []) {
-    await supabase.from("notifications").insert({
-      user_id: d.id,
-      type: "nuevo_pedido",
-      title,
-      link: "/ingresos",
-    });
+    await notify(supabase, d.id, "nuevo_pedido", title, "/ingresos");
   }
 }

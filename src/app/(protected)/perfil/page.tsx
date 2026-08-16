@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChangePasswordForm } from "@/components/perfil/change-password-form";
 import { ChangeEmailForm } from "@/components/perfil/change-email-form";
 import { EditProfileForm } from "@/components/perfil/edit-profile-form";
+import { PushToggle } from "@/components/perfil/push-toggle";
 
 export default async function PerfilPage() {
   const profile = await requireProfile();
@@ -49,6 +50,15 @@ export default async function PerfilPage() {
             </CardHeader>
             <CardContent>
               <ChangePasswordForm />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Notificaciones push</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PushToggle />
             </CardContent>
           </Card>
         </div>

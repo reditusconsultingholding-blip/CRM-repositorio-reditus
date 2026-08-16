@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { notify } from "@/lib/notify";
 
 export const runtime = "nodejs";
 
@@ -48,12 +49,13 @@ export async function GET(request: NextRequest) {
 
     if (!yaEnviado?.length) {
       for (const id of ceoIds) {
-        await supabase.from("notifications").insert({
-          user_id: id,
-          type: "recordatorio_costos",
-          title: "Recordatorio: pagar hoy los costos fijos SaaS (ElevenLabs + Google Storage)",
-          link: "/ceo",
-        });
+        await notify(
+          supabase,
+          id,
+          "recordatorio_costos",
+          "Recordatorio: pagar hoy los costos fijos SaaS (ElevenLabs + Google Storage)",
+          "/ceo",
+        );
       }
       tasks.push("recordatorio_costos");
     }
@@ -70,12 +72,13 @@ export async function GET(request: NextRequest) {
 
     if (!yaEnviado?.length) {
       for (const id of ceoIds) {
-        await supabase.from("notifications").insert({
-          user_id: id,
-          type: "nomina_lista",
-          title: "El checklist de nómina de la semana pasada ya está listo para revisar",
-          link: "/ceo",
-        });
+        await notify(
+          supabase,
+          id,
+          "nomina_lista",
+          "El checklist de nómina de la semana pasada ya está listo para revisar",
+          "/ceo",
+        );
       }
       tasks.push("nomina_lista");
     }
