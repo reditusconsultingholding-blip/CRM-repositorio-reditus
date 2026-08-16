@@ -68,15 +68,26 @@ export async function deleteUser(id: string) {
   }
 
   const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(id);
 
-  if (error) {
-    // Algunos proyectos de Supabase devuelven un 500 genérico acá por un
-    // problema transitorio de su servicio de auth — como red de seguridad,
-    // al menos desactivamos la cuenta para que deje de aparecer en la app.
-    await admin.from("users").update({ active: false }).eq("id", id);
+  // Todo el intento de borrado va envuelto en try/catch a propósito: la
+  // librería de Supabase puede LANZAR una excepción en vez de devolver
+  // {error} en algunos casos (ej. fallos de red del lado del servidor de
+  // Auth), y esa excepción cruda a veces no se puede serializar bien de
+  // vuelta al cliente — eso es lo que producía el error #441 genérico de
+  // React en vez de un mensaje claro. Ahora cualquier fallo, venga como
+  // {error} o como excepción, termina en un mensaje de texto plano.
+  try {
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) throw new Error(error.message || "Error desconocido de Supabase.");
+  } catch (err) {
+    try {
+      await admin.from("users").update({ active: false }).eq("id", id);
+    } catch {
+      // si ni siquiera esto funciona, igual informamos el error original abajo
+    }
+    const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `No se pudo borrar del todo (${error.message || "error de Supabase"}) — se dejó desactivada mientras tanto. Intenta de nuevo en unos minutos.`,
+      `No se pudo borrar del todo (${detail || "error de Supabase"}). Se dejó desactivada mientras tanto — intenta borrarla de nuevo en unos minutos.`,
     );
   }
 

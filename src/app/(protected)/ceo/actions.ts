@@ -2,17 +2,29 @@
 
 import { requireProfile } from "@/lib/auth";
 import { computeCeoReport, formatCeoReportText } from "@/lib/ceo-report";
+import { buildExtendedBusinessContext } from "@/lib/ceo-context";
 import { CEO_KNOWLEDGE } from "@/lib/ceo-knowledge";
 import { crearCotizacionDesdeChat } from "@/lib/chat-tools";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
-const SYSTEM_PROMPT = `Eres el asistente de negocio privado del CEO de Reditus Consulting, una agencia
-de marketing en LatAm. Solo el CEO puede verte. Respondes en español, de forma directa y ejecutiva,
-sobre el estado del negocio, rentabilidad, nómina, equipo, precios y políticas internas, usando los
-datos que se te dan en cada mensaje — esos datos se recalculan en vivo desde la base de datos justo
-antes de responderte, así que siempre reflejan el estado actual, no una foto vieja. Si no tienes un
-dato, dilo claramente en vez de inventarlo. Sé breve salvo que te pidan detalle.
+const SYSTEM_PROMPT = `Eres el asesor de negocio privado y de confianza del CEO de Reditus Consulting
+(agencia de marketing digital en LatAm: landing pages y videos creativos). Solo el CEO te ve. No eres
+un simple lector de reportes — eres un experto estratégico que conoce el negocio a fondo (rentabilidad,
+nómina, clientes, prospectos, equipo, y la estrategia propia de la empresa descrita más abajo) y da
+consejo concreto y accionable, no genérico. Cuando algo amerite preocupación u oportunidad, dilo
+directamente y con una recomendación clara — actúas como un buen asesor, no como un buzón de datos.
+
+Responde en español, directo y ejecutivo. Los datos de negocio que se te dan en cada mensaje se
+recalculan en vivo desde la base de datos justo antes de responder — siempre reflejan el estado actual.
+Si no tienes un dato, dilo en vez de inventarlo.
+
+Formato de respuesta: usa Markdown con criterio para que la información se entienda de un vistazo —
+tablas para comparar cifras, listas para pasos o prioridades, **negritas** para lo importante. Cuando
+un diagrama ayude más que texto (un flujo, un mapa mental de opciones, una jerarquía de prioridades),
+inclúyelo como un bloque de código con lenguaje "mermaid" (sintaxis Mermaid: flowchart, mindmap, etc.)
+— se renderiza como diagrama real. No lo uses si el texto solo ya es suficientemente claro; resérvalo
+para cuando de verdad aclare algo.
 
 Tienes una herramienta "crear_cotizacion" para generar cotizaciones reales en PDF (mismo formato que
 la plantilla de Canva de la empresa) directamente desde esta conversación. Al usarla, ANTES de
@@ -124,9 +136,9 @@ export async function askCeoAssistant(history: ChatMsg[]) {
     };
   }
 
-  const report = await computeCeoReport();
+  const [report, extendedContext] = await Promise.all([computeCeoReport(), buildExtendedBusinessContext()]);
   const businessContext = formatCeoReportText(report);
-  const system = `${SYSTEM_PROMPT}\n\nDatos actuales del negocio (calculados justo ahora):\n${businessContext}\n\nConocimiento interno de la empresa (manuales):\n${CEO_KNOWLEDGE}`;
+  const system = `${SYSTEM_PROMPT}\n\nDatos actuales del negocio (calculados justo ahora):\n${businessContext}\n\nContexto adicional (clientes, prospectos, equipo):\n${extendedContext}\n\nConocimiento interno de la empresa (manuales):\n${CEO_KNOWLEDGE}`;
 
   const messages: unknown[] = history.map((m) => ({ role: m.role, content: m.content }));
 

@@ -10,7 +10,8 @@ export type NotificationType =
   | "terminado"
   | "mensaje_directo"
   | "recordatorio_costos"
-  | "nomina_lista";
+  | "nomina_lista"
+  | "recomendacion_ceo";
 
 /** Punto único para crear notificaciones: guarda en la tabla `notifications`
  * (la campana de la app) Y manda un push al celular si el usuario tiene la

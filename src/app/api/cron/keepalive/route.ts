@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { notify } from "@/lib/notify";
 import { syncCalendlyBookings } from "@/lib/calendly";
+import { sendWeeklyCeoInsight } from "@/lib/ceo-insight";
 
 export const runtime = "nodejs";
 
@@ -82,6 +83,26 @@ export async function GET(request: NextRequest) {
         );
       }
       tasks.push("nomina_lista");
+    }
+  }
+
+  // Lunes: recomendación semanal del asesor IA (no hace nada sin
+  // ANTHROPIC_API_KEY).
+  if (now.getUTCDay() === 1) {
+    const { data: yaEnviado } = await supabase
+      .from("notifications")
+      .select("id")
+      .eq("type", "recomendacion_ceo")
+      .gte("created_at", `${today}T00:00:00Z`)
+      .limit(1);
+
+    if (!yaEnviado?.length) {
+      try {
+        await sendWeeklyCeoInsight();
+        tasks.push("recomendacion_ceo");
+      } catch (e) {
+        tasks.push(`recomendacion_ceo_error:${e instanceof Error ? e.message.slice(0, 80) : "?"}`);
+      }
     }
   }
 

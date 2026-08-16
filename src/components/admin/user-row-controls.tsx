@@ -76,6 +76,7 @@ export function UserRowControls({
         </SelectContent>
       </Select>
       <Button
+        type="button"
         variant="outline"
         size="sm"
         disabled={pending}
@@ -93,7 +94,7 @@ export function UserRowControls({
       </Button>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogTrigger render={<Button variant="destructive" size="icon" title="Borrar usuario" />}>
+        <DialogTrigger render={<Button type="button" variant="destructive" size="icon" title="Borrar usuario" />}>
           <Trash2 className="size-3.5" />
         </DialogTrigger>
         <DialogContent>
@@ -105,10 +106,10 @@ export function UserRowControls({
             completo. No se puede deshacer.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={pending}>
+            <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)} disabled={pending}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={pending}>
+            <Button type="button" variant="destructive" onClick={handleDelete} disabled={pending}>
               {pending ? "Borrando…" : "Sí, borrar"}
             </Button>
           </DialogFooter>
