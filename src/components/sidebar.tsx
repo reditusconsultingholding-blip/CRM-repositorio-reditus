@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Contact,
   HelpCircle,
+  Workflow,
   Crown,
   LogOut,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const ALL_LINKS = [
   { href: "/clientes", label: "Clientes", icon: Contact, roles: ["ceo", "gerente_comercial"] },
   { href: "/whatsapp", label: "WhatsApp Business", icon: MessageCircle, roles: ["ceo", "gerente_comercial"] },
   { href: "/admin/usuarios", label: "Usuarios", icon: Users, roles: ["ceo"] },
+  { href: "/flujo", label: "Flujo de trabajo", icon: Workflow, roles: null },
   { href: "/ayuda", label: "¿Cómo funciona?", icon: HelpCircle, roles: null },
 ] as const;
 
