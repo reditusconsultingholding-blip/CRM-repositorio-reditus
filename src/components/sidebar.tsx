@@ -84,10 +84,10 @@ export function Sidebar({
         <CurrencyWidget />
 
         <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0 leading-tight">
+          <Link href="/perfil" className="min-w-0 leading-tight hover:opacity-80">
             <p className="truncate text-sm font-medium">{name}</p>
             <p className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</p>
-          </div>
+          </Link>
           <NotificationBell userId={userId} />
         </div>
 
