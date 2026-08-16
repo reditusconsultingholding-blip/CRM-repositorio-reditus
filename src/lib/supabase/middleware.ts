@@ -1,7 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login"];
+// /api/cron: Vercel Cron llama esta ruta sin sesión de usuario — la
+// autenticación real la hace la propia ruta con CRON_SECRET, no el
+// middleware. Sin este permiso, el middleware redirigía la petición a
+// /login antes de que la ruta pudiera ejecutarse, y el cron nunca corría.
+// /encuesta: el cliente abre este link sin haber iniciado sesión.
+const PUBLIC_PATHS = ["/login", "/api/cron", "/encuesta"];
 // Roles allowed to see /ingresos. Everyone else with a session is bounced to /requerimientos.
 const INGRESOS_ROLES = ["ceo", "gerente_comercial"];
 const ADMIN_ROLES = ["ceo"];

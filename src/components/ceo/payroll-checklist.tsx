@@ -15,12 +15,12 @@ function fmtUsd(n: number) {
 export function PayrollChecklist({
   weekStart,
   weekEnd,
-  dueDate,
+  limitDate,
   items,
 }: {
   weekStart: string;
   weekEnd: string;
-  dueDate: string;
+  limitDate: string;
   items: ChecklistItem[];
 }) {
   const [pending, startTransition] = useTransition();
@@ -30,7 +30,7 @@ export function PayrollChecklist({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">
-        Semana {weekStart} a {weekEnd} · vence sábado {dueDate} · total {fmtUsd(total)}
+        Semana {weekStart} a {weekEnd} · plazo de pago hasta el lunes {limitDate} · total {fmtUsd(total)}
       </p>
       <div className="flex flex-col gap-2">
         {items.map((it) => (

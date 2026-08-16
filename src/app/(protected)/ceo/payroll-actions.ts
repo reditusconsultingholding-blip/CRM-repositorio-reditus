@@ -9,7 +9,8 @@ async function requireCeo() {
   if (profile.role !== "ceo") throw new Error("Solo el CEO puede hacer esto.");
 }
 
-export async function updatePayrollSettings(formData: FormData) {
+/** Costos fijos mensuales de SaaS — no varían por persona. */
+export async function updateSaasSettings(formData: FormData) {
   await requireCeo();
   const supabase = await createClient();
 
@@ -18,17 +19,29 @@ export async function updatePayrollSettings(formData: FormData) {
   const { error } = await supabase
     .from("payroll_settings")
     .update({
-      disenadora_landing_usd_dia: num("disenadora_landing_usd_dia"),
-      gerente_comercial_usd_dia: num("gerente_comercial_usd_dia"),
-      project_manager_usd_dia: num("project_manager_usd_dia"),
-      dias_por_semana: num("dias_por_semana"),
-      editor_video_usd_por_video: num("editor_video_usd_por_video"),
-      programador_cop_por_pagina: num("programador_cop_por_pagina"),
       elevenlabs_usd_mes: num("elevenlabs_usd_mes"),
       google_storage_usd_mes: num("google_storage_usd_mes"),
       updated_at: new Date().toISOString(),
     })
     .eq("id", true);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/ceo");
+}
+
+export async function updateUserPayrollRate(
+  userId: string,
+  modo: "semanal_fijo" | "por_pieza",
+  monto: number,
+  moneda: "USD" | "COP",
+) {
+  await requireCeo();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("user_payroll_rates")
+    .upsert({ user_id: userId, modo, monto, moneda }, { onConflict: "user_id" });
 
   if (error) throw new Error(error.message);
 

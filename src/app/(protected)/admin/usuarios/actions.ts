@@ -60,3 +60,25 @@ export async function updateUserRole(id: string, role: UserRole) {
   if (error) throw new Error(error.message);
   revalidatePath("/admin/usuarios");
 }
+
+export async function deleteUser(id: string) {
+  const profile = await requireCeo();
+  if (id === profile.id) {
+    throw new Error("No puedes borrar tu propia cuenta.");
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
+
+  if (error) {
+    // Algunos proyectos de Supabase devuelven un 500 genérico acá por un
+    // problema transitorio de su servicio de auth — como red de seguridad,
+    // al menos desactivamos la cuenta para que deje de aparecer en la app.
+    await admin.from("users").update({ active: false }).eq("id", id);
+    throw new Error(
+      `No se pudo borrar del todo (${error.message || "error de Supabase"}) — se dejó desactivada mientras tanto. Intenta de nuevo en unos minutos.`,
+    );
+  }
+
+  revalidatePath("/admin/usuarios");
+}

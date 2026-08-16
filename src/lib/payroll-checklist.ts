@@ -1,6 +1,5 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { getPayrollSettings } from "@/lib/payroll-settings";
 import { getUsdCopRate, weekBounds, isoDate } from "@/lib/ceo-report";
 
 export type ChecklistItem = {
@@ -24,17 +23,25 @@ const ROLE_LABELS_LOCAL: Record<string, string> = {
   programador: "Programador",
 };
 
+function fmtUsd(n: number) {
+  return n.toLocaleString("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+}
+
 /** Nómina de la semana pasada (lunes a domingo anterior al actual) — cada
- * persona con su monto calculado según su rol, si ya se le pagó, y si fue a
- * tiempo. El "día de pago" de referencia es el sábado de esa semana (misma
- * convención que ya usa Sebastian). Se auto-genera/actualiza en
+ * persona tiene su PROPIA tarifa (user_payroll_rates), no una por rol —
+ * dos personas con el mismo rol pueden ganar distinto. El "día de pago" de
+ * referencia es el sábado de esa semana. Se auto-genera/actualiza en
  * payroll_payments cada vez que se consulta (mientras no esté marcada como
- * pagada), así siempre refleja el trabajo real entregado. */
+ * pagada), así siempre refleja el trabajo real entregado. Las personas
+ * activas sin tarifa configurada se listan aparte para que el CEO la
+ * complete en la pestaña Nómina. */
 export async function getWeeklyPayrollChecklist(): Promise<{
   weekStart: string;
   weekEnd: string;
   dueDate: string;
+  limitDate: string;
   items: ChecklistItem[];
+  sinConfigurar: { userId: string; name: string; role: string }[];
 }> {
   const supabase = await createClient();
   const now = new Date();
@@ -47,11 +54,11 @@ export async function getWeeklyPayrollChecklist(): Promise<{
   const dueDate = new Date(weekStart);
   dueDate.setUTCDate(dueDate.getUTCDate() + 5); // sábado de esa semana
 
-  const [settings, rateCop, { data: users }, { data: videoRows }, { data: landingRows }, { data: existing }] =
+  const [rateCop, { data: users }, { data: rates }, { data: videoRows }, { data: landingRows }, { data: existing }] =
     await Promise.all([
-      getPayrollSettings(),
       getUsdCopRate(),
       supabase.from("users").select("id, name, role").eq("active", true).neq("role", "ceo"),
+      supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
       supabase
         .from("requerimientos")
         .select("encargado_id")
@@ -81,41 +88,31 @@ export async function getWeeklyPayrollChecklist(): Promise<{
     landingCounts.set(r.programador_id, (landingCounts.get(r.programador_id) ?? 0) + 1);
   }
   const existingByUser = new Map((existing ?? []).map((p) => [p.user_id, p]));
+  const rateByUser = new Map((rates ?? []).map((r) => [r.user_id, r]));
 
   const items: ChecklistItem[] = [];
+  const sinConfigurar: { userId: string; name: string; role: string }[] = [];
 
   for (const u of users ?? []) {
+    const rateRow = rateByUser.get(u.id);
+    if (!rateRow) {
+      sinConfigurar.push({ userId: u.id, name: u.name, role: ROLE_LABELS_LOCAL[u.role] ?? u.role });
+      continue;
+    }
+
+    const montoUsd = rateRow.moneda === "COP" ? Number(rateRow.monto) / rate : Number(rateRow.monto);
     let amount = 0;
     let detalle = "";
 
-    switch (u.role) {
-      case "gerente_comercial":
-        amount = settings.gerenteComercialUsdDia * settings.diasPorSemana;
-        detalle = `Salario fijo (${settings.diasPorSemana} días × $${settings.gerenteComercialUsdDia})`;
-        break;
-      case "directora_operativa":
-        amount = settings.projectManagerUsdDia * settings.diasPorSemana;
-        detalle = `Salario fijo (${settings.diasPorSemana} días × $${settings.projectManagerUsdDia})`;
-        break;
-      case "disenador_landing":
-        amount = settings.disenadoraLandingUsdDia * settings.diasPorSemana;
-        detalle = `Salario fijo (${settings.diasPorSemana} días × $${settings.disenadoraLandingUsdDia})`;
-        break;
-      case "editor_video": {
-        const n = videoCounts.get(u.id) ?? 0;
-        amount = n * settings.editorVideoUsdPorVideo;
-        detalle = `${n} video(s) entregado(s) × $${settings.editorVideoUsdPorVideo}`;
-        break;
-      }
-      case "programador": {
-        const n = landingCounts.get(u.id) ?? 0;
-        const usdPorPagina = settings.programadorCopPorPagina / rate;
-        amount = n * usdPorPagina;
-        detalle = `${n} página(s) publicada(s) × $${usdPorPagina.toFixed(2)}`;
-        break;
-      }
-      default:
-        continue; // roles sin regla de nómina definida (ninguno actualmente)
+    if (rateRow.modo === "semanal_fijo") {
+      amount = montoUsd;
+      detalle = `Salario semanal fijo (${fmtUsd(montoUsd)})`;
+    } else {
+      // por_pieza: video para editor_video, landing/publicación para programador.
+      const n = u.role === "editor_video" ? (videoCounts.get(u.id) ?? 0) : (landingCounts.get(u.id) ?? 0);
+      const unidad = u.role === "editor_video" ? "video(s)" : "página(s)";
+      amount = n * montoUsd;
+      detalle = `${n} ${unidad} × ${fmtUsd(montoUsd)}`;
     }
 
     const existingRow = existingByUser.get(u.id);
@@ -133,18 +130,23 @@ export async function getWeeklyPayrollChecklist(): Promise<{
         .eq("id", existingRow.id);
     }
 
+    // Ventana real de pago: sábado a lunes (dueDate es el sábado) — recién
+    // se considera tarde a partir del martes.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const graceEndMs = dueDate.getTime() + 3 * DAY_MS; // fin del lunes
+
     const paid = existingRow?.paid ?? false;
     const paidAt = existingRow?.paid_at ?? null;
     let isLate: boolean | null = null;
     let daysLate = 0;
     if (paid && paidAt) {
       const paidDate = new Date(paidAt);
-      const diffMs = paidDate.getTime() - dueDate.getTime() - 24 * 60 * 60 * 1000; // gracia hasta fin del sábado
+      const diffMs = paidDate.getTime() - graceEndMs;
       isLate = diffMs > 0;
-      daysLate = isLate ? Math.ceil(diffMs / (24 * 60 * 60 * 1000)) : 0;
-    } else if (!paid && now.getTime() > dueDate.getTime() + 24 * 60 * 60 * 1000) {
+      daysLate = isLate ? Math.ceil(diffMs / DAY_MS) : 0;
+    } else if (!paid && now.getTime() > graceEndMs) {
       isLate = true;
-      daysLate = Math.ceil((now.getTime() - dueDate.getTime() - 24 * 60 * 60 * 1000) / (24 * 60 * 60 * 1000));
+      daysLate = Math.ceil((now.getTime() - graceEndMs) / DAY_MS);
     }
 
     items.push({
@@ -161,10 +163,15 @@ export async function getWeeklyPayrollChecklist(): Promise<{
     });
   }
 
+  const limitDate = new Date(dueDate);
+  limitDate.setUTCDate(limitDate.getUTCDate() + 2); // lunes — fin de la ventana sábado-lunes
+
   return {
     weekStart: isoDate(weekStart),
     weekEnd: isoDate(weekEndInclusive),
     dueDate: isoDate(dueDate),
+    limitDate: isoDate(limitDate),
     items,
+    sinConfigurar,
   };
 }

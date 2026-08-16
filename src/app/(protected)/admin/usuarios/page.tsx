@@ -47,7 +47,7 @@ export default async function UsuariosPage() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <UserRowControls userId={u.id} role={u.role as UserRole} active={u.active} />
+                  <UserRowControls userId={u.id} name={u.name} role={u.role as UserRole} active={u.active} />
                 </TableCell>
               </TableRow>
             ))}

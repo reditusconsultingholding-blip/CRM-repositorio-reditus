@@ -53,8 +53,8 @@ const ETAPAS: {
   { n: 7, nombre: "Producción", role: "landing", roleLabel: "Diseñador(a) Landing / Editor de Video", detalle: "Se ejecuta el trabajo; el estado avanza con el botón “Pasar a siguiente fase”.", feature: "Requerimientos → En progreso" },
   { n: 8, nombre: "Revisión", role: "operativa", roleLabel: "Directora Operativa / CEO", detalle: "Control de calidad antes de que el cliente lo vea.", feature: "Requerimientos → Por revisión" },
   { n: 9, nombre: "Entrega", role: "programador", roleLabel: "Programador / Editor de Video", detalle: "Landing: pasa a “Por subir” y el Programador la publica. Video: se marca Terminado.", feature: "Requerimientos → pestaña Programador" },
-  { n: 10, nombre: "Correcciones", role: "todos", detalle: "Ajustes pedidos por el cliente, coordinados por @mención en el chat del requerimiento.", feature: "Comentarios del requerimiento" },
-  { n: 11, nombre: "Seguimiento", role: "operativa", roleLabel: "Directora Operativa / Gerente Comercial", detalle: "Encuesta de satisfacción y calidad — todavía no está construida.", feature: "Pendiente de construir" },
+  { n: 10, nombre: "Correcciones", role: "operativa", roleLabel: "Directora Operativa (Gerente Comercial da seguimiento para que no se pase)", detalle: "Ajustes pedidos por el cliente, coordinados por @mención en el chat del requerimiento.", feature: "Comentarios del requerimiento" },
+  { n: 11, nombre: "Seguimiento", role: "operativa", roleLabel: "Directora Operativa / Gerente Comercial", detalle: "Encuesta de satisfacción y calidad — cada ingreso entregado genera un link único para el cliente.", feature: "Encuesta de calidad" },
   { n: 12, nombre: "Recompra", role: "comercial", detalle: "Se detectan clientes que no han vuelto a comprar, usando su histórico de gasto.", feature: "Clientes (base de datos general)" },
 ];
 

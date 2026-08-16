@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MonthCalendar, type DiaData } from "@/components/dashboard/month-calendar";
+import { LiveSync } from "@/components/live-sync";
 
 export default async function DashboardPage() {
   const profile = await requireProfile();
@@ -74,9 +75,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-heading text-2xl font-semibold tracking-tight">
-        Hola, {profile.name.split(" ")[0]}
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          Hola, {profile.name.split(" ")[0]}
+        </h1>
+        <LiveSync tables={["ingresos", "requerimientos"]} />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {canSeeIngresos && (

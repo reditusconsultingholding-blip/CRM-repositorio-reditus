@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { SEMANAS_POR_MES, salarioFijoSemanal, fijosMensualesUsd } from "@/lib/payroll";
+import { SEMANAS_POR_MES, fijosMensualesUsd } from "@/lib/payroll";
 import { getPayrollSettings } from "@/lib/payroll-settings";
 
 // Semana ISO: lunes 00:00 (UTC) → lunes siguiente 00:00 (UTC). Aproximado —
@@ -43,8 +43,6 @@ export type CeoReport = {
   landingsMes: number;
   rateCop: number;
   rateCopIsLive: boolean;
-  editorVideoUsdPorVideo: number;
-  programadorCopPorPagina: number;
   costoFijoSemanal: number;
   costoFijoMensual: number;
   costoFijoProrrateadoSemana: number;
@@ -62,9 +60,10 @@ export type CeoReport = {
 
 /** Calcula el reporte completo de negocio (semana + mes) — misma fuente de
  * datos para el Panel CEO, el widget de la barra lateral y el asistente de
- * IA, así todos ven exactamente los mismos números en todo momento. La
- * nómina se lee de payroll_settings (editable desde /ceo), no de un valor
- * fijo en el código. */
+ * IA, así todos ven exactamente los mismos números en todo momento. Cada
+ * persona tiene su PROPIA tarifa (user_payroll_rates) — dos personas con el
+ * mismo rol pueden ganar distinto, así que el costo se suma persona por
+ * persona, no por un valor único de rol. */
 export async function computeCeoReport(): Promise<CeoReport> {
   const supabase = await createClient();
   const now = new Date();
@@ -75,10 +74,12 @@ export async function computeCeoReport(): Promise<CeoReport> {
     settings,
     { data: ingresosSemana },
     { data: ingresosMes },
-    { count: videosSemanaCount },
-    { count: videosMesCount },
-    { count: landingsSemanaCount },
-    { count: landingsMesCount },
+    { data: users },
+    { data: rates },
+    { data: videoRowsSemana },
+    { data: videoRowsMes },
+    { data: landingRowsSemana },
+    { data: landingRowsMes },
     { count: abiertosVideoCount },
     { count: abiertosLandingCount },
     usdCop,
@@ -94,30 +95,32 @@ export async function computeCeoReport(): Promise<CeoReport> {
       .select("precio_final_descuento")
       .gte("fecha", isoDate(monthStart))
       .lt("fecha", isoDate(monthEnd)),
+    supabase.from("users").select("id, role").eq("active", true).neq("role", "ceo"),
+    supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
     supabase
       .from("requerimientos")
-      .select("id", { count: "exact", head: true })
+      .select("encargado_id")
       .eq("pipeline", "video")
       .eq("estado", "Terminado")
       .gte("updated_at", weekStart.toISOString())
       .lt("updated_at", weekEnd.toISOString()),
     supabase
       .from("requerimientos")
-      .select("id", { count: "exact", head: true })
+      .select("encargado_id")
       .eq("pipeline", "video")
       .eq("estado", "Terminado")
       .gte("updated_at", monthStart.toISOString())
       .lt("updated_at", monthEnd.toISOString()),
     supabase
       .from("requerimientos")
-      .select("id", { count: "exact", head: true })
+      .select("programador_id")
       .eq("pipeline", "landing")
       .eq("estado", "Terminado")
       .gte("updated_at", weekStart.toISOString())
       .lt("updated_at", weekEnd.toISOString()),
     supabase
       .from("requerimientos")
-      .select("id", { count: "exact", head: true })
+      .select("programador_id")
       .eq("pipeline", "landing")
       .eq("estado", "Terminado")
       .gte("updated_at", monthStart.toISOString())
@@ -144,20 +147,54 @@ export async function computeCeoReport(): Promise<CeoReport> {
     0,
   );
 
-  const costoFijoSemanal = salarioFijoSemanal(settings);
+  const rateCop = usdCop ?? 4000;
+
+  function countBy(rows: { encargado_id?: string | null; programador_id?: string | null }[] | null, key: "encargado_id" | "programador_id") {
+    const map = new Map<string, number>();
+    for (const r of rows ?? []) {
+      const id = r[key];
+      if (!id) continue;
+      map.set(id, (map.get(id) ?? 0) + 1);
+    }
+    return map;
+  }
+
+  const videoCountsSemana = countBy(videoRowsSemana, "encargado_id");
+  const videoCountsMes = countBy(videoRowsMes, "encargado_id");
+  const landingCountsSemana = countBy(landingRowsSemana, "programador_id");
+  const landingCountsMes = countBy(landingRowsMes, "programador_id");
+
+  const rateByUser = new Map((rates ?? []).map((r) => [r.user_id, r]));
+
+  let costoFijoSemanal = 0;
+  let costoVideoSemana = 0;
+  let costoVideoMes = 0;
+  let costoProgramadorSemanaUsd = 0;
+  let costoProgramadorMesUsd = 0;
+
+  for (const u of users ?? []) {
+    const rateRow = rateByUser.get(u.id);
+    if (!rateRow) continue;
+    const montoUsd = rateRow.moneda === "COP" ? Number(rateRow.monto) / rateCop : Number(rateRow.monto);
+
+    if (rateRow.modo === "semanal_fijo") {
+      costoFijoSemanal += montoUsd;
+    } else if (u.role === "editor_video") {
+      costoVideoSemana += (videoCountsSemana.get(u.id) ?? 0) * montoUsd;
+      costoVideoMes += (videoCountsMes.get(u.id) ?? 0) * montoUsd;
+    } else if (u.role === "programador") {
+      costoProgramadorSemanaUsd += (landingCountsSemana.get(u.id) ?? 0) * montoUsd;
+      costoProgramadorMesUsd += (landingCountsMes.get(u.id) ?? 0) * montoUsd;
+    }
+  }
+
   const costoFijoMensual = fijosMensualesUsd(settings);
   const costoFijoProrrateadoSemana = costoFijoMensual / SEMANAS_POR_MES;
 
-  const rateCop = usdCop ?? 4000;
-  const videosSemana = videosSemanaCount ?? 0;
-  const videosMes = videosMesCount ?? 0;
-  const landingsSemana = landingsSemanaCount ?? 0;
-  const landingsMes = landingsMesCount ?? 0;
-
-  const costoVideoSemana = videosSemana * settings.editorVideoUsdPorVideo;
-  const costoVideoMes = videosMes * settings.editorVideoUsdPorVideo;
-  const costoProgramadorSemanaUsd = (landingsSemana * settings.programadorCopPorPagina) / rateCop;
-  const costoProgramadorMesUsd = (landingsMes * settings.programadorCopPorPagina) / rateCop;
+  const videosSemana = [...videoCountsSemana.values()].reduce((a, b) => a + b, 0);
+  const videosMes = [...videoCountsMes.values()].reduce((a, b) => a + b, 0);
+  const landingsSemana = [...landingCountsSemana.values()].reduce((a, b) => a + b, 0);
+  const landingsMes = [...landingCountsMes.values()].reduce((a, b) => a + b, 0);
 
   const costoTotalSemana =
     costoFijoSemanal + costoFijoProrrateadoSemana + costoVideoSemana + costoProgramadorSemanaUsd;
@@ -173,8 +210,6 @@ export async function computeCeoReport(): Promise<CeoReport> {
     landingsMes,
     rateCop,
     rateCopIsLive: usdCop != null,
-    editorVideoUsdPorVideo: settings.editorVideoUsdPorVideo,
-    programadorCopPorPagina: settings.programadorCopPorPagina,
     costoFijoSemanal,
     costoFijoMensual,
     costoFijoProrrateadoSemana,
@@ -201,7 +236,7 @@ function fmtUsd(n: number) {
 export function formatCeoReportText(r: CeoReport): string {
   return [
     `Ingresos de esta semana: ${fmtUsd(r.ingresosSemanaUsd)}. Ingresos de este mes: ${fmtUsd(r.ingresosMesUsd)}.`,
-    `Costo total esta semana: ${fmtUsd(r.costoTotalSemana)} (salarios fijos ${fmtUsd(r.costoFijoSemanal)}, SaaS prorrateado ${fmtUsd(r.costoFijoProrrateadoSemana)}, editor de video ${r.videosSemana} videos × $${r.editorVideoUsdPorVideo} = ${fmtUsd(r.costoVideoSemana)}, programador ${r.landingsSemana} páginas × ${r.programadorCopPorPagina} COP = ${fmtUsd(r.costoProgramadorSemanaUsd)}).`,
+    `Costo total esta semana: ${fmtUsd(r.costoTotalSemana)} (salarios fijos ${fmtUsd(r.costoFijoSemanal)}, SaaS prorrateado ${fmtUsd(r.costoFijoProrrateadoSemana)}, editores de video ${r.videosSemana} entregados = ${fmtUsd(r.costoVideoSemana)}, programadores ${r.landingsSemana} páginas = ${fmtUsd(r.costoProgramadorSemanaUsd)}).`,
     `Costo total este mes: ${fmtUsd(r.costoTotalMes)}.`,
     `Rentabilidad de esta semana: ${fmtUsd(r.rentabilidadSemana)}. Rentabilidad de este mes: ${fmtUsd(r.rentabilidadMes)}.`,
     `Requerimientos abiertos (sin terminar) ahora mismo: ${r.requerimientosAbiertosVideo} de video, ${r.requerimientosAbiertosLanding} de landing pages.`,
