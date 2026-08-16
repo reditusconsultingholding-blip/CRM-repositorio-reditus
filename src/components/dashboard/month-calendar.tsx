@@ -18,11 +18,12 @@ export function MonthCalendar({
 
   const todayKey = new Date().toISOString().slice(0, 10);
 
-  const cells: { key: string | null; day: number | null }[] = [];
-  for (let i = 0; i < leadingBlanks; i++) cells.push({ key: null, day: null });
+  const cells: { key: string | null; day: number | null; isWeekend: boolean }[] = [];
+  for (let i = 0; i < leadingBlanks; i++) cells.push({ key: null, day: null, isWeekend: false });
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    cells.push({ key, day: d });
+    const weekday = new Date(Date.UTC(year, month, d)).getUTCDay(); // 0=domingo, 6=sábado
+    cells.push({ key, day: d, isWeekend: weekday === 0 || weekday === 6 });
   }
 
   return (
@@ -43,6 +44,7 @@ export function MonthCalendar({
               className={`flex aspect-square flex-col items-center justify-center rounded-md border p-1 text-center ${
                 isToday ? "border-primary bg-primary/5" : "border-transparent bg-muted/40"
               }`}
+              style={!isToday && c.isWeekend ? { background: "var(--brand-blue-tint)" } : undefined}
               title={
                 d
                   ? `${d.count} pedido(s) · ${d.total.toLocaleString("es-CO", { style: "currency", currency: "USD" })}`

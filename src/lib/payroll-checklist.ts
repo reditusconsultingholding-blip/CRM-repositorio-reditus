@@ -109,8 +109,9 @@ export async function getWeeklyPayrollChecklist(): Promise<{
       }
       case "programador": {
         const n = landingCounts.get(u.id) ?? 0;
-        amount = (n * settings.programadorCopPorPagina) / rate;
-        detalle = `${n} página(s) publicada(s) × ${settings.programadorCopPorPagina.toLocaleString("es-CO")} COP`;
+        const usdPorPagina = settings.programadorCopPorPagina / rate;
+        amount = n * usdPorPagina;
+        detalle = `${n} página(s) publicada(s) × $${usdPorPagina.toFixed(2)}`;
         break;
       }
       default:

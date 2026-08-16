@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { notify } from "@/lib/notify";
 
-export async function sendChannelMessage(channelId: string, body: string, replyToId?: string | null) {
+type Attachment = { url: string; name: string; size: number } | null;
+
+export async function sendChannelMessage(
+  channelId: string,
+  body: string,
+  replyToId?: string | null,
+  attachment?: Attachment,
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -12,7 +19,7 @@ export async function sendChannelMessage(channelId: string, body: string, replyT
 
   if (!user) throw new Error("No autenticado.");
 
-  const text = body.trim();
+  const text = body.trim() || attachment?.name || "";
   if (!text) return;
 
   const { error } = await supabase.from("chat_messages").insert({
@@ -20,6 +27,9 @@ export async function sendChannelMessage(channelId: string, body: string, replyT
     author_id: user.id,
     body: text,
     reply_to_id: replyToId || null,
+    attachment_url: attachment?.url ?? null,
+    attachment_name: attachment?.name ?? null,
+    attachment_size: attachment?.size ?? null,
   });
 
   if (error) throw new Error(error.message);
@@ -27,7 +37,12 @@ export async function sendChannelMessage(channelId: string, body: string, replyT
   revalidatePath("/chat");
 }
 
-export async function sendDirectMessage(recipientId: string, body: string, replyToId?: string | null) {
+export async function sendDirectMessage(
+  recipientId: string,
+  body: string,
+  replyToId?: string | null,
+  attachment?: Attachment,
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,7 +50,7 @@ export async function sendDirectMessage(recipientId: string, body: string, reply
 
   if (!user) throw new Error("No autenticado.");
 
-  const text = body.trim();
+  const text = body.trim() || attachment?.name || "";
   if (!text) return;
 
   const { error } = await supabase.from("chat_messages").insert({
@@ -43,6 +58,9 @@ export async function sendDirectMessage(recipientId: string, body: string, reply
     author_id: user.id,
     body: text,
     reply_to_id: replyToId || null,
+    attachment_url: attachment?.url ?? null,
+    attachment_name: attachment?.name ?? null,
+    attachment_size: attachment?.size ?? null,
   });
 
   if (error) throw new Error(error.message);
@@ -94,6 +112,27 @@ export async function deleteMessage(messageId: string) {
   if (!user) throw new Error("No autenticado.");
 
   const { error } = await supabase.from("chat_messages").delete().eq("id", messageId).eq("author_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/chat");
+}
+
+export async function editMessage(messageId: string, newBody: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado.");
+
+  const text = newBody.trim();
+  if (!text) throw new Error("El mensaje no puede quedar vacío.");
+
+  const { error } = await supabase
+    .from("chat_messages")
+    .update({ body: text, edited_at: new Date().toISOString() })
+    .eq("id", messageId)
+    .eq("author_id", user.id);
+
   if (error) throw new Error(error.message);
 
   revalidatePath("/chat");

@@ -14,6 +14,7 @@ import {
   HelpCircle,
   Workflow,
   Crown,
+  Settings,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,8 +55,9 @@ export function Sidebar({
 
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r bg-background">
-      <div className="flex h-14 items-center gap-2 border-b px-4">
+      <div className="flex h-14 items-center justify-between gap-2 border-b px-4">
         <span className="font-heading text-base font-semibold tracking-tight">Reditus CRM</span>
+        <NotificationBell userId={userId} />
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
@@ -79,27 +81,36 @@ export function Sidebar({
         })}
 
         {role === "ceo" && (
-          <>
-            <div className="my-2 border-t" />
-            <Link
-              href="/ceo"
-              className={cn(
-                "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
-                pathname.startsWith("/ceo") && "bg-primary/10 text-primary",
-              )}
-            >
-              <Crown className="size-4" />
-              Panel CEO
-            </Link>
-          </>
+          <Link
+            href="/ceo"
+            className={cn(
+              "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
+              pathname.startsWith("/ceo") && "bg-primary/10 text-primary",
+            )}
+          >
+            <Crown className="size-4" />
+            Panel CEO
+          </Link>
         )}
+
+        <div className="my-2 border-t" />
+        <Link
+          href="/perfil"
+          className={cn(
+            "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
+            pathname.startsWith("/perfil") && "bg-primary/10 text-primary",
+          )}
+        >
+          <Settings className="size-4" />
+          Configuración
+        </Link>
       </nav>
 
       <div className="flex flex-col gap-3 border-t p-3">
         <CurrencyWidget />
         {role === "ceo" && <RentabilidadWidget />}
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <Link href="/perfil" className="flex min-w-0 items-center gap-2 hover:opacity-80">
             {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -119,7 +130,6 @@ export function Sidebar({
               <p className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</p>
             </span>
           </Link>
-          <NotificationBell userId={userId} />
         </div>
 
         <form action={signOut}>

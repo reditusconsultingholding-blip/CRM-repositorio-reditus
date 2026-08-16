@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Hash, Send, User, Reply, Copy, Trash2, X } from "lucide-react";
+import { Hash, Send, User, Reply, Copy, Trash2, X, Pencil, Paperclip, FileIcon, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   sendChannelMessage,
@@ -9,13 +9,19 @@ import {
   markChatRead,
   toggleReaction,
   deleteMessage,
+  editMessage,
 } from "@/app/(protected)/chat/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const QUICK_EMOJIS = ["👍", "❤️", "😂"];
+// Adjuntos: tope razonable para el bucket de Supabase Storage. Para
+// archivos más grandes (videos pesados, carpetas completas, 20GB+),
+// comparte el link de Drive/Dropbox — se vuelve clicable solo.
+const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024; // 100MB
+const URL_RE = /(https?:\/\/[^\s]+)/g;
 
 type Channel = { id: string; slug: string; name: string };
 type Person = { id: string; name: string; avatar_url?: string | null };
@@ -27,6 +33,10 @@ type Message = {
   author_id: string;
   body: string;
   reply_to_id: string | null;
+  edited_at: string | null;
+  attachment_url: string | null;
+  attachment_name: string | null;
+  attachment_size: number | null;
   created_at: string;
   author?: { name: string; avatar_url?: string | null } | null;
   reactions?: Reaction[];
@@ -47,6 +57,39 @@ function Avatar({ name, url }: { name: string; url?: string | null }) {
   );
 }
 
+function fmtSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isImageFile(name: string) {
+  return /\.(png|jpe?g|gif|webp|svg)$/i.test(name);
+}
+
+/** Convierte URLs sueltas dentro del texto en links clicables. */
+function Linkified({ text }: { text: string }) {
+  const parts = text.split(URL_RE);
+  return (
+    <>
+      {parts.map((part, i) =>
+        URL_RE.test(part) ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2 hover:opacity-80"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 export function ChatView({
   channels,
   people,
@@ -64,8 +107,12 @@ export function ChatView({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -92,7 +139,7 @@ export function ChatView({
     let active = true;
 
     const baseSelect =
-      "id, channel_id, recipient_id, author_id, body, reply_to_id, created_at, author:users!chat_messages_author_id_fkey(name, avatar_url)";
+      "id, channel_id, recipient_id, author_id, body, reply_to_id, edited_at, attachment_url, attachment_name, attachment_size, created_at, author:users!chat_messages_author_id_fkey(name, avatar_url)";
 
     const query =
       selection.type === "channel"
@@ -140,7 +187,15 @@ export function ChatView({
               .single();
             row.author = author;
           }
-          setMessages((prev) => [...prev, { ...row, reactions: [] }]);
+          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, reactions: [] }]));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "chat_messages" },
+        (payload) => {
+          const row = payload.new as Message;
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, ...row, reactions: m.reactions } : m)));
         },
       )
       .on(
@@ -210,11 +265,73 @@ export function ChatView({
             author_id: currentUserId,
             body: text,
             reply_to_id: replyToId,
+            edited_at: null,
+            attachment_url: null,
+            attachment_name: null,
+            attachment_size: null,
             created_at: new Date().toISOString(),
             author: { name: currentUserName },
             reactions: [],
           },
         ]);
+      }
+    });
+  }
+
+  async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !selection) return;
+
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      toast.error(
+        `Ese archivo pesa ${fmtSize(file.size)} — el máximo por chat es 100MB. Para algo más grande, comparte un link de Drive o Dropbox (se vuelve clicable solo).`,
+      );
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const path = `${currentUserId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from("chat-files").upload(path, file);
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
+
+      const attachment = { url: data.publicUrl, name: file.name, size: file.size };
+      if (selection.type === "channel") {
+        await sendChannelMessage(selection.id, "", replyTo?.id ?? null, attachment);
+      } else {
+        await sendDirectMessage(selection.userId, "", replyTo?.id ?? null, attachment);
+      }
+      setReplyTo(null);
+      toast.success("Archivo enviado");
+    } catch {
+      toast.error("No se pudo subir el archivo");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function startEdit(m: Message) {
+    setEditingId(m.id);
+    setEditText(m.body);
+  }
+
+  function saveEdit() {
+    if (!editingId) return;
+    const text = editText.trim();
+    if (!text) return;
+    startTransition(async () => {
+      try {
+        await editMessage(editingId, text);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === editingId ? { ...m, body: text, edited_at: new Date().toISOString() } : m)),
+        );
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo editar");
+      } finally {
+        setEditingId(null);
+        setEditText("");
       }
     });
   }
@@ -276,6 +393,7 @@ export function ChatView({
           {messages.map((m) => {
             const isOwn = m.author_id === currentUserId;
             const quoted = findMessage(m.reply_to_id);
+            const isEditing = editingId === m.id;
             const reactionCounts = new Map<string, { count: number; mine: boolean }>();
             for (const r of m.reactions ?? []) {
               const cur = reactionCounts.get(r.emoji) ?? { count: 0, mine: false };
@@ -285,10 +403,7 @@ export function ChatView({
             }
 
             return (
-              <div
-                key={m.id}
-                className="group flex gap-2 border-b border-border/40 py-2 last:border-b-0"
-              >
+              <div key={m.id} className="flex gap-2 border-b border-border/40 py-2 last:border-b-0">
                 <Avatar name={m.author?.name ?? "?"} url={m.author?.avatar_url} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
@@ -299,6 +414,7 @@ export function ChatView({
                         minute: "2-digit",
                       })}
                     </span>
+                    {m.edited_at && <span className="text-[10px] text-muted-foreground">(editado)</span>}
                   </div>
 
                   {m.reply_to_id && (
@@ -313,47 +429,107 @@ export function ChatView({
                     </div>
                   )}
 
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm">{m.body}</p>
-                    <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-                      {QUICK_EMOJIS.slice(0, 3).map((emoji) => (
-                        <button
-                          key={emoji}
-                          onClick={() => toggleReaction(m.id, emoji)}
-                          className="rounded px-1 text-xs hover:bg-muted"
-                          title="Reaccionar"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => setReplyTo(m)}
-                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                        title="Responder"
-                      >
-                        <Reply className="size-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(m.body);
-                          toast.success("Copiado");
+                  {isEditing ? (
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit();
+                          if (e.key === "Escape") setEditingId(null);
                         }}
-                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                        title="Copiar"
-                      >
-                        <Copy className="size-3.5" />
-                      </button>
-                      {isOwn && (
-                        <button
-                          onClick={() => deleteMessage(m.id)}
-                          className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      )}
+                        autoFocus
+                        className="h-7 text-sm"
+                      />
+                      <Button size="icon-sm" onClick={saveEdit} title="Guardar">
+                        <Check className="size-3.5" />
+                      </Button>
+                      <Button size="icon-sm" variant="ghost" onClick={() => setEditingId(null)} title="Cancelar">
+                        <X className="size-3.5" />
+                      </Button>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      {m.body && (
+                        <p className="text-sm break-words">
+                          <Linkified text={m.body} />
+                        </p>
+                      )}
+
+                      {m.attachment_url &&
+                        (isImageFile(m.attachment_name ?? "") ? (
+                          <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className="mt-1 block">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={m.attachment_url}
+                              alt={m.attachment_name ?? "imagen"}
+                              className="max-h-56 max-w-full rounded-md border object-contain"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={m.attachment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 flex w-fit items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-muted"
+                          >
+                            <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+                            <span className="max-w-48 truncate font-medium">{m.attachment_name}</span>
+                            {m.attachment_size != null && (
+                              <span className="text-muted-foreground">{fmtSize(m.attachment_size)}</span>
+                            )}
+                          </a>
+                        ))}
+
+                      <div className="mt-1 flex items-center gap-1">
+                        {QUICK_EMOJIS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            onClick={() => toggleReaction(m.id, emoji)}
+                            className="rounded px-1 text-xs hover:bg-muted"
+                            title="Reaccionar"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setReplyTo(m)}
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title="Responder"
+                        >
+                          <Reply className="size-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(m.body);
+                            toast.success("Copiado");
+                          }}
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title="Copiar"
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                        {isOwn && (
+                          <>
+                            <button
+                              onClick={() => startEdit(m)}
+                              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="Editar"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              onClick={() => deleteMessage(m.id)}
+                              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  )}
 
                   {reactionCounts.size > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -393,14 +569,30 @@ export function ChatView({
         )}
 
         <div className="flex gap-2 border-t p-3">
+          <input ref={fileRef} type="file" className="hidden" onChange={handleFilePick} />
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => fileRef.current?.click()}
+            disabled={pending || uploading || !selection}
+            title="Adjuntar archivo (máx. 100MB)"
+          >
+            <Paperclip className="size-4" />
+          </Button>
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
-            placeholder={activeChannel ? `Mensaje en #${headerLabel}` : `Mensaje a ${headerLabel}`}
-            disabled={pending || !selection}
+            placeholder={
+              uploading
+                ? "Subiendo archivo…"
+                : activeChannel
+                  ? `Mensaje en #${headerLabel}`
+                  : `Mensaje a ${headerLabel}`
+            }
+            disabled={pending || uploading || !selection}
           />
-          <Button size="icon" onClick={send} disabled={pending || !selection}>
+          <Button size="icon" onClick={send} disabled={pending || uploading || !selection}>
             <Send className="size-4" />
           </Button>
         </div>

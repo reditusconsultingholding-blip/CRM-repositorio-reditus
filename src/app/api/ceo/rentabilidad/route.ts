@@ -17,5 +17,7 @@ export async function GET() {
   return NextResponse.json({
     rentabilidadSemana: r.rentabilidadSemana,
     ingresosSemanaUsd: r.ingresosSemanaUsd,
+    rentabilidadMes: r.rentabilidadMes,
+    ingresosMesUsd: r.ingresosMesUsd,
   });
 }

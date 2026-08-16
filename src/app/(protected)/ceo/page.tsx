@@ -55,7 +55,7 @@ export default async function CeoPage() {
                   value={`-${fmtUsd(r.costoVideoSemana)}`}
                 />
                 <Row
-                  label={`Programador (${r.landingsSemana} páginas × $${r.programadorCopPorPagina.toLocaleString("es-CO")} COP)`}
+                  label={`Programador (${r.landingsSemana} páginas × ${fmtUsd(r.programadorCopPorPagina / r.rateCop)})`}
                   value={`-${fmtUsd(r.costoProgramadorSemanaUsd)}`}
                 />
                 <Separator className="my-1" />
@@ -80,7 +80,7 @@ export default async function CeoPage() {
                   value={`-${fmtUsd(r.costoVideoMes)}`}
                 />
                 <Row
-                  label={`Programador (${r.landingsMes} páginas × $${r.programadorCopPorPagina.toLocaleString("es-CO")} COP)`}
+                  label={`Programador (${r.landingsMes} páginas × ${fmtUsd(r.programadorCopPorPagina / r.rateCop)})`}
                   value={`-${fmtUsd(r.costoProgramadorMesUsd)}`}
                 />
                 <Separator className="my-1" />
@@ -111,7 +111,7 @@ export default async function CeoPage() {
               <Row label="Editor de Video" value={`$${payrollSettings.editorVideoUsdPorVideo}/video`} />
               <Row
                 label="Programador"
-                value={`${payrollSettings.programadorCopPorPagina.toLocaleString("es-CO")} COP/página`}
+                value={`${fmtUsd(payrollSettings.programadorCopPorPagina / r.rateCop)}/página`}
               />
               <Row label="ElevenLabs" value={`$${payrollSettings.elevenLabsUsdMes}/mes`} />
               <Row label="Google Storage" value={`$${payrollSettings.googleStorageUsdMes}/mes`} />
