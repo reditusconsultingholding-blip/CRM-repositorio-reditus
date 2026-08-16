@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { updateRequerimientoEstado } from "./actions";
 import { RequerimientoFormDialog } from "@/components/requerimientos/requerimiento-form-dialog";
 import { EstadoSelect } from "@/components/estado-select";
+import { LiveSync } from "@/components/live-sync";
 import {
   REQUERIMIENTO_ESTADOS,
   REQUERIMIENTO_ESTADO_COLORS,
@@ -55,7 +56,10 @@ export default async function RequerimientosPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Requerimientos</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Requerimientos</h1>
+        <LiveSync tables={["requerimientos"]} />
+      </div>
 
       <Tabs defaultValue="video">
         <TabsList>

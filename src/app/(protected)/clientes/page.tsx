@@ -2,14 +2,8 @@ import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getUsdCopRate } from "@/lib/ceo-report";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { ClientesTable, type ClienteRow } from "@/components/clientes/clientes-table";
+import { LiveSync } from "@/components/live-sync";
 
 function fmtUsd(n: number) {
   return n.toLocaleString("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -54,7 +48,7 @@ export default async function ClientesPage() {
     historicoByClient.set(r.client_id, cur);
   }
 
-  const rows = (clients ?? [])
+  const rows: ClienteRow[] = (clients ?? [])
     .map((c) => {
       const actual = actualByClient.get(c.id) ?? { total: 0, count: 0 };
       const historico = historicoByClient.get(c.id) ?? { total: 0, count: 0 };
@@ -65,7 +59,6 @@ export default async function ClientesPage() {
         pedidosHistoricos: historico.count,
         gastoHistorico: historico.total,
         gastoTotal: actual.total + historico.total,
-        pedidosTotal: actual.count + historico.count,
       };
     })
     .sort((a, b) => b.gastoTotal - a.gastoTotal);
@@ -75,12 +68,15 @@ export default async function ClientesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Base de datos de clientes</h1>
-        <p className="text-sm text-muted-foreground">
-          {rows.length} clientes · {fmtUsd(granTotal)} · {fmtCop(granTotal * rateCop)} en gasto total (actual +
-          histórico)
-        </p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">Base de datos de clientes</h1>
+          <p className="text-sm text-muted-foreground">
+            {rows.length} clientes · {fmtUsd(granTotal)} · {fmtCop(granTotal * rateCop)} en gasto total (actual +
+            histórico)
+          </p>
+        </div>
+        <LiveSync tables={["clients", "ingresos"]} />
       </div>
 
       {!historicoDisponible && (
@@ -90,49 +86,7 @@ export default async function ClientesPage() {
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-md border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>WhatsApp</TableHead>
-              <TableHead>País</TableHead>
-              <TableHead>Pedidos (app)</TableHead>
-              <TableHead>Gasto (app)</TableHead>
-              <TableHead>Pedidos históricos</TableHead>
-              <TableHead>Gasto histórico</TableHead>
-              <TableHead>Gasto total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell className="font-medium">{r.name}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{r.whatsapp_number}</TableCell>
-                <TableCell>{r.country ?? "—"}</TableCell>
-                <TableCell>{r.pedidosActuales}</TableCell>
-                <TableCell>{fmtUsd(r.gastoActual)}</TableCell>
-                <TableCell>{r.pedidosHistoricos}</TableCell>
-                <TableCell>
-                  <div>{fmtUsd(r.gastoHistorico)}</div>
-                  <div className="text-xs text-muted-foreground">{fmtCop(r.gastoHistorico * rateCop)}</div>
-                </TableCell>
-                <TableCell className="font-semibold">
-                  <div>{fmtUsd(r.gastoTotal)}</div>
-                  <div className="text-xs font-normal text-muted-foreground">{fmtCop(r.gastoTotal * rateCop)}</div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
-                  Todavía no hay clientes registrados.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <ClientesTable rows={rows} rateCop={rateCop} />
     </div>
   );
 }

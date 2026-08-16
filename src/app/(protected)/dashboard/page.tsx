@@ -3,6 +3,7 @@ import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MonthCalendar, type DiaData } from "@/components/dashboard/month-calendar";
 import { LiveSync } from "@/components/live-sync";
+import { RevenueExplorer } from "@/components/dashboard/revenue-explorer";
 
 export default async function DashboardPage() {
   const profile = await requireProfile();
@@ -140,6 +141,8 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {canSeeIngresos && <RevenueExplorer />}
 
       {canSeeIngresos && (
         <Card>

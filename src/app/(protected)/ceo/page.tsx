@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { computeCeoReport } from "@/lib/ceo-report";
 import { getPayrollSettings } from "@/lib/payroll-settings";
 import { getWeeklyPayrollChecklist } from "@/lib/payroll-checklist";
+import { computeAttendanceReport } from "@/lib/attendance-report";
+import { listVaultEntries } from "@/lib/vault-actions";
 import { SEMANAS_POR_MES } from "@/lib/payroll";
 import { ROLE_LABELS } from "@/lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +15,8 @@ import { CeoAssistant } from "@/components/ceo/ceo-assistant";
 import { PayrollSettingsForm } from "@/components/ceo/payroll-settings-form";
 import { PayrollRatesTable, type PersonRate } from "@/components/ceo/payroll-rates-table";
 import { PayrollChecklist } from "@/components/ceo/payroll-checklist";
+import { CredentialsVault } from "@/components/ceo/credentials-vault";
+import { LiveSync } from "@/components/live-sync";
 
 function fmtUsd(n: number) {
   return n.toLocaleString("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -24,13 +28,16 @@ export default async function CeoPage() {
 
   const supabase = await createClient();
 
-  const [r, payrollSettings, checklist, { data: users }, { data: rates }] = await Promise.all([
-    computeCeoReport(),
-    getPayrollSettings(),
-    getWeeklyPayrollChecklist(),
-    supabase.from("users").select("id, name, role").eq("active", true).neq("role", "ceo").order("name"),
-    supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
-  ]);
+  const [r, payrollSettings, checklist, { data: users }, { data: rates }, attendanceReport, vaultEntries] =
+    await Promise.all([
+      computeCeoReport(),
+      getPayrollSettings(),
+      getWeeklyPayrollChecklist(),
+      supabase.from("users").select("id, name, role").eq("active", true).neq("role", "ceo").order("name"),
+      supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
+      computeAttendanceReport(),
+      listVaultEntries().catch(() => []),
+    ]);
 
   const rateByUser = new Map((rates ?? []).map((rt) => [rt.user_id, rt]));
   const people: PersonRate[] = (users ?? []).map((u) => {
@@ -47,9 +54,12 @@ export default async function CeoPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Panel CEO</h1>
-        <p className="text-sm text-muted-foreground">Visible solo para ti.</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">Panel CEO</h1>
+          <p className="text-sm text-muted-foreground">Visible solo para ti.</p>
+        </div>
+        <LiveSync tables={["ingresos", "requerimientos", "attendance", "user_payroll_rates"]} />
       </div>
 
       <Tabs defaultValue="rentabilidad">
@@ -57,6 +67,8 @@ export default async function CeoPage() {
           <TabsTrigger value="rentabilidad">Rentabilidad</TabsTrigger>
           <TabsTrigger value="nomina">Nómina</TabsTrigger>
           <TabsTrigger value="checklist">Checklist de pago</TabsTrigger>
+          <TabsTrigger value="asistencia">Asistencia</TabsTrigger>
+          <TabsTrigger value="contrasenas">Contraseñas</TabsTrigger>
           <TabsTrigger value="asistente">Asistente CEO</TabsTrigger>
         </TabsList>
 
@@ -163,6 +175,69 @@ export default async function CeoPage() {
                   Nómina.
                 </p>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="asistencia">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Entradas y salidas — últimos 7 días</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Hora Colombia. Se marca &quot;tarde&quot; si la entrada fue después de las 9:00 a.m.
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1.5 text-sm">
+              {attendanceReport.length === 0 && (
+                <p className="text-muted-foreground">Nadie ha marcado entrada todavía.</p>
+              )}
+              {attendanceReport.map((row, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-3 border-b py-1.5 last:border-b-0"
+                >
+                  <span className="font-medium">{row.name}</span>
+                  <span className="text-muted-foreground">
+                    {new Date(row.clockIn).toLocaleString("es-CO", {
+                      timeZone: "America/Bogota",
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {row.clockOut
+                      ? `salió ${new Date(row.clockOut).toLocaleString("es-CO", {
+                          timeZone: "America/Bogota",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : "sigue activo"}
+                  </span>
+                  {row.tarde ? (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                      Tarde
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800">
+                      A tiempo
+                    </span>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="contrasenas">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Bóveda de contraseñas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CredentialsVault entries={vaultEntries} />
             </CardContent>
           </Card>
         </TabsContent>

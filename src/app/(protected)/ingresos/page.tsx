@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { updateIngresoEstado, updateEstadoPago } from "./actions";
 import { IngresoFormDialog } from "@/components/ingresos/ingreso-form-dialog";
 import { EstadoSelect } from "@/components/estado-select";
+import { LiveSync } from "@/components/live-sync";
 import {
   INGRESO_ESTADOS,
   INGRESO_ESTADO_COLORS,
@@ -53,7 +54,10 @@ export default async function IngresosPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Ingresos</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Ingresos</h1>
+          <LiveSync tables={["ingresos"]} />
+        </div>
         <IngresoFormDialog responsables={users ?? []} />
       </div>
 

@@ -6,6 +6,7 @@ import { ProspectoFormDialog } from "@/components/prospectos/prospecto-form-dial
 import { EstadoSelect } from "@/components/estado-select";
 import { PROSPECTO_ESTADOS, PROSPECTO_ESTADO_COLORS, type ProspectoEstado } from "@/lib/statuses";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LiveSync } from "@/components/live-sync";
 import {
   Table,
   TableBody,
@@ -48,7 +49,10 @@ export default async function ProspectosPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">Prospectos</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="font-heading text-2xl font-semibold tracking-tight">Prospectos</h1>
+            <LiveSync tables={["prospectos"]} />
+          </div>
           <p className="text-sm text-muted-foreground">
             Leads de WhatsApp (próximamente) y reuniones agendadas por Calendly, sincronizadas
             automáticamente.

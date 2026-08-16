@@ -71,7 +71,7 @@ function Row({ person }: { person: PersonRate }) {
           </SelectContent>
         </Select>
       </div>
-      <div className="col-span-3">
+      <div className="col-span-2">
         <Input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} className="h-8" />
       </div>
       <div className="col-span-2">
@@ -85,9 +85,10 @@ function Row({ person }: { person: PersonRate }) {
           </SelectContent>
         </Select>
       </div>
-      <div className="col-span-1">
-        <Button size="icon-sm" onClick={save} disabled={pending} title="Guardar">
+      <div className="col-span-2">
+        <Button size="sm" type="button" onClick={save} disabled={pending} className="h-8 w-full gap-1 px-2 text-xs">
           <Check className="size-3.5" />
+          {pending ? "Guardando…" : "Guardar"}
         </Button>
       </div>
     </div>
@@ -100,9 +101,9 @@ export function PayrollRatesTable({ people }: { people: PersonRate[] }) {
       <div className="grid grid-cols-12 gap-2 border-b pb-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
         <div className="col-span-3">Persona</div>
         <div className="col-span-3">Modo</div>
-        <div className="col-span-3">Monto</div>
+        <div className="col-span-2">Monto</div>
         <div className="col-span-2">Moneda</div>
-        <div className="col-span-1"></div>
+        <div className="col-span-2"></div>
       </div>
       {people.map((p) => (
         <Row key={p.userId} person={p} />
