@@ -1,4 +1,11 @@
-import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, View, Text, StyleSheet, Font } from "@react-pdf/renderer";
+
+// Fuente cursiva para la firma — se descarga una sola vez por invocación
+// del servidor (react-pdf la cachea internamente tras el primer registro).
+Font.register({
+  family: "Great Vibes",
+  src: "https://fonts.gstatic.com/s/greatvibes/v21/RWmMoKWR9v4ksMfaWd_JN-XC.ttf",
+});
 
 // Static "prestador de servicio" info — taken verbatim from Sebastian's Canva
 // template (DAHNnU_KLNg). This is Alank/Reditus's fixed legal identity as an
@@ -126,17 +133,26 @@ const styles = StyleSheet.create({
     color: BLUE,
   },
   signature: {
-    marginTop: 70,
+    marginTop: 50,
     alignItems: "center",
   },
+  signatureScript: {
+    fontFamily: "Great Vibes",
+    fontSize: 30,
+    color: "#1a1a1a",
+    marginBottom: 2,
+  },
   signatureLine: {
-    width: 200,
+    width: 220,
     borderBottom: "1pt solid #333333",
     marginBottom: 4,
   },
 });
 
-function formatCOP(value: number) {
+function formatMoney(value: number, moneda: "USD" | "COP") {
+  if (moneda === "USD") {
+    return `US$${value.toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
   return `$${Math.round(value).toLocaleString("es-CO")} COP`;
 }
 
@@ -148,6 +164,7 @@ export type DocumentoIngreso = {
   servicio: string | null;
   producto: string | null;
   precio_final_descuento: number | null;
+  moneda: "USD" | "COP" | null;
   cotizacion_numero: string | null;
   cuenta_cobro_numero: string | null;
   created_at: string;
@@ -177,6 +194,7 @@ export function DocumentoReditus({
   items?: DocumentoItem[];
 }) {
   const isCuentaCobro = tipo === "cuenta_cobro";
+  const moneda = ingreso.moneda ?? "USD";
   const fecha = new Date(ingreso.created_at);
   const anio = fecha.getFullYear();
   const mes = String(fecha.getMonth() + 1).padStart(2, "0");
@@ -298,17 +316,18 @@ export function DocumentoReditus({
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.tableCell}>{linea.producto}</Text>
                 <Text style={styles.tableCell}>{linea.cantidad}</Text>
-                <Text style={styles.tableCell}>{formatCOP(linea.precio_unitario)}</Text>
+                <Text style={styles.tableCell}>{formatMoney(linea.precio_unitario, moneda)}</Text>
                 <Text style={styles.tableCell}>
-                  {formatCOP(linea.cantidad * linea.precio_unitario)}
+                  {formatMoney(linea.cantidad * linea.precio_unitario, moneda)}
                 </Text>
               </View>
             ))}
           </View>
 
-          <Text style={styles.totalRow}>Total a pagar: {formatCOP(total)}</Text>
+          <Text style={styles.totalRow}>Total a pagar: {formatMoney(total, moneda)}</Text>
 
           <View style={styles.signature}>
+            <Text style={styles.signatureScript}>{PRESTADOR.firma}</Text>
             <View style={styles.signatureLine} />
             <Text style={{ fontSize: 9 }}>{PRESTADOR.firma}</Text>
           </View>

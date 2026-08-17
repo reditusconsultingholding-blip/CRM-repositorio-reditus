@@ -24,6 +24,14 @@ export function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+/** Convierte un valor de ingreso a USD según su moneda guardada — los
+ * ingresos en COP se guardan en pesos tal cual, y hay que pasarlos a USD
+ * para poder sumarlos con el resto (todos los reportes son en USD). */
+export function ingresoToUsd(precio: number | null, moneda: string | null | undefined, rateCop: number): number {
+  const v = Number(precio ?? 0);
+  return moneda === "COP" ? v / rateCop : v;
+}
+
 export async function getUsdCopRate(): Promise<number | null> {
   try {
     const res = await fetch("https://open.er-api.com/v6/latest/USD", { next: { revalidate: 300 } });
@@ -87,12 +95,12 @@ export async function computeCeoReport(): Promise<CeoReport> {
     getPayrollSettings(),
     supabase
       .from("ingresos")
-      .select("precio_final_descuento")
+      .select("precio_final_descuento, moneda")
       .gte("fecha", isoDate(weekStart))
       .lt("fecha", isoDate(weekEnd)),
     supabase
       .from("ingresos")
-      .select("precio_final_descuento")
+      .select("precio_final_descuento, moneda")
       .gte("fecha", isoDate(monthStart))
       .lt("fecha", isoDate(monthEnd)),
     supabase.from("users").select("id, role").eq("active", true).eq("incluir_en_nomina", true).neq("role", "ceo"),
@@ -138,16 +146,16 @@ export async function computeCeoReport(): Promise<CeoReport> {
     getUsdCopRate(),
   ]);
 
+  const rateCop = usdCop ?? 4000;
+
   const ingresosSemanaUsd = (ingresosSemana ?? []).reduce(
-    (s, r) => s + Number(r.precio_final_descuento ?? 0),
+    (s, r) => s + ingresoToUsd(r.precio_final_descuento, r.moneda, rateCop),
     0,
   );
   const ingresosMesUsd = (ingresosMes ?? []).reduce(
-    (s, r) => s + Number(r.precio_final_descuento ?? 0),
+    (s, r) => s + ingresoToUsd(r.precio_final_descuento, r.moneda, rateCop),
     0,
   );
-
-  const rateCop = usdCop ?? 4000;
 
   function countBy(rows: { encargado_id?: string | null; programador_id?: string | null }[] | null, key: "encargado_id" | "programador_id") {
     const map = new Map<string, number>();

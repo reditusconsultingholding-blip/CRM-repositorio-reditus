@@ -31,6 +31,7 @@ type RequerimientoRow = {
   programador_id: string | null;
   encargado: { name: string } | null;
   programador: { name: string } | null;
+  ingreso: { tracking_id: string } | null;
 };
 
 export default async function RequerimientosPage() {
@@ -40,7 +41,7 @@ export default async function RequerimientosPage() {
     supabase
       .from("requerimientos")
       .select(
-        "id, pipeline, estado, nombre_producto, pais_acento, f_entrega_prometida, programador_id, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name)",
+        "id, pipeline, estado, nombre_producto, pais_acento, f_entrega_prometida, programador_id, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name), ingreso:ingresos(tracking_id)",
       )
       .order("created_at", { ascending: false })
       .returns<RequerimientoRow[]>(),
@@ -82,6 +83,7 @@ export default async function RequerimientosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>ID</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>País (acento)</TableHead>
                       <TableHead>Entrega prometida</TableHead>
@@ -93,6 +95,9 @@ export default async function RequerimientosPage() {
                   <TableBody>
                     {rows.map((row) => (
                       <TableRow key={row.id}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {row.ingreso?.tracking_id ?? "—"}
+                        </TableCell>
                         <TableCell>{row.nombre_producto}</TableCell>
                         <TableCell>{row.pais_acento ?? "—"}</TableCell>
                         <TableCell>{row.f_entrega_prometida ?? "—"}</TableCell>
@@ -117,7 +122,7 @@ export default async function RequerimientosPage() {
                     ))}
                     {rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">
                           Sin requerimientos todavía.
                         </TableCell>
                       </TableRow>
@@ -140,6 +145,7 @@ export default async function RequerimientosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>ID</TableHead>
                   <TableHead>Producto</TableHead>
                   <TableHead>Diseñadora</TableHead>
                   <TableHead>Programador</TableHead>
@@ -150,6 +156,9 @@ export default async function RequerimientosPage() {
               <TableBody>
                 {programadorRows.map((row) => (
                   <TableRow key={row.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {row.ingreso?.tracking_id ?? "—"}
+                    </TableCell>
                     <TableCell>{row.nombre_producto}</TableCell>
                     <TableCell>{row.encargado?.name ?? "—"}</TableCell>
                     <TableCell>{row.programador?.name ?? "Sin asignar"}</TableCell>
@@ -173,7 +182,7 @@ export default async function RequerimientosPage() {
                 ))}
                 {programadorRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
                       Nada pendiente de publicar por ahora.
                     </TableCell>
                   </TableRow>

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { updateIngresoEstado, updateEstadoPago } from "./actions";
 import { IngresoFormDialog } from "@/components/ingresos/ingreso-form-dialog";
+import { DeleteIngresoButton } from "@/components/ingresos/delete-ingreso-button";
 import { EstadoSelect } from "@/components/estado-select";
 import { LiveSync } from "@/components/live-sync";
 import {
@@ -30,6 +31,7 @@ type IngresoRow = {
   producto: string | null;
   precio_total: number | null;
   precio_final_descuento: number | null;
+  moneda: "USD" | "COP";
   estado_pago: EstadoPago;
   cotizacion_numero: string | null;
   cuenta_cobro_numero: string | null;
@@ -44,7 +46,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, estado_pago, cotizacion_numero, cuenta_cobro_numero, client:clients(name, whatsapp_number), responsable:users(name)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, moneda, estado_pago, cotizacion_numero, cuenta_cobro_numero, client:clients(name, whatsapp_number), responsable:users(name)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -76,6 +78,7 @@ export default async function IngresosPage() {
               <TableHead>Responsable</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Documentos</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -93,7 +96,7 @@ export default async function IngresosPage() {
                   {row.precio_final_descuento != null
                     ? Number(row.precio_final_descuento).toLocaleString("es-CO", {
                         style: "currency",
-                        currency: "USD",
+                        currency: row.moneda ?? "USD",
                       })
                     : "—"}
                 </TableCell>
@@ -128,16 +131,19 @@ export default async function IngresosPage() {
                         href={`/api/documentos/${row.id}/cuenta_cobro`}
                         className="text-primary hover:underline"
                       >
-                        Cuenta de cobro
+                        Factura
                       </a>
                     </>
                   )}
+                </TableCell>
+                <TableCell>
+                  <DeleteIngresoButton ingresoId={row.id} trackingId={row.tracking_id} />
                 </TableCell>
               </TableRow>
             ))}
             {(ingresos ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground">
+                <TableCell colSpan={12} className="text-center text-muted-foreground">
                   Todavía no hay ingresos registrados.
                 </TableCell>
               </TableRow>

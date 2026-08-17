@@ -38,6 +38,7 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [items, setItems] = useState<Item[]>([{ ...EMPTY_ITEM }]);
+  const [moneda, setMoneda] = useState<"USD" | "COP">("USD");
   const formRef = useRef<HTMLFormElement>(null);
 
   function updateItem(index: number, patch: Partial<Item>) {
@@ -56,6 +57,7 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
 
   function handleSubmit(formData: FormData) {
     formData.set("items_json", JSON.stringify(items));
+    formData.set("moneda", moneda);
     startTransition(async () => {
       const result = await createIngreso(formData);
       if (result?.error) {
@@ -93,9 +95,20 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
           <div className="col-span-2 flex flex-col gap-2 rounded-md border p-3">
             <div className="flex items-center justify-between">
               <Label>Servicios / productos</Label>
-              <Button type="button" size="sm" variant="outline" onClick={addItem}>
-                <Plus className="size-3.5" /> Agregar servicio
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select value={moneda} onValueChange={(v) => setMoneda(v as "USD" | "COP")}>
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="COP">COP</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button type="button" size="sm" variant="outline" onClick={addItem}>
+                  <Plus className="size-3.5" /> Agregar servicio
+                </Button>
+              </div>
             </div>
             <div className="flex flex-col gap-2">
               {items.map((item, i) => (
@@ -153,13 +166,13 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
               ))}
             </div>
             <p className="text-right text-sm text-muted-foreground">
-              Total: {totalCalculado.toLocaleString("es-CO", { style: "currency", currency: "USD" })}
+              Total: {totalCalculado.toLocaleString("es-CO", { style: "currency", currency: moneda })}
             </p>
           </div>
 
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="precio_final_descuento">
-              Precio final (opcional — solo si aplica un descuento distinto a la suma)
+              Precio final en {moneda} (opcional — solo si aplica un descuento distinto a la suma)
             </Label>
             <Input id="precio_final_descuento" name="precio_final_descuento" type="number" step="0.01" />
           </div>

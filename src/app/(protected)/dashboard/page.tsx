@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MonthCalendar, type DiaData } from "@/components/dashboard/month-calendar";
 import { LiveSync } from "@/components/live-sync";
 import { RevenueExplorer } from "@/components/dashboard/revenue-explorer";
+import { getUsdCopRate, ingresoToUsd } from "@/lib/ceo-report";
 
 export default async function DashboardPage() {
   const profile = await requireProfile();
@@ -23,17 +24,18 @@ export default async function DashboardPage() {
     landingAbiertos,
     videoTotal,
     landingTotal,
+    usdCop,
   ] = await Promise.all([
     canSeeIngresos
       ? supabase
           .from("ingresos")
-          .select("precio_final_descuento", { count: "exact" })
+          .select("precio_final_descuento, moneda", { count: "exact" })
           .eq("fecha", today)
       : Promise.resolve({ data: [], count: 0 }),
     canSeeIngresos
       ? supabase
           .from("ingresos")
-          .select("fecha, precio_final_descuento")
+          .select("fecha, precio_final_descuento, moneda")
           .gte("fecha", monthStart)
           .lt("fecha", monthEnd)
       : Promise.resolve({ data: [] }),
@@ -55,11 +57,14 @@ export default async function DashboardPage() {
       .from("requerimientos")
       .select("id", { count: "exact", head: true })
       .eq("pipeline", "landing"),
+    getUsdCopRate(),
   ]);
+
+  const rateCop = usdCop ?? 4000;
 
   const totalHoy =
     (ingresosHoy.data ?? []).reduce(
-      (sum, r) => sum + Number(r.precio_final_descuento ?? 0),
+      (sum, r) => sum + ingresoToUsd(r.precio_final_descuento, r.moneda, rateCop),
       0,
     ) || 0;
 
@@ -67,7 +72,7 @@ export default async function DashboardPage() {
   let totalMes = 0;
   for (const row of ingresosMes.data ?? []) {
     const key = row.fecha as string;
-    const monto = Number(row.precio_final_descuento ?? 0);
+    const monto = ingresoToUsd(row.precio_final_descuento, row.moneda, rateCop);
     totalMes += monto;
     if (!calendarData[key]) calendarData[key] = { count: 0, total: 0 };
     calendarData[key].count += 1;

@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_LABELS } from "@/lib/roles";
+import { getUsdCopRate, ingresoToUsd } from "@/lib/ceo-report";
 
 /** Contexto extendido del negocio para el asistente del CEO: top clientes,
  * pipeline de prospectos y equipo — más allá de solo rentabilidad/nómina,
@@ -8,19 +9,24 @@ import { ROLE_LABELS } from "@/lib/roles";
 export async function buildExtendedBusinessContext(): Promise<string> {
   const supabase = await createClient();
 
-  const [{ data: clients }, { data: ingresos }, { data: historicos }, { data: prospectos }, { data: team }] =
+  const [{ data: clients }, { data: ingresos }, { data: historicos }, { data: prospectos }, { data: team }, usdCop] =
     await Promise.all([
       supabase.from("clients").select("id, name"),
-      supabase.from("ingresos").select("client_id, precio_final_descuento"),
+      supabase.from("ingresos").select("client_id, precio_final_descuento, moneda"),
       supabase.from("historical_ingresos").select("client_id, precio_usd_aprox"),
       supabase.from("prospectos").select("estado"),
       supabase.from("users").select("name, role").eq("active", true).neq("role", "ceo"),
+      getUsdCopRate(),
     ]);
 
+  const rateCop = usdCop ?? 4000;
   const spendByClient = new Map<string, number>();
   for (const r of ingresos ?? []) {
     if (!r.client_id) continue;
-    spendByClient.set(r.client_id, (spendByClient.get(r.client_id) ?? 0) + Number(r.precio_final_descuento ?? 0));
+    spendByClient.set(
+      r.client_id,
+      (spendByClient.get(r.client_id) ?? 0) + ingresoToUsd(r.precio_final_descuento, r.moneda, rateCop),
+    );
   }
   for (const r of historicos ?? []) {
     if (!r.client_id) continue;

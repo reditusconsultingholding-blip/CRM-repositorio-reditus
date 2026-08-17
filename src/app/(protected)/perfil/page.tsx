@@ -5,6 +5,7 @@ import { ChangePasswordForm } from "@/components/perfil/change-password-form";
 import { ChangeEmailForm } from "@/components/perfil/change-email-form";
 import { EditProfileForm } from "@/components/perfil/edit-profile-form";
 import { PushToggle } from "@/components/perfil/push-toggle";
+import { TotpCodeDisplay } from "@/components/perfil/totp-code-display";
 
 export default async function PerfilPage() {
   const profile = await requireProfile();
@@ -61,6 +62,22 @@ export default async function PerfilPage() {
               <PushToggle />
             </CardContent>
           </Card>
+
+          {profile.role === "ceo" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Código para borrar ingresos</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Solo tú ves este código — cámbia cada 30 segundos. Gerente Comercial lo necesita
+                  para poder borrar un ingreso, así que si hace falta compártelo de viva voz en el
+                  momento.
+                </p>
+                <TotpCodeDisplay />
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

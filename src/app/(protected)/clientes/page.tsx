@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getUsdCopRate } from "@/lib/ceo-report";
+import { getUsdCopRate, ingresoToUsd } from "@/lib/ceo-report";
 import { ClientesTable, type ClienteRow } from "@/components/clientes/clientes-table";
 import { LiveSync } from "@/components/live-sync";
 
@@ -21,7 +21,7 @@ export default async function ClientesPage() {
 
   const [{ data: clients }, { data: ingresos }, { data: historicos }, usdCop] = await Promise.all([
     supabase.from("clients").select("id, name, whatsapp_number, country, tax_id").order("name"),
-    supabase.from("ingresos").select("client_id, precio_final_descuento"),
+    supabase.from("ingresos").select("client_id, precio_final_descuento, moneda"),
     // Puede no existir todavía si la migración 0002b/histórica no se ha corrido —
     // se maneja con gracia en vez de romper la página.
     supabase.from("historical_ingresos").select("client_id, precio_usd_aprox"),
@@ -34,7 +34,7 @@ export default async function ClientesPage() {
   for (const r of ingresos ?? []) {
     if (!r.client_id) continue;
     const cur = actualByClient.get(r.client_id) ?? { total: 0, count: 0 };
-    cur.total += Number(r.precio_final_descuento ?? 0);
+    cur.total += ingresoToUsd(r.precio_final_descuento, r.moneda, rateCop);
     cur.count += 1;
     actualByClient.set(r.client_id, cur);
   }
