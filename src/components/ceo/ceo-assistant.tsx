@@ -1,16 +1,31 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Bot, Send } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Bot, Send, Mic, Square, Volume2, VolumeX } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 import { askCeoAssistant } from "@/app/(protected)/ceo/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MermaidDiagram } from "@/components/ceo/mermaid-diagram";
+import { markdownToSpeechText } from "@/lib/speech-text";
+import { cn } from "@/lib/utils";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
+
+// El navegador expone SpeechRecognition con prefijo en Chrome/Edge — no
+// hay tipos oficiales de TypeScript para esta API todavía.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SpeechRecognitionCtor = new () => any;
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
 
 function AssistantMessage({ content }: { content: string }) {
   return (
@@ -42,39 +57,105 @@ export function CeoAssistant() {
     {
       role: "assistant",
       content:
-        "Hola, soy tu asesor de negocio privado. Te conozco a fondo: rentabilidad, nómina, clientes, prospectos y tu propia estrategia (documento maestro y manual operativo). Pregúntame lo que sea — si ayuda a explicarlo, te armo tablas o diagramas.",
+        "Hola, soy tu asesor de negocio privado. Te conozco a fondo: rentabilidad, nómina, clientes, prospectos y tu propia estrategia (documento maestro y manual operativo). Pregúntame lo que sea — si ayuda a explicarlo, te armo tablas o diagramas. Puedes hablarme con el micrófono y te respondo en voz.",
     },
   ]);
   const [input, setInput] = useState("");
   const [pending, startTransition] = useTransition();
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null);
+  const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const micSupported = getSpeechRecognitionCtor() !== null;
+  const spokenCountRef = useRef(1); // el mensaje inicial no se lee solo
 
-  function send() {
-    const text = input.trim();
-    if (!text) return;
-    const next = [...messages, { role: "user" as const, content: text }];
+  function send(text: string) {
+    const clean = text.trim();
+    if (!clean) return;
+    const next = [...messages, { role: "user" as const, content: clean }];
     setMessages(next);
     setInput("");
 
     startTransition(async () => {
-      try {
-        const reply = await askCeoAssistant(next);
-        setMessages((prev) => [...prev, reply]);
-      } catch (e) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: e instanceof Error ? e.message : "Ocurrió un error." },
-        ]);
-      }
+      const reply = await askCeoAssistant(next);
+      setMessages((prev) => [...prev, reply]);
     });
   }
 
+  function toggleMic() {
+    if (!micSupported) {
+      toast.error("Este navegador no soporta reconocimiento de voz. Usa Chrome o Edge.");
+      return;
+    }
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Ctor = getSpeechRecognitionCtor()!;
+    const recognition = new Ctor();
+    recognition.lang = "es-CO";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript as string;
+      setInput(transcript);
+      send(transcript);
+    };
+    recognition.onerror = () => {
+      toast.error("No se pudo escuchar — intenta de nuevo.");
+      setListening(false);
+    };
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }
+
+  // Lee en voz alta cada respuesta nueva del asistente cuando el modo voz
+  // está activado (no lee el mensaje de bienvenida inicial).
+  useEffect(() => {
+    if (!voiceOn || !speechSupported) return;
+    if (messages.length <= spokenCountRef.current) return;
+    spokenCountRef.current = messages.length;
+
+    const last = messages[messages.length - 1];
+    if (last.role !== "assistant") return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(markdownToSpeechText(last.content));
+    utterance.lang = "es-CO";
+    utterance.rate = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const esVoice = voices.find((v) => v.lang.startsWith("es"));
+    if (esVoice) utterance.voice = esVoice;
+    window.speechSynthesis.speak(utterance);
+  }, [messages, voiceOn, speechSupported]);
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2 text-base">
           <Bot className="size-4" />
           Asistente CEO
         </CardTitle>
+        {speechSupported && (
+          <Button
+            type="button"
+            size="sm"
+            variant={voiceOn ? "default" : "outline"}
+            className="gap-1.5"
+            onClick={() => {
+              if (voiceOn) window.speechSynthesis.cancel();
+              setVoiceOn((v) => !v);
+            }}
+          >
+            {voiceOn ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
+            {voiceOn ? "Voz activada" : "Voz desactivada"}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto">
@@ -95,11 +176,24 @@ export function CeoAssistant() {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
-            placeholder="Ej. ¿Cómo va la rentabilidad esta semana?"
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send(input))}
+            placeholder="Ej. ¿Cómo va la rentabilidad esta semana? (o usa el micrófono)"
             disabled={pending}
           />
-          <Button size="icon" onClick={send} disabled={pending}>
+          {micSupported && (
+            <Button
+              type="button"
+              size="icon"
+              variant={listening ? "destructive" : "outline"}
+              onClick={toggleMic}
+              disabled={pending}
+              title={listening ? "Detener" : "Hablar"}
+              className={cn(listening && "animate-pulse")}
+            >
+              {listening ? <Square className="size-4" /> : <Mic className="size-4" />}
+            </Button>
+          )}
+          <Button size="icon" onClick={() => send(input)} disabled={pending}>
             <Send className="size-4" />
           </Button>
         </div>
