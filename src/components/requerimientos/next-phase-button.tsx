@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { Check } from "lucide-react";
 import { updateRequerimientoEstado } from "@/app/(protected)/requerimientos/actions";
 import { Button } from "@/components/ui/button";
 import type { RequerimientoEstado } from "@/lib/statuses";
@@ -19,21 +20,22 @@ export function NextPhaseButton({
 
   return (
     <Button
-      size="sm"
-      variant="outline"
+      size="default"
+      className="gap-1.5"
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          try {
-            await updateRequerimientoEstado(requerimientoId, nextEstado);
-            toast.success(`Pasó a "${nextEstado}"`);
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "No se pudo avanzar");
+          const result = await updateRequerimientoEstado(requerimientoId, nextEstado);
+          if (result?.error) {
+            toast.error(result.error);
+          } else {
+            toast.success(`Tarea completada — pasó a "${nextEstado}"`);
           }
         })
       }
     >
-      Pasar a &quot;{nextEstado}&quot; →
+      <Check className="size-4" />
+      {pending ? "Guardando…" : "Tarea completada"}
     </Button>
   );
 }

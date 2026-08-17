@@ -63,18 +63,18 @@ export default async function RequerimientoDetailPage({
       <Card className="lg:col-span-2">
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>{requerimiento.nombre_producto}</CardTitle>
-          <div className="flex items-center gap-2">
-            <NextPhaseButton requerimientoId={id} nextEstado={nextEstado} />
-            <EstadoSelect
-              value={requerimiento.estado as RequerimientoEstado}
-              estados={REQUERIMIENTO_ESTADOS}
-              colors={REQUERIMIENTO_ESTADO_COLORS}
-              onChange={updateRequerimientoEstado.bind(null, id)}
-            />
-          </div>
+          <EstadoSelect
+            value={requerimiento.estado as RequerimientoEstado}
+            estados={REQUERIMIENTO_ESTADOS}
+            colors={REQUERIMIENTO_ESTADO_COLORS}
+            onChange={updateRequerimientoEstado.bind(null, id)}
+          />
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
-          <p className="text-muted-foreground">{requerimiento.requerimiento_texto || "Sin descripción."}</p>
+          <div>
+            <p className="text-xs text-muted-foreground">Requerimiento</p>
+            <p>{requerimiento.requerimiento_texto || "Sin descripción."}</p>
+          </div>
           <Separator />
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -100,6 +100,20 @@ export default async function RequerimientoDetailPage({
               )}
             </div>
             <div>
+              <p className="text-xs text-muted-foreground">Documento de información</p>
+              {requerimiento.documento_inf_url ? (
+                <a
+                  href={requerimiento.documento_inf_url}
+                  target="_blank"
+                  className="text-primary hover:underline"
+                >
+                  Abrir documento
+                </a>
+              ) : (
+                <p>—</p>
+              )}
+            </div>
+            <div>
               <p className="text-xs text-muted-foreground">Encargado</p>
               <AssignSelect
                 requerimientoId={id}
@@ -118,6 +132,18 @@ export default async function RequerimientoDetailPage({
               </div>
             )}
           </div>
+
+          {nextEstado && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Cuando termines tu parte, marca la tarea como completada — avanza sola a &quot;{nextEstado}&quot;.
+                </p>
+                <NextPhaseButton requerimientoId={id} nextEstado={nextEstado} />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
