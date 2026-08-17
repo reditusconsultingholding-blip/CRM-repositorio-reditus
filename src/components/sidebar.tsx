@@ -24,7 +24,6 @@ import { NotificationBell } from "@/components/notification-bell";
 import { ChatBadge } from "@/components/chat/chat-badge";
 import { CurrencyWidget } from "@/components/currency-widget";
 import { RentabilidadWidget } from "@/components/ceo/rentabilidad-widget";
-import { ClockWidget } from "@/components/clock-widget";
 import { ROLE_LABELS, type UserRole } from "@/lib/roles";
 
 const ALL_LINKS = [
@@ -45,13 +44,11 @@ export function Sidebar({
   name,
   userId,
   avatarUrl,
-  attendance,
 }: {
   role: UserRole;
   name: string;
   userId: string;
   avatarUrl?: string | null;
-  attendance?: { id: string; clock_in: string; clock_out: string | null } | null;
 }) {
   const pathname = usePathname();
   const links = ALL_LINKS.filter((l) => !l.roles || (l.roles as readonly string[]).includes(role));
@@ -110,7 +107,6 @@ export function Sidebar({
       </nav>
 
       <div className="flex flex-col gap-3 border-t p-3">
-        <ClockWidget initial={attendance ?? null} />
         <CurrencyWidget />
         {role === "ceo" && <RentabilidadWidget />}
 
