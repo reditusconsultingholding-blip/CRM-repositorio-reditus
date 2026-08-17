@@ -1,14 +1,17 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { updateRequerimientoEstado } from "../actions";
 import { EstadoSelect } from "@/components/estado-select";
 import { AssignSelect } from "@/components/requerimientos/assign-select";
 import { ProgramadorSelect } from "@/components/requerimientos/programador-select";
 import { NextPhaseButton } from "@/components/requerimientos/next-phase-button";
 import { CommentForm } from "@/components/requerimientos/comment-form";
+import { SeguimientoRecompra } from "@/components/requerimientos/seguimiento-recompra";
 import {
   REQUERIMIENTO_ESTADOS,
   REQUERIMIENTO_ESTADO_COLORS,
+  REQUERIMIENTO_TERMINADOS,
   getNextEstado,
   type RequerimientoEstado,
 } from "@/lib/statuses";
@@ -29,6 +32,7 @@ export default async function RequerimientoDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const profile = await requireProfile();
   const supabase = await createClient();
 
   const [{ data: requerimiento }, { data: users }, { data: programadores }, { data: comments }] =
@@ -57,6 +61,22 @@ export default async function RequerimientoDetailPage({
     requerimiento.pipeline as "video" | "landing",
     requerimiento.estado as RequerimientoEstado,
   );
+
+  const mostrarSeguimiento = requerimiento.ingreso_id && REQUERIMIENTO_TERMINADOS.includes(requerimiento.estado as RequerimientoEstado);
+  let encuestaInfo = null;
+  let cicloCerrado = false;
+  if (mostrarSeguimiento) {
+    const [{ data: encuesta }, { data: ingreso }] = await Promise.all([
+      supabase
+        .from("encuestas_calidad")
+        .select("token, puntuacion, comentario, quiere_testimonio, respondido_at")
+        .eq("ingreso_id", requerimiento.ingreso_id)
+        .maybeSingle(),
+      supabase.from("ingresos").select("ciclo_cerrado").eq("id", requerimiento.ingreso_id).single(),
+    ]);
+    encuestaInfo = encuesta;
+    cicloCerrado = ingreso?.ciclo_cerrado ?? false;
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -171,6 +191,17 @@ export default async function RequerimientoDetailPage({
           <CommentForm requerimientoId={id} people={users ?? []} />
         </CardContent>
       </Card>
+
+      {mostrarSeguimiento && (
+        <div className="lg:col-span-3">
+          <SeguimientoRecompra
+            ingresoId={requerimiento.ingreso_id}
+            encuesta={encuestaInfo}
+            cicloCerrado={cicloCerrado}
+            canManage={(INGRESOS_ROLES as string[]).includes(profile.role)}
+          />
+        </div>
+      )}
     </div>
   );
 }

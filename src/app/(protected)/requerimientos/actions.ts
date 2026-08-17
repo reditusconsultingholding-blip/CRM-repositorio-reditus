@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { notify } from "@/lib/notify";
+import { maybeGenerarEncuestaCalidad } from "@/lib/encuesta";
 import type { RequerimientoEstado, Pipeline, PruebaSocialEstado, RequerimientoPagadoEstado } from "@/lib/statuses";
 
 type ActionResult = { error?: string } | undefined;
@@ -147,6 +148,10 @@ export async function updateRequerimientoEstado(id: string, estado: Requerimient
         }
       }
     }
+
+    // Si con este cambio todo el pedido queda terminado, genera (una sola
+    // vez) la encuesta de calidad y avisa al equipo comercial.
+    await maybeGenerarEncuestaCalidad(supabase, id);
 
     revalidatePath("/requerimientos");
     revalidatePath(`/requerimientos/${id}`);

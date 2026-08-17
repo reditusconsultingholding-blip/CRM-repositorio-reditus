@@ -38,6 +38,10 @@ export const REQUERIMIENTO_ESTADOS = [
 
 export type RequerimientoEstado = (typeof REQUERIMIENTO_ESTADOS)[number];
 
+// Estados que cuentan como "ya está listo" — para Prueba Social, la
+// encuesta de calidad, y filtros de "sigue activo" en otras pantallas.
+export const REQUERIMIENTO_TERMINADOS: RequerimientoEstado[] = ["Terminado", "ENTREGADO", "SUBIDA"];
+
 // Tailwind bg/text classes approximating the original spreadsheet colors.
 export const INGRESO_ESTADO_COLORS: Record<IngresoEstado, string> = {
   "Nuevo pedido": "bg-yellow-300 text-yellow-950",
