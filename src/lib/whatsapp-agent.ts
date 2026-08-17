@@ -1,11 +1,10 @@
-// Reditus CRM — diseño del agente de ventas de WhatsApp (línea 1).
+// Reditus CRM — agente de ventas de WhatsApp (línea 1).
 //
-// TODAVÍA NO ESTÁ CONECTADO A NADA — no hay webhook de WhatsApp que lo
-// invoque, porque falta el acceso a la WhatsApp Business API (Meta
-// Business Manager o un proveedor como Twilio/360dialog, gestionado por
-// Sebastian). Este archivo deja listo el "cerebro" del agente para cuando
-// exista ese webhook: solo hay que llamar a `runSalesAgentTurn()` con cada
-// mensaje entrante.
+// El "cerebro" (esta función) ya está completo y conectado al webhook en
+// src/app/api/whatsapp/webhook/route.ts. Lo único que falta es que exista
+// la credencial WHATSAPP_ACCESS_TOKEN + WHATSAPP_SALES_PHONE_NUMBER_ID +
+// WHATSAPP_VERIFY_TOKEN (Meta Business Manager, gestionado por Sebastian)
+// — sin eso, Meta nunca llama al webhook y esta función nunca se ejecuta.
 //
 // Diseño (aprovecha que Calendly ya tiene la calificación a fondo resuelta
 // con 5 preguntas en el evento "Llamada Estratégica de Crecimiento
@@ -47,16 +46,67 @@ export type SalesAgentResult = {
   prospectoEstado: "calificando" | "agendado" | "descartado";
 };
 
-// Placeholder de la función que se conectará al webhook de WhatsApp una vez
-// exista. La firma ya refleja lo que va a necesitar: el mensaje entrante,
-// el histórico de la conversación, y el número del remitente para
-// crear/actualizar su prospecto en la base de datos.
+/** Un turno del agente de ventas: recibe el mensaje entrante + el
+ * histórico de la conversación, y devuelve la respuesta a enviar más el
+ * nuevo estado del prospecto (heurística simple por palabras clave —
+ * "agendado" real lo confirma igual el cron de Calendly cuando la
+ * reunión efectivamente se agenda). */
 export async function runSalesAgentTurn(params: {
   fromWhatsappNumber: string;
   incomingMessage: string;
   history: { role: "user" | "assistant"; content: string }[];
 }): Promise<SalesAgentResult> {
-  throw new Error(
-    `runSalesAgentTurn: pendiente de conectar (webhook de WhatsApp) — mensaje recibido de ${params.fromWhatsappNumber} sin procesar.`,
-  );
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return {
+      reply:
+        "Gracias por escribir a Reditus Consulting. En breve te atiende un asesor — mientras tanto puedes agendar directo aquí: https://calendly.com/reditusconsultingholding/15min",
+      prospectoEstado: "calificando",
+    };
+  }
+
+  const messages = [
+    ...params.history.map((m) => ({ role: m.role, content: m.content })),
+    { role: "user" as const, content: params.incomingMessage },
+  ];
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-5",
+      max_tokens: 400,
+      system: SALES_AGENT_SYSTEM_PROMPT,
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    return {
+      reply: "Gracias por tu mensaje, en breve te responde nuestro equipo.",
+      prospectoEstado: "calificando",
+    };
+  }
+
+  const data = await res.json();
+  const reply: string =
+    data?.content?.find((c: { type: string }) => c.type === "text")?.text ??
+    "Gracias por tu mensaje, en breve te responde nuestro equipo.";
+
+  // "agendado" real lo confirma el cron de Calendly cuando la reunión se
+  // agenda de verdad — aquí solo distinguimos "calificando" (sigue en la
+  // conversación, con o sin el link ya compartido) de "descartado" (el
+  // propio agente cerró la conversación por no aplicar).
+  const lower = reply.toLowerCase();
+  const prospectoEstado: SalesAgentResult["prospectoEstado"] = /no (aplica|encajamos|es para (ti|ustedes))|no somos la mejor opción/.test(
+    lower,
+  )
+    ? "descartado"
+    : "calificando";
+
+  return { reply, prospectoEstado };
 }

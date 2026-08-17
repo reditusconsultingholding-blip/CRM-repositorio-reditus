@@ -79,10 +79,10 @@ export default async function WhatsAppPage() {
             vía un proveedor como Twilio/360dialog) — esa cuenta solo la puedes crear tú, no yo.
           </p>
           <p>
-            Apenas tengas esas credenciales, aquí se activa la bandeja de mensajes en tiempo real para
-            ambos números, con el historial de conversación, asignación de responsables y el agente de
-            ventas ya diseñado (<code>src/lib/whatsapp-agent.ts</code>) siguiendo el protocolo de tu
-            documento maestro.
+            El receptor ya está construido y desplegado (<code>/api/whatsapp/webhook</code>) — apenas
+            tengas las credenciales, conectar es solo: pegar 3 variables en Vercel y dar &quot;Verificar y
+            guardar&quot; en Meta. El agente de ventas (<code>src/lib/whatsapp-agent.ts</code>) ya sigue el
+            protocolo de tu documento maestro y comparte el link de Calendly cuando corresponde.
           </p>
         </CardContent>
       </Card>

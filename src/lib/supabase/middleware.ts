@@ -7,7 +7,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // /login antes de que la ruta pudiera ejecutarse, y el cron nunca corría.
 // /encuesta: el cliente abre este link sin haber iniciado sesión.
 // /api/health: monitoreo externo (UptimeRobot y similares) sin sesión.
-const PUBLIC_PATHS = ["/login", "/api/cron", "/encuesta", "/api/health"];
+// /api/whatsapp/webhook: Meta llama esta ruta directamente, sin sesión.
+const PUBLIC_PATHS = ["/login", "/api/cron", "/encuesta", "/api/health", "/api/whatsapp/webhook"];
 // Roles allowed to see /ingresos. Everyone else with a session is bounced to /requerimientos.
 const INGRESOS_ROLES = ["ceo", "gerente_comercial"];
 const ADMIN_ROLES = ["ceo"];
