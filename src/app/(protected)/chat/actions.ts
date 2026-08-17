@@ -127,7 +127,10 @@ export async function deleteMessage(messageId: string): Promise<ActionResult> {
     } = await supabase.auth.getUser();
     if (!user) return { error: "No autenticado." };
 
-    const { error } = await supabase.from("chat_messages").delete().eq("id", messageId).eq("author_id", user.id);
+    // Sin filtro de author_id aquí a propósito: el CEO puede moderar
+    // cualquier mensaje. RLS (chat_messages_delete_own_or_ceo) es quien
+    // realmente decide si el borrado se permite o no.
+    const { error } = await supabase.from("chat_messages").delete().eq("id", messageId);
     if (error) return { error: error.message };
 
     revalidatePath("/chat");

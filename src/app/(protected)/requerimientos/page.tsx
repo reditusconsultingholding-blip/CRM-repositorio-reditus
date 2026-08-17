@@ -130,9 +130,12 @@ export default async function RequerimientosPage() {
         })}
 
         <TabsContent value="programador" className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Landing pages en &quot;Por subir&quot; o ya asignadas a un programador.
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Landing pages en &quot;Por subir&quot; o ya asignadas a un programador.
+            </p>
+            <RequerimientoFormDialog pipeline="landing" encargados={users ?? []} />
+          </div>
           <div className="overflow-x-auto rounded-md border bg-background">
             <Table>
               <TableHeader>

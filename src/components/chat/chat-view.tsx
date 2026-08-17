@@ -95,11 +95,13 @@ export function ChatView({
   people,
   currentUserId,
   currentUserName,
+  canModerate = false,
 }: {
   channels: Channel[];
   people: Person[];
   currentUserId: string;
   currentUserName: string;
+  canModerate?: boolean;
 }) {
   const [selection, setSelection] = useState<Selection | null>(
     channels[0] ? { type: "channel", id: channels[0].id } : null,
@@ -514,22 +516,25 @@ export function ChatView({
                           <Copy className="size-3.5" />
                         </button>
                         {isOwn && (
-                          <>
-                            <button
-                              onClick={() => startEdit(m)}
-                              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                              title="Editar"
-                            >
-                              <Pencil className="size-3.5" />
-                            </button>
-                            <button
-                              onClick={() => deleteMessage(m.id)}
-                              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </>
+                          <button
+                            onClick={() => startEdit(m)}
+                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            title="Editar"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                        )}
+                        {(isOwn || canModerate) && (
+                          <button
+                            onClick={async () => {
+                              const result = await deleteMessage(m.id);
+                              if (result?.error) toast.error(result.error);
+                            }}
+                            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
                         )}
                       </div>
                     </>

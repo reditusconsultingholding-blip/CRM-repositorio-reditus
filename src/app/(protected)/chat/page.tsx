@@ -24,6 +24,7 @@ export default async function ChatPage() {
         people={people ?? []}
         currentUserId={profile.id}
         currentUserName={profile.name}
+        canModerate={profile.role === "ceo"}
       />
     </div>
   );
