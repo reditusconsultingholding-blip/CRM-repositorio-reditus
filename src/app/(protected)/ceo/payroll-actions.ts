@@ -62,16 +62,16 @@ export async function updateUserPayrollRate(
   }
 }
 
-/** Excluye/incluye a alguien del cálculo de nómina y rentabilidad, sin
- * tocar su cuenta (sigue activo/a para iniciar sesión normalmente). Solo
- * aplica si ya tiene una tarifa configurada — si no, ya está excluido de
- * hecho porque no hay fila que sumar. */
-export async function setPayrollRateActive(userId: string, activo: boolean): Promise<ActionResult> {
+/** Esconde/muestra a alguien en la tabla de Nómina y lo excluye/incluye del
+ * cálculo de costos y rentabilidad — funciona tenga o no una tarifa
+ * configurada todavía. No toca su cuenta (sigue pudiendo iniciar sesión
+ * normalmente, esto es solo de cara a la nómina). */
+export async function setIncluirEnNomina(userId: string, incluir: boolean): Promise<ActionResult> {
   const denied = await requireCeoOrError();
   if (denied) return denied;
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from("user_payroll_rates").update({ activo }).eq("user_id", userId);
+    const { error } = await supabase.from("users").update({ incluir_en_nomina: incluir }).eq("id", userId);
     if (error) return { error: error.message };
     revalidatePath("/ceo");
     return {};

@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, EyeOff, Eye } from "lucide-react";
-import { updateUserPayrollRate, setPayrollRateActive } from "@/app/(protected)/ceo/payroll-actions";
+import { Check, EyeOff, Eye, ChevronDown, ChevronRight } from "lucide-react";
+import { updateUserPayrollRate, setIncluirEnNomina } from "@/app/(protected)/ceo/payroll-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 export type PersonRate = {
   userId: string;
@@ -22,7 +21,7 @@ export type PersonRate = {
   modo: "semanal_fijo" | "por_pieza" | null;
   monto: number | null;
   moneda: "USD" | "COP" | null;
-  activo: boolean;
+  incluirEnNomina: boolean;
 };
 
 const MODO_LABELS: Record<string, string> = {
@@ -30,14 +29,41 @@ const MODO_LABELS: Record<string, string> = {
   por_pieza: "Por pieza",
 };
 
+function VisibilityButton({ person }: { person: PersonRate }) {
+  const [pending, startTransition] = useTransition();
+
+  function toggle() {
+    const next = !person.incluirEnNomina;
+    startTransition(async () => {
+      const result = await setIncluirEnNomina(person.userId, next);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(next ? `${person.name} vuelve a contar en nómina` : `${person.name} escondido de nómina`);
+      }
+    });
+  }
+
+  return (
+    <Button
+      size="icon-sm"
+      type="button"
+      variant="outline"
+      onClick={toggle}
+      disabled={pending}
+      title={person.incluirEnNomina ? "Esconder de nómina" : "Mostrar de nuevo en nómina"}
+      className="h-8 w-full"
+    >
+      {person.incluirEnNomina ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+    </Button>
+  );
+}
+
 function Row({ person }: { person: PersonRate }) {
   const [modo, setModo] = useState<"semanal_fijo" | "por_pieza">(person.modo ?? "semanal_fijo");
   const [monto, setMonto] = useState(String(person.monto ?? ""));
   const [moneda, setMoneda] = useState<"USD" | "COP">(person.moneda ?? "USD");
-  const [activo, setActivo] = useState(person.activo);
   const [pending, startTransition] = useTransition();
-  const [togglePending, startToggle] = useTransition();
-  const tieneRate = person.monto !== null;
 
   function save() {
     const n = Number(monto);
@@ -55,34 +81,11 @@ function Row({ person }: { person: PersonRate }) {
     });
   }
 
-  function toggleActivo() {
-    if (!tieneRate) {
-      toast.error("Primero configura y guarda una tarifa para esta persona.");
-      return;
-    }
-    const next = !activo;
-    startToggle(async () => {
-      const result = await setPayrollRateActive(person.userId, next);
-      if (result?.error) {
-        toast.error(result.error);
-      } else {
-        setActivo(next);
-        toast.success(next ? `${person.name} vuelve a contar en nómina` : `${person.name} excluido de nómina`);
-      }
-    });
-  }
-
   return (
-    <div
-      className={cn(
-        "grid grid-cols-12 items-end gap-2 border-b py-2 text-sm last:border-b-0",
-        !activo && "opacity-50",
-      )}
-    >
+    <div className="grid grid-cols-12 items-end gap-2 border-b py-2 text-sm last:border-b-0">
       <div className="col-span-3">
         <p className="font-medium">{person.name}</p>
         <p className="text-xs text-muted-foreground">{person.role}</p>
-        {!activo && <p className="text-[11px] font-medium text-amber-600">Excluido de nómina</p>}
       </div>
       <div className="col-span-2">
         <Select
@@ -114,17 +117,7 @@ function Row({ person }: { person: PersonRate }) {
         </Select>
       </div>
       <div className="col-span-1">
-        <Button
-          size="icon-sm"
-          type="button"
-          variant="outline"
-          onClick={toggleActivo}
-          disabled={togglePending}
-          title={activo ? "Excluir de nómina" : "Incluir de nuevo en nómina"}
-          className="h-8 w-full"
-        >
-          {activo ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-        </Button>
+        <VisibilityButton person={person} />
       </div>
       <div className="col-span-2">
         <Button size="sm" type="button" onClick={save} disabled={pending} className="h-8 w-full gap-1 px-2 text-xs">
@@ -137,6 +130,10 @@ function Row({ person }: { person: PersonRate }) {
 }
 
 export function PayrollRatesTable({ people }: { people: PersonRate[] }) {
+  const [showHidden, setShowHidden] = useState(false);
+  const visibles = people.filter((p) => p.incluirEnNomina);
+  const escondidos = people.filter((p) => !p.incluirEnNomina);
+
   return (
     <div className="flex flex-col">
       <div className="grid grid-cols-12 gap-2 border-b pb-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
@@ -147,14 +144,40 @@ export function PayrollRatesTable({ people }: { people: PersonRate[] }) {
         <div className="col-span-1">En nómina</div>
         <div className="col-span-2"></div>
       </div>
-      {people.map((p) => (
+      {visibles.map((p) => (
         <Row key={p.userId} person={p} />
       ))}
-      {people.length === 0 && (
+      {visibles.length === 0 && (
         <p className="py-3 text-sm text-muted-foreground">
-          No hay personal activo (fuera del CEO). Créalos en Usuarios y aparecen aquí para configurar su
+          No hay personal visible en nómina. Créalos en Usuarios y aparecen aquí para configurar su
           tarifa.
         </p>
+      )}
+
+      {escondidos.length > 0 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowHidden((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {showHidden ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            {escondidos.length} escondido(s) de nómina
+          </button>
+          {showHidden && (
+            <div className="mt-2 flex flex-col gap-1.5 rounded-md border border-dashed p-2">
+              {escondidos.map((p) => (
+                <div key={p.userId} className="flex items-center justify-between gap-3 text-sm">
+                  <div>
+                    <span className="font-medium">{p.name}</span>{" "}
+                    <span className="text-xs text-muted-foreground">— {p.role}</span>
+                  </div>
+                  <VisibilityButton person={p} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
