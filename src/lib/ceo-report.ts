@@ -96,7 +96,7 @@ export async function computeCeoReport(): Promise<CeoReport> {
       .gte("fecha", isoDate(monthStart))
       .lt("fecha", isoDate(monthEnd)),
     supabase.from("users").select("id, role").eq("active", true).neq("role", "ceo"),
-    supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
+    supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda, activo").eq("activo", true),
     supabase
       .from("requerimientos")
       .select("encargado_id")

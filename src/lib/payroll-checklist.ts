@@ -58,7 +58,7 @@ export async function getWeeklyPayrollChecklist(): Promise<{
     await Promise.all([
       getUsdCopRate(),
       supabase.from("users").select("id, name, role").eq("active", true).neq("role", "ceo"),
-      supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
+      supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda, activo"),
       supabase
         .from("requerimientos")
         .select("encargado_id")
@@ -99,6 +99,7 @@ export async function getWeeklyPayrollChecklist(): Promise<{
       sinConfigurar.push({ userId: u.id, name: u.name, role: ROLE_LABELS_LOCAL[u.role] ?? u.role });
       continue;
     }
+    if (rateRow.activo === false) continue; // excluido de nómina a propósito
 
     const montoUsd = rateRow.moneda === "COP" ? Number(rateRow.monto) / rate : Number(rateRow.monto);
     let amount = 0;

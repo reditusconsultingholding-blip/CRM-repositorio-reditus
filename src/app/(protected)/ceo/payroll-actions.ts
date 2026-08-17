@@ -62,6 +62,24 @@ export async function updateUserPayrollRate(
   }
 }
 
+/** Excluye/incluye a alguien del cálculo de nómina y rentabilidad, sin
+ * tocar su cuenta (sigue activo/a para iniciar sesión normalmente). Solo
+ * aplica si ya tiene una tarifa configurada — si no, ya está excluido de
+ * hecho porque no hay fila que sumar. */
+export async function setPayrollRateActive(userId: string, activo: boolean): Promise<ActionResult> {
+  const denied = await requireCeoOrError();
+  if (denied) return denied;
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("user_payroll_rates").update({ activo }).eq("user_id", userId);
+    if (error) return { error: error.message };
+    revalidatePath("/ceo");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
 export async function markPayrollPaid(userId: string, weekStart: string): Promise<ActionResult> {
   const denied = await requireCeoOrError();
   if (denied) return denied;

@@ -32,7 +32,7 @@ export default async function CeoPage() {
     getPayrollSettings(),
     getWeeklyPayrollChecklist(),
     supabase.from("users").select("id, name, role").eq("active", true).neq("role", "ceo").order("name"),
-    supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
+    supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda, activo"),
     listVaultEntries().catch(() => []),
   ]);
 
@@ -46,6 +46,7 @@ export default async function CeoPage() {
       modo: (rt?.modo as PersonRate["modo"]) ?? null,
       monto: rt ? Number(rt.monto) : null,
       moneda: (rt?.moneda as PersonRate["moneda"]) ?? null,
+      activo: rt?.activo ?? true,
     };
   });
 
