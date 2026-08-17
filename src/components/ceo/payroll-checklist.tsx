@@ -55,11 +55,8 @@ export function PayrollChecklist({
                     title="Deshacer"
                     onClick={() =>
                       startTransition(async () => {
-                        try {
-                          await unmarkPayrollPaid(it.userId, weekStart);
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : "No se pudo actualizar");
-                        }
+                        const result = await unmarkPayrollPaid(it.userId, weekStart);
+                        if (result?.error) toast.error(result.error);
                       })
                     }
                   >
@@ -73,11 +70,11 @@ export function PayrollChecklist({
                   disabled={pending}
                   onClick={() =>
                     startTransition(async () => {
-                      try {
-                        await markPayrollPaid(it.userId, weekStart);
+                      const result = await markPayrollPaid(it.userId, weekStart);
+                      if (result?.error) {
+                        toast.error(result.error);
+                      } else {
                         toast.success(`${it.name} marcado como pagado`);
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : "No se pudo marcar");
                       }
                     })
                   }

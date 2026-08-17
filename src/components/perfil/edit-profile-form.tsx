@@ -54,7 +54,8 @@ export function EditProfileForm({
       fd.set("birthdate", birthdate ?? "");
       fd.set("phone", phone ?? "");
       fd.set("avatar_url", data.publicUrl);
-      await updateMyProfile(fd);
+      const result = await updateMyProfile(fd);
+      if (result?.error) throw new Error(result.error);
       toast.success("Foto actualizada");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo subir la foto");
@@ -66,11 +67,11 @@ export function EditProfileForm({
   function handleSubmit(formData: FormData) {
     formData.set("avatar_url", preview ?? "");
     startTransition(async () => {
-      try {
-        await updateMyProfile(formData);
+      const result = await updateMyProfile(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Perfil actualizado");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo actualizar");
       }
     });
   }

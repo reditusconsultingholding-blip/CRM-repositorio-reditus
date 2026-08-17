@@ -47,10 +47,11 @@ export function PushToggle() {
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         });
         const json = sub.toJSON();
-        await savePushSubscription({
+        const result = await savePushSubscription({
           endpoint: json.endpoint!,
           keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth },
         });
+        if (result?.error) throw new Error(result.error);
         setSubscribed(true);
         toast.success("Notificaciones activadas en este dispositivo");
       } catch {

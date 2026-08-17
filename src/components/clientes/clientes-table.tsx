@@ -43,19 +43,19 @@ function ClienteForm({
   onDone,
 }: {
   cliente?: ClienteRow;
-  onSubmit: (formData: FormData) => Promise<void>;
+  onSubmit: (formData: FormData) => Promise<{ error?: string } | undefined>;
   onDone: () => void;
 }) {
   const [pending, startTransition] = useTransition();
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      try {
-        await onSubmit(formData);
+      const result = await onSubmit(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success(cliente ? "Cliente actualizado" : "Cliente agregado");
         onDone();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo guardar");
       }
     });
   }
@@ -129,11 +129,11 @@ function ClienteRowActions({ cliente }: { cliente: ClienteRow }) {
   function handleDelete() {
     if (!confirm(`¿Borrar a ${cliente.name}? Esta acción no se puede deshacer.`)) return;
     startTransition(async () => {
-      try {
-        await deleteClient(cliente.id);
+      const result = await deleteClient(cliente.id);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success(`${cliente.name} eliminado`);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo borrar");
       }
     });
   }

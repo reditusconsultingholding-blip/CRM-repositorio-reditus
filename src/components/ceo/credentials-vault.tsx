@@ -28,19 +28,19 @@ function EntryForm({
   onDone,
 }: {
   entry?: VaultEntry;
-  onSubmit: (formData: FormData) => Promise<void>;
+  onSubmit: (formData: FormData) => Promise<{ error?: string } | undefined>;
   onDone: () => void;
 }) {
   const [pending, startTransition] = useTransition();
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      try {
-        await onSubmit(formData);
+      const result = await onSubmit(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success(entry ? "Actualizado" : "Agregado a la bóveda");
         onDone();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo guardar");
       }
     });
   }
@@ -84,13 +84,12 @@ function VaultRow({ entry }: { entry: VaultEntry }) {
       return;
     }
     setLoading(true);
-    try {
-      const pw = await revealVaultPassword(entry.id);
-      setRevealed(pw);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo revelar");
-    } finally {
-      setLoading(false);
+    const result = await revealVaultPassword(entry.id);
+    setLoading(false);
+    if (result.error) {
+      toast.error(result.error);
+    } else if (result.password) {
+      setRevealed(result.password);
     }
   }
 
@@ -102,11 +101,11 @@ function VaultRow({ entry }: { entry: VaultEntry }) {
 
   function handleDelete() {
     startTransition(async () => {
-      try {
-        await deleteVaultEntry(entry.id);
+      const result = await deleteVaultEntry(entry.id);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Eliminado");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
       }
     });
   }

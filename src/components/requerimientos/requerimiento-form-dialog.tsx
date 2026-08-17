@@ -40,13 +40,13 @@ export function RequerimientoFormDialog({
   function handleSubmit(formData: FormData) {
     formData.set("pipeline", pipeline);
     startTransition(async () => {
-      try {
-        await createRequerimiento(formData);
+      const result = await createRequerimiento(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Requerimiento creado");
         formRef.current?.reset();
         setOpen(false);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo crear el requerimiento");
       }
     });
   }

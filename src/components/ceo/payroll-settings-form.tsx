@@ -24,12 +24,12 @@ export function PayrollSettingsForm({ settings }: { settings: PayrollSettings })
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      try {
-        await updateSaasSettings(formData);
+      const result = await updateSaasSettings(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Costos fijos actualizados");
         setOpen(false);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo actualizar");
       }
     });
   }

@@ -30,12 +30,12 @@ export function CommentForm({
   function handleSubmit(formData: FormData) {
     formData.set("requerimiento_id", requerimientoId);
     startTransition(async () => {
-      try {
-        await addComment(formData);
+      const result = await addComment(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         formRef.current?.reset();
         setMentionedId("");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo enviar el mensaje");
       }
     });
   }

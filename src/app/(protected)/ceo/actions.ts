@@ -121,10 +121,14 @@ async function callAnthropic(apiKey: string, system: string, messages: unknown[]
   return res.json();
 }
 
+// Nota: esta acción nunca lanza (throw) — cualquier falla se devuelve como
+// un mensaje normal del asistente. Next.js oculta el mensaje real de un
+// throw en una Server Action en producción, así que lanzar aquí terminaría
+// mostrando el genérico "Minified React error #441" en vez de algo útil.
 export async function askCeoAssistant(history: ChatMsg[]) {
   const profile = await requireProfile();
   if (profile.role !== "ceo") {
-    throw new Error("Solo el CEO puede usar este asistente.");
+    return { role: "assistant" as const, content: "Solo el CEO puede usar este asistente." };
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -136,44 +140,51 @@ export async function askCeoAssistant(history: ChatMsg[]) {
     };
   }
 
-  const [report, extendedContext] = await Promise.all([computeCeoReport(), buildExtendedBusinessContext()]);
-  const businessContext = formatCeoReportText(report);
-  const system = `${SYSTEM_PROMPT}\n\nDatos actuales del negocio (calculados justo ahora):\n${businessContext}\n\nContexto adicional (clientes, prospectos, equipo):\n${extendedContext}\n\nConocimiento interno de la empresa (manuales):\n${CEO_KNOWLEDGE}`;
+  try {
+    const [report, extendedContext] = await Promise.all([computeCeoReport(), buildExtendedBusinessContext()]);
+    const businessContext = formatCeoReportText(report);
+    const system = `${SYSTEM_PROMPT}\n\nDatos actuales del negocio (calculados justo ahora):\n${businessContext}\n\nContexto adicional (clientes, prospectos, equipo):\n${extendedContext}\n\nConocimiento interno de la empresa (manuales):\n${CEO_KNOWLEDGE}`;
 
-  const messages: unknown[] = history.map((m) => ({ role: m.role, content: m.content }));
+    const messages: unknown[] = history.map((m) => ({ role: m.role, content: m.content }));
 
-  // Loop de tool-use: hasta 3 rondas para evitar costos descontrolados si
-  // el modelo encadena llamadas.
-  for (let round = 0; round < 3; round++) {
-    const data = await callAnthropic(apiKey, system, messages);
+    // Loop de tool-use: hasta 3 rondas para evitar costos descontrolados si
+    // el modelo encadena llamadas.
+    for (let round = 0; round < 3; round++) {
+      const data = await callAnthropic(apiKey, system, messages);
 
-    if (data.stop_reason !== "tool_use") {
-      const text = data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "No obtuve respuesta.";
-      return { role: "assistant" as const, content: text };
-    }
-
-    messages.push({ role: "assistant", content: data.content });
-
-    const toolResults = [];
-    for (const block of data.content) {
-      if (block.type !== "tool_use") continue;
-      let result;
-      try {
-        result = await executeTool(block.name, block.input);
-      } catch (e) {
-        result = { ok: false, error: e instanceof Error ? e.message : "Error ejecutando la herramienta." };
+      if (data.stop_reason !== "tool_use") {
+        const text = data?.content?.find((c: { type: string }) => c.type === "text")?.text ?? "No obtuve respuesta.";
+        return { role: "assistant" as const, content: text };
       }
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: block.id,
-        content: JSON.stringify(result),
-      });
-    }
-    messages.push({ role: "user", content: toolResults });
-  }
 
-  return {
-    role: "assistant" as const,
-    content: "Se me acabaron los intentos usando herramientas — intenta reformular la pregunta.",
-  };
+      messages.push({ role: "assistant", content: data.content });
+
+      const toolResults = [];
+      for (const block of data.content) {
+        if (block.type !== "tool_use") continue;
+        let result;
+        try {
+          result = await executeTool(block.name, block.input);
+        } catch (e) {
+          result = { ok: false, error: e instanceof Error ? e.message : "Error ejecutando la herramienta." };
+        }
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify(result),
+        });
+      }
+      messages.push({ role: "user", content: toolResults });
+    }
+
+    return {
+      role: "assistant" as const,
+      content: "Se me acabaron los intentos usando herramientas — intenta reformular la pregunta.",
+    };
+  } catch (err) {
+    return {
+      role: "assistant" as const,
+      content: `Tuve un problema respondiendo: ${err instanceof Error ? err.message : "error desconocido"}.`,
+    };
+  }
 }

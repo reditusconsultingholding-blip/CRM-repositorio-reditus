@@ -38,12 +38,12 @@ export function UserRowControls({
 
   function handleDelete() {
     startTransition(async () => {
-      try {
-        await deleteUser(userId);
+      const result = await deleteUser(userId);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success(`${name} eliminado`);
         setConfirmOpen(false);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo borrar");
       }
     });
   }
@@ -56,11 +56,8 @@ export function UserRowControls({
         disabled={pending}
         onValueChange={(next) =>
           startTransition(async () => {
-            try {
-              await updateUserRole(userId, next as UserRole);
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "No se pudo cambiar el rol");
-            }
+            const result = await updateUserRole(userId, next as UserRole);
+            if (result?.error) toast.error(result.error);
           })
         }
       >
@@ -82,11 +79,8 @@ export function UserRowControls({
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            try {
-              await setUserActive(userId, !active);
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "No se pudo actualizar");
-            }
+            const result = await setUserActive(userId, !active);
+            if (result?.error) toast.error(result.error);
           })
         }
       >

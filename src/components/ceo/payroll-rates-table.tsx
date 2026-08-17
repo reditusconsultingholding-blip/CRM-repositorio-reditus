@@ -41,11 +41,11 @@ function Row({ person }: { person: PersonRate }) {
       return;
     }
     startTransition(async () => {
-      try {
-        await updateUserPayrollRate(person.userId, modo, n, moneda);
+      const result = await updateUserPayrollRate(person.userId, modo, n, moneda);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success(`Tarifa de ${person.name} guardada`);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo guardar");
       }
     });
   }

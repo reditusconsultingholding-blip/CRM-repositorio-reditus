@@ -4,61 +4,85 @@ import { revalidatePath } from "next/cache";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
-async function requireClientesAccess() {
+// Ver nota en admin/usuarios/actions.ts: Next.js oculta el mensaje real de
+// cualquier throw en una Server Action en producción, así que aquí siempre
+// se devuelve { error } en vez de lanzar.
+type ActionResult = { error?: string } | undefined;
+
+async function requireAccessOrError(): Promise<{ error: string } | null> {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) {
-    throw new Error("No tienes acceso a la base de datos de clientes.");
+    return { error: "No tienes acceso a la base de datos de clientes." };
+  }
+  return null;
+}
+
+export async function createClient_(formData: FormData): Promise<ActionResult> {
+  const denied = await requireAccessOrError();
+  if (denied) return denied;
+  try {
+    const supabase = await createClient();
+
+    const name = String(formData.get("name") ?? "").trim();
+    const whatsapp_number = String(formData.get("whatsapp_number") ?? "").trim();
+    const country = String(formData.get("country") ?? "").trim();
+    const tax_id = String(formData.get("tax_id") ?? "").trim();
+
+    if (!name || !whatsapp_number) {
+      return { error: "Nombre y WhatsApp son obligatorios." };
+    }
+
+    const { error } = await supabase.from("clients").insert({
+      name,
+      whatsapp_number,
+      country: country || null,
+      tax_id: tax_id || null,
+    });
+    if (error) return { error: error.message };
+    revalidatePath("/clientes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
   }
 }
 
-export async function createClient_(formData: FormData) {
-  await requireClientesAccess();
-  const supabase = await createClient();
+export async function updateClient(id: string, formData: FormData): Promise<ActionResult> {
+  const denied = await requireAccessOrError();
+  if (denied) return denied;
+  try {
+    const supabase = await createClient();
 
-  const name = String(formData.get("name") ?? "").trim();
-  const whatsapp_number = String(formData.get("whatsapp_number") ?? "").trim();
-  const country = String(formData.get("country") ?? "").trim();
-  const tax_id = String(formData.get("tax_id") ?? "").trim();
+    const name = String(formData.get("name") ?? "").trim();
+    const whatsapp_number = String(formData.get("whatsapp_number") ?? "").trim();
+    const country = String(formData.get("country") ?? "").trim();
+    const tax_id = String(formData.get("tax_id") ?? "").trim();
 
-  if (!name || !whatsapp_number) {
-    throw new Error("Nombre y WhatsApp son obligatorios.");
+    if (!name || !whatsapp_number) {
+      return { error: "Nombre y WhatsApp son obligatorios." };
+    }
+
+    const { error } = await supabase
+      .from("clients")
+      .update({ name, whatsapp_number, country: country || null, tax_id: tax_id || null })
+      .eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/clientes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
   }
-
-  const { error } = await supabase.from("clients").insert({
-    name,
-    whatsapp_number,
-    country: country || null,
-    tax_id: tax_id || null,
-  });
-  if (error) throw new Error(error.message);
-  revalidatePath("/clientes");
 }
 
-export async function updateClient(id: string, formData: FormData) {
-  await requireClientesAccess();
-  const supabase = await createClient();
-
-  const name = String(formData.get("name") ?? "").trim();
-  const whatsapp_number = String(formData.get("whatsapp_number") ?? "").trim();
-  const country = String(formData.get("country") ?? "").trim();
-  const tax_id = String(formData.get("tax_id") ?? "").trim();
-
-  if (!name || !whatsapp_number) {
-    throw new Error("Nombre y WhatsApp son obligatorios.");
+export async function deleteClient(id: string): Promise<ActionResult> {
+  const denied = await requireAccessOrError();
+  if (denied) return denied;
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("clients").delete().eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/clientes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
   }
-
-  const { error } = await supabase
-    .from("clients")
-    .update({ name, whatsapp_number, country: country || null, tax_id: tax_id || null })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/clientes");
-}
-
-export async function deleteClient(id: string) {
-  await requireClientesAccess();
-  const supabase = await createClient();
-  const { error } = await supabase.from("clients").delete().eq("id", id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/clientes");
 }

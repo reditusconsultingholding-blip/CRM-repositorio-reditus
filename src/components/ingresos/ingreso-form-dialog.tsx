@@ -57,14 +57,14 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
   function handleSubmit(formData: FormData) {
     formData.set("items_json", JSON.stringify(items));
     startTransition(async () => {
-      try {
-        await createIngreso(formData);
+      const result = await createIngreso(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Ingreso creado");
         formRef.current?.reset();
         setItems([{ ...EMPTY_ITEM }]);
         setOpen(false);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo crear el ingreso");
       }
     });
   }

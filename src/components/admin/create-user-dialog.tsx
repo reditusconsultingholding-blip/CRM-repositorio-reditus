@@ -30,13 +30,13 @@ export function CreateUserDialog() {
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      try {
-        await createUser(formData);
+      const result = await createUser(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Usuario creado");
         formRef.current?.reset();
         setOpen(false);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo crear el usuario");
       }
     });
   }

@@ -130,7 +130,7 @@ export default async function RequerimientoDetailPage({
             {(comments ?? []).map((c) => (
               <div key={c.id} className="rounded-md border p-2 text-sm">
                 <p className="text-xs font-medium">
-                  {c.author?.name}
+                  {c.author?.name ?? "Usuario eliminado"}
                   {c.mentioned?.name && (
                     <span className="text-primary"> @{c.mentioned.name}</span>
                   )}

@@ -15,14 +15,14 @@ export function ChangeEmailForm() {
 
   function handleSubmit() {
     startTransition(async () => {
-      try {
-        await changeMyEmail(password, email);
+      const result = await changeMyEmail(password, email);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Correo actualizado");
         formRef.current?.reset();
         setPassword("");
         setEmail("");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo cambiar el correo");
       }
     });
   }

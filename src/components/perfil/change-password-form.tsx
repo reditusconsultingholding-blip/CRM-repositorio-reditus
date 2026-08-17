@@ -20,15 +20,15 @@ export function ChangePasswordForm() {
       return;
     }
     startTransition(async () => {
-      try {
-        await changeMyPassword(current, next);
+      const result = await changeMyPassword(current, next);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Contraseña actualizada");
         formRef.current?.reset();
         setCurrent("");
         setNext("");
         setConfirm("");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo cambiar la contraseña");
       }
     });
   }

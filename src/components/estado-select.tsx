@@ -20,7 +20,7 @@ export function EstadoSelect<T extends string>({
   value: T;
   estados: readonly T[];
   colors: Record<T, string>;
-  onChange: (next: T) => Promise<void>;
+  onChange: (next: T) => Promise<{ error?: string } | undefined>;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -30,11 +30,8 @@ export function EstadoSelect<T extends string>({
       disabled={pending}
       onValueChange={(next) =>
         startTransition(async () => {
-          try {
-            await onChange(next as T);
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "No se pudo actualizar el estado");
-          }
+          const result = await onChange(next as T);
+          if (result?.error) toast.error(result.error);
         })
       }
     >

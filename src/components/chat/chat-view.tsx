@@ -253,9 +253,14 @@ export function ChatView({
     setReplyTo(null);
     startTransition(async () => {
       if (selection.type === "channel") {
-        await sendChannelMessage(selection.id, text, replyToId);
+        const result = await sendChannelMessage(selection.id, text, replyToId);
+        if (result?.error) toast.error(result.error);
       } else {
-        await sendDirectMessage(selection.userId, text, replyToId);
+        const result = await sendDirectMessage(selection.userId, text, replyToId);
+        if (result?.error) {
+          toast.error(result.error);
+          return;
+        }
         setMessages((prev) => [
           ...prev,
           {
@@ -298,15 +303,15 @@ export function ChatView({
       const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
 
       const attachment = { url: data.publicUrl, name: file.name, size: file.size };
-      if (selection.type === "channel") {
-        await sendChannelMessage(selection.id, "", replyTo?.id ?? null, attachment);
-      } else {
-        await sendDirectMessage(selection.userId, "", replyTo?.id ?? null, attachment);
-      }
+      const result =
+        selection.type === "channel"
+          ? await sendChannelMessage(selection.id, "", replyTo?.id ?? null, attachment)
+          : await sendDirectMessage(selection.userId, "", replyTo?.id ?? null, attachment);
+      if (result?.error) throw new Error(result.error);
       setReplyTo(null);
       toast.success("Archivo enviado");
-    } catch {
-      toast.error("No se pudo subir el archivo");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo subir el archivo");
     } finally {
       setUploading(false);
     }
@@ -322,17 +327,16 @@ export function ChatView({
     const text = editText.trim();
     if (!text) return;
     startTransition(async () => {
-      try {
-        await editMessage(editingId, text);
+      const result = await editMessage(editingId, text);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         setMessages((prev) =>
           prev.map((m) => (m.id === editingId ? { ...m, body: text, edited_at: new Date().toISOString() } : m)),
         );
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo editar");
-      } finally {
-        setEditingId(null);
-        setEditText("");
       }
+      setEditingId(null);
+      setEditText("");
     });
   }
 
@@ -421,7 +425,7 @@ export function ChatView({
                     <div className="mb-1 border-l-2 border-primary/40 pl-2 text-xs text-muted-foreground">
                       {quoted ? (
                         <>
-                          <span className="font-medium">{quoted.author?.name}</span>: {quoted.body.slice(0, 80)}
+                          <span className="font-medium">{quoted.author?.name ?? "Usuario eliminado"}</span>: {quoted.body.slice(0, 80)}
                         </>
                       ) : (
                         "Mensaje anterior"
@@ -560,7 +564,7 @@ export function ChatView({
         {replyTo && (
           <div className="flex items-center justify-between gap-2 border-t bg-muted/40 px-3 py-1.5 text-xs">
             <span className="truncate text-muted-foreground">
-              Respondiendo a <span className="font-medium">{replyTo.author?.name}</span>: {replyTo.body.slice(0, 60)}
+              Respondiendo a <span className="font-medium">{replyTo.author?.name ?? "Usuario eliminado"}</span>: {replyTo.body.slice(0, 60)}
             </span>
             <button onClick={() => setReplyTo(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
               <X className="size-3.5" />

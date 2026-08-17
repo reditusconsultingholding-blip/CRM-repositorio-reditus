@@ -34,11 +34,11 @@ export function AssignSelect({
       onValueChange={(next) =>
         startTransition(async () => {
           if (!next) return;
-          try {
-            await assignEncargado(requerimientoId, next);
+          const result = await assignEncargado(requerimientoId, next);
+          if (result?.error) {
+            toast.error(result.error);
+          } else {
             toast.success("Requerimiento asignado");
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "No se pudo asignar");
           }
         })
       }

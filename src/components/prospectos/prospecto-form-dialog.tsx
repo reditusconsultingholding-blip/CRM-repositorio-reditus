@@ -23,13 +23,13 @@ export function ProspectoFormDialog() {
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      try {
-        await createProspectoManual(formData);
+      const result = await createProspectoManual(formData);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Prospecto agregado");
         formRef.current?.reset();
         setOpen(false);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo agregar");
       }
     });
   }

@@ -28,11 +28,11 @@ export function RevenueExplorer() {
 
   function run(s: string, e: string, label: string) {
     startTransition(async () => {
-      try {
-        const r = await getRevenueForRange(s, e);
+      const r = await getRevenueForRange(s, e);
+      if (r.error) {
+        toast.error(r.error);
+      } else {
         setResult({ ...r, label });
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "No se pudo consultar");
       }
     });
   }

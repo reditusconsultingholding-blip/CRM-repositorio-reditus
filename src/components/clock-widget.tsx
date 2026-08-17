@@ -30,18 +30,12 @@ export function ClockWidget({ initial }: { initial: AttendanceRow }) {
 
   function handleToggle() {
     startTransition(async () => {
-      try {
-        if (!record || record.clock_out) {
-          const r = await clockIn();
-          setRecord(r);
-          toast.success("Entrada marcada");
-        } else {
-          const r = await clockOut(record.id);
-          setRecord(r);
-          toast.success("Salida marcada");
-        }
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "No se pudo marcar");
+      const result = !record || record.clock_out ? await clockIn() : await clockOut(record.id);
+      if (result.error) {
+        toast.error(result.error);
+      } else if (result.data) {
+        setRecord(result.data);
+        toast.success(!record || record.clock_out ? "Entrada marcada" : "Salida marcada");
       }
     });
   }
