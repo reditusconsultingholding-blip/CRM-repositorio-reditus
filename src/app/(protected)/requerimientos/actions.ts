@@ -2,10 +2,43 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireProfile } from "@/lib/auth";
 import { notify } from "@/lib/notify";
-import type { RequerimientoEstado, Pipeline } from "@/lib/statuses";
+import type { RequerimientoEstado, Pipeline, PruebaSocialEstado, RequerimientoPagadoEstado } from "@/lib/statuses";
 
 type ActionResult = { error?: string } | undefined;
+
+export async function updatePruebaSocial(id: string, estado: PruebaSocialEstado): Promise<ActionResult> {
+  try {
+    const profile = await requireProfile();
+    if (!["ceo", "gerente_comercial"].includes(profile.role)) {
+      return { error: "Solo Gerente Comercial o el CEO pueden marcar prueba social." };
+    }
+    const supabase = await createClient();
+    const { error } = await supabase.from("requerimientos").update({ prueba_social: estado }).eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/requerimientos");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
+export async function updateRequerimientoPagado(id: string, pagado: RequerimientoPagadoEstado): Promise<ActionResult> {
+  try {
+    const profile = await requireProfile();
+    if (!["ceo", "gerente_comercial"].includes(profile.role)) {
+      return { error: "Solo Gerente Comercial o el CEO pueden marcar el pago." };
+    }
+    const supabase = await createClient();
+    const { error } = await supabase.from("requerimientos").update({ pagado }).eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/requerimientos");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
 
 export async function createRequerimiento(formData: FormData): Promise<ActionResult> {
   try {
@@ -24,7 +57,7 @@ export async function createRequerimiento(formData: FormData): Promise<ActionRes
         carpeta_drive_url: String(formData.get("carpeta_drive_url") ?? "") || null,
         f_entrega_prometida: String(formData.get("f_entrega_prometida") ?? "") || null,
         encargado_id: encargadoId,
-        estado: encargadoId ? "Asignado" : "Nuevo pedido",
+        estado: encargadoId ? "En progreso" : "Nuevo pedido",
       })
       .select("id")
       .single();
@@ -79,7 +112,7 @@ export async function updateRequerimientoEstado(id: string, estado: Requerimient
       }
     }
 
-    if (estado === "Por subir") {
+    if (estado === "POR SUBIR") {
       const { data: req } = await supabase
         .from("requerimientos")
         .select("nombre_producto, pipeline, programador_id")
@@ -158,7 +191,7 @@ export async function assignEncargado(id: string, encargadoId: string): Promise<
 
     const { data: req, error } = await supabase
       .from("requerimientos")
-      .update({ encargado_id: encargadoId, estado: "Asignado" })
+      .update({ encargado_id: encargadoId, estado: "En progreso" })
       .eq("id", id)
       .select("nombre_producto")
       .single();

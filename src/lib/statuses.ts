@@ -1,6 +1,7 @@
 // Status catalogs and colors reconciled from Reditus's existing spreadsheet
-// dropdowns. Keep these in sync with the `ingreso_estado` / `requerimiento_estado`
-// Postgres enums in supabase/migrations/0001_init.sql.
+// dropdowns. Keep these in sync with the CHECK constraints in
+// supabase/migrations (estado ya no es un enum de Postgres, es texto libre
+// con constraint — más fácil de ajustar sin migraciones de enum).
 
 export const INGRESO_ESTADOS = [
   "Nuevo pedido",
@@ -19,19 +20,20 @@ export const INGRESO_ESTADOS = [
 
 export type IngresoEstado = (typeof INGRESO_ESTADOS)[number];
 
+// Réplica exacta del dropdown "ESTADO" de la hoja de cálculo original.
 export const REQUERIMIENTO_ESTADOS = [
   "Nuevo pedido",
-  "En tabla",
-  "Asignado",
   "En progreso",
   "Por revisión",
   "Corregir",
-  "Por subir",
   "Terminado",
   "ENTREGADO",
-  "Sin nada",
-  "POR CONFIRMAR",
+  "NO LABORADO",
+  "POR SUBIR",
   "ESPERA INFO",
+  "CORREGIDO",
+  "NO APROBADO",
+  "SUBIDA",
 ] as const;
 
 export type RequerimientoEstado = (typeof REQUERIMIENTO_ESTADOS)[number];
@@ -54,17 +56,17 @@ export const INGRESO_ESTADO_COLORS: Record<IngresoEstado, string> = {
 
 export const REQUERIMIENTO_ESTADO_COLORS: Record<RequerimientoEstado, string> = {
   "Nuevo pedido": "bg-yellow-300 text-yellow-950",
-  "En tabla": "bg-orange-200 text-orange-950",
-  Asignado: "bg-amber-800 text-white",
   "En progreso": "bg-orange-400 text-orange-950",
   "Por revisión": "bg-indigo-200 text-indigo-950",
   Corregir: "bg-red-500 text-white",
-  "Por subir": "bg-purple-500 text-white",
-  Terminado: "bg-cyan-300 text-cyan-950",
-  ENTREGADO: "bg-blue-900 text-white",
-  "Sin nada": "bg-neutral-200 text-neutral-700",
-  "POR CONFIRMAR": "bg-purple-200 text-purple-900",
+  Terminado: "bg-green-300 text-green-950",
+  ENTREGADO: "bg-cyan-300 text-cyan-950",
+  "NO LABORADO": "bg-neutral-300 text-neutral-700",
+  "POR SUBIR": "bg-purple-500 text-white",
   "ESPERA INFO": "bg-neutral-800 text-white",
+  CORREGIDO: "bg-emerald-300 text-emerald-950",
+  "NO APROBADO": "bg-red-800 text-white",
+  SUBIDA: "bg-blue-900 text-white",
 };
 
 export const PROSPECTO_ESTADOS = [
@@ -85,6 +87,28 @@ export const PROSPECTO_ESTADO_COLORS: Record<ProspectoEstado, string> = {
   convertido: "bg-green-500 text-white",
 };
 
+// Prueba Social: se decide una vez el requerimiento está Terminado — si el
+// contenido sirve como testimonio/prueba social para redes, y si ya se
+// subió. Gerente Comercial lo gestiona.
+export const PRUEBA_SOCIAL_ESTADOS = ["Pendiente", "Apto", "No apto", "Subido"] as const;
+export type PruebaSocialEstado = (typeof PRUEBA_SOCIAL_ESTADOS)[number];
+export const PRUEBA_SOCIAL_COLORS: Record<PruebaSocialEstado, string> = {
+  Pendiente: "bg-neutral-200 text-neutral-700",
+  Apto: "bg-emerald-200 text-emerald-950",
+  "No apto": "bg-red-200 text-red-950",
+  Subido: "bg-green-500 text-white",
+};
+
+// "Pagado" a nivel de requerimiento (además del pago a nivel de ingreso) —
+// tal cual el dropdown original de 3 opciones.
+export const REQUERIMIENTO_PAGADO_ESTADOS = ["Sí", "No", "Por terminar"] as const;
+export type RequerimientoPagadoEstado = (typeof REQUERIMIENTO_PAGADO_ESTADOS)[number];
+export const REQUERIMIENTO_PAGADO_COLORS: Record<RequerimientoPagadoEstado, string> = {
+  Sí: "bg-green-500 text-white",
+  No: "bg-red-500 text-white",
+  "Por terminar": "bg-neutral-200 text-neutral-700",
+};
+
 export const ESTADOS_PAGO = ["Pendiente", "Pagado"] as const;
 export type EstadoPago = (typeof ESTADOS_PAGO)[number];
 export const ESTADO_PAGO_COLORS: Record<EstadoPago, string> = {
@@ -100,20 +124,12 @@ export const PIPELINES = [
 export type Pipeline = (typeof PIPELINES)[number]["value"];
 
 // Secuencia "normal" de avance por pipeline, para el botón de "pasar a la
-// siguiente fase". No incluye los estados de excepción (Corregir, Sin nada,
-// POR CONFIRMAR, ESPERA INFO) — esos se siguen eligiendo a mano desde el
-// selector de estado.
+// siguiente fase". No incluye los estados de excepción (Corregir, NO
+// LABORADO, ESPERA INFO, NO APROBADO) — esos se siguen eligiendo a mano
+// desde el selector de estado.
 export const PIPELINE_FLOW: Record<Pipeline, RequerimientoEstado[]> = {
-  video: ["Nuevo pedido", "Asignado", "En progreso", "Por revisión", "Terminado", "ENTREGADO"],
-  landing: [
-    "Nuevo pedido",
-    "Asignado",
-    "En progreso",
-    "Por revisión",
-    "Por subir",
-    "Terminado",
-    "ENTREGADO",
-  ],
+  video: ["Nuevo pedido", "En progreso", "Por revisión", "Terminado", "ENTREGADO"],
+  landing: ["Nuevo pedido", "En progreso", "Por revisión", "POR SUBIR", "Terminado", "ENTREGADO"],
 };
 
 export function getNextEstado(

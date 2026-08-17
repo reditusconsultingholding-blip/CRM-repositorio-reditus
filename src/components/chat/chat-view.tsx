@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ChannelPanel } from "@/components/chat/channel-panel";
+import { CreateChannelButton } from "@/components/chat/create-channel-button";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂"];
 // Adjuntos: tope razonable para el bucket de Supabase Storage. Para
@@ -93,16 +95,21 @@ function Linkified({ text }: { text: string }) {
 export function ChatView({
   channels,
   people,
+  allPeople,
   currentUserId,
   currentUserName,
   canModerate = false,
+  canManageChannels = false,
 }: {
   channels: Channel[];
   people: Person[];
+  allPeople?: { id: string; name: string }[];
   currentUserId: string;
   currentUserName: string;
   canModerate?: boolean;
+  canManageChannels?: boolean;
 }) {
+  const [channelPanelOpen, setChannelPanelOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(
     channels[0] ? { type: "channel", id: channels[0].id } : null,
   );
@@ -112,6 +119,9 @@ export function ChatView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<
+    { localId: string; url: string; name: string; size: number; sending?: boolean }[]
+  >([]);
   const [pending, startTransition] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -244,6 +254,14 @@ export function ChatView({
   }, [selection?.type, selection?.type === "channel" ? selection.id : selection?.userId]);
 
   useEffect(() => {
+    // Cambiar de canal/DM descarta los adjuntos en borrador — evita mandarlos
+    // sin querer al chat equivocado.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingAttachments([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection?.type, selection?.type === "channel" ? selection.id : selection?.userId]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
@@ -285,38 +303,69 @@ export function ChatView({
     });
   }
 
+  // Los archivos se suben de una vez (para no perder tiempo esperando) pero
+  // quedan en un borrador — no se envían al chat hasta que la persona
+  // presione "Enviar" en cada uno (o "Enviar todos"). Así se puede
+  // seleccionar varios archivos al tiempo y revisarlos antes de mandarlos.
   async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!file || !selection) return;
-
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      toast.error(
-        `Ese archivo pesa ${fmtSize(file.size)} — el máximo por chat es 100MB. Para algo más grande, comparte un link de Drive o Dropbox (se vuelve clicable solo).`,
-      );
-      return;
-    }
+    if (!files.length || !selection) return;
 
     setUploading(true);
     try {
-      const path = `${currentUserId}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from("chat-files").upload(path, file);
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
-
-      const attachment = { url: data.publicUrl, name: file.name, size: file.size };
-      const result =
-        selection.type === "channel"
-          ? await sendChannelMessage(selection.id, "", replyTo?.id ?? null, attachment)
-          : await sendDirectMessage(selection.userId, "", replyTo?.id ?? null, attachment);
-      if (result?.error) throw new Error(result.error);
-      setReplyTo(null);
-      toast.success("Archivo enviado");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo subir el archivo");
+      for (const file of files) {
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          toast.error(
+            `"${file.name}" pesa ${fmtSize(file.size)} — el máximo por chat es 100MB. Para algo más grande, comparte un link de Drive o Dropbox.`,
+          );
+          continue;
+        }
+        const path = `${currentUserId}/${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from("chat-files").upload(path, file);
+        if (uploadError) {
+          toast.error(`No se pudo subir "${file.name}": ${uploadError.message}`);
+          continue;
+        }
+        const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
+        setPendingAttachments((prev) => [
+          ...prev,
+          { localId: `${Date.now()}-${file.name}`, url: data.publicUrl, name: file.name, size: file.size },
+        ]);
+      }
     } finally {
       setUploading(false);
     }
+  }
+
+  async function sendPendingAttachment(localId: string) {
+    const item = pendingAttachments.find((a) => a.localId === localId);
+    if (!item || !selection) return;
+    setPendingAttachments((prev) => prev.map((a) => (a.localId === localId ? { ...a, sending: true } : a)));
+
+    const attachment = { url: item.url, name: item.name, size: item.size };
+    const result =
+      selection.type === "channel"
+        ? await sendChannelMessage(selection.id, "", replyTo?.id ?? null, attachment)
+        : await sendDirectMessage(selection.userId, "", replyTo?.id ?? null, attachment);
+
+    if (result?.error) {
+      toast.error(result.error);
+      setPendingAttachments((prev) => prev.map((a) => (a.localId === localId ? { ...a, sending: false } : a)));
+      return;
+    }
+    setReplyTo(null);
+    setPendingAttachments((prev) => prev.filter((a) => a.localId !== localId));
+  }
+
+  async function sendAllPendingAttachments() {
+    for (const a of pendingAttachments) {
+      await sendPendingAttachment(a.localId);
+    }
+  }
+
+  function discardPendingAttachment(localId: string) {
+    setPendingAttachments((prev) => prev.filter((a) => a.localId !== localId));
   }
 
   function startEdit(m: Message) {
@@ -353,7 +402,10 @@ export function ChatView({
   return (
     <div className="flex flex-1 overflow-hidden rounded-md border bg-background">
       <div className="w-52 shrink-0 overflow-y-auto border-r p-2">
-        <p className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase text-muted-foreground">Canales</p>
+        <div className="flex items-center justify-between px-2.5 pb-1 pt-2">
+          <p className="text-[11px] font-semibold uppercase text-muted-foreground">Canales</p>
+          {canManageChannels && <CreateChannelButton />}
+        </div>
         {channels.map((c) => (
           <button
             key={c.id}
@@ -390,10 +442,31 @@ export function ChatView({
       </div>
 
       <div className="flex flex-1 flex-col">
-        <div className="border-b px-4 py-2 text-sm font-medium">
+        <button
+          type="button"
+          onClick={() => activeChannel && setChannelPanelOpen(true)}
+          disabled={!activeChannel}
+          className={cn(
+            "flex items-center border-b px-4 py-2 text-left text-sm font-medium",
+            activeChannel && "hover:bg-muted/50",
+          )}
+        >
           {activeChannel ? <Hash className="mr-1 inline size-3.5" /> : <User className="mr-1 inline size-3.5" />}
           {headerLabel}
-        </div>
+        </button>
+
+        {activeChannel && (
+          <ChannelPanel
+            open={channelPanelOpen}
+            onOpenChange={setChannelPanelOpen}
+            channelId={activeChannel.id}
+            channelName={activeChannel.name}
+            allPeople={allPeople ?? people}
+            canManageChannels={canManageChannels}
+            isCeo={canModerate}
+            onDeleted={() => setSelection(channels[0] ? { type: "channel", id: channels[0].id } : null)}
+          />
+        )}
 
         <div className="flex flex-1 flex-col overflow-y-auto p-4">
           {messages.map((m) => {
@@ -527,6 +600,7 @@ export function ChatView({
                         {(isOwn || canModerate) && (
                           <button
                             onClick={async () => {
+                              if (!confirm("¿Borrar este mensaje? No se puede deshacer.")) return;
                               const result = await deleteMessage(m.id);
                               if (result?.error) toast.error(result.error);
                             }}
@@ -577,8 +651,51 @@ export function ChatView({
           </div>
         )}
 
+        {pendingAttachments.length > 0 && (
+          <div className="flex flex-col gap-1.5 border-t bg-muted/30 p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">
+                {pendingAttachments.length} archivo(s) listo(s) — revisa y envía
+              </p>
+              <Button type="button" size="sm" variant="outline" onClick={sendAllPendingAttachments}>
+                Enviar todos
+              </Button>
+            </div>
+            {pendingAttachments.map((a) => (
+              <div key={a.localId} className="flex items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{a.name}</span>
+                  <span className="shrink-0 text-muted-foreground">({fmtSize(a.size)})</span>
+                </span>
+                <span className="flex shrink-0 gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => sendPendingAttachment(a.localId)}
+                    disabled={a.sending}
+                  >
+                    <Check className="size-3" /> {a.sending ? "Enviando…" : "Enviar"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => discardPendingAttachment(a.localId)}
+                    disabled={a.sending}
+                    title="Descartar"
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2 border-t p-3">
-          <input ref={fileRef} type="file" className="hidden" onChange={handleFilePick} />
+          <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFilePick} />
           <Button
             size="icon"
             variant="outline"

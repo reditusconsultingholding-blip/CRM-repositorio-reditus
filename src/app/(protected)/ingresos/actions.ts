@@ -60,7 +60,7 @@ async function autoCrearRequerimientos(
       nombre_producto: unidades > 1 ? `${item.producto} (${i + 1}/${unidades}) — ${trackingId}` : `${item.producto} — ${trackingId}`,
       pais_acento: pais,
       encargado_id: encargadoId,
-      estado: encargadoId ? "Asignado" : "Nuevo pedido",
+      estado: encargadoId ? "En progreso" : "Nuevo pedido",
       ingreso_id: ingresoId,
     }));
 
