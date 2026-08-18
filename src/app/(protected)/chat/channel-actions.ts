@@ -101,6 +101,52 @@ export async function removeChannelMember(channelId: string, userId: string): Pr
   }
 }
 
+export async function addBookmark(channelId: string, nombre: string, url: string): Promise<ActionResult> {
+  const { profile, error: denied } = await requireChannelManager();
+  if (denied) return { error: denied };
+  try {
+    if (!nombre.trim() || !url.trim()) return { error: "Nombre y link son obligatorios." };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("chat_channel_bookmarks")
+      .insert({ channel_id: channelId, nombre: nombre.trim(), url: url.trim(), created_by: profile!.id });
+    if (error) return { error: error.message };
+    revalidatePath("/chat");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "No se pudo agregar el marcador." };
+  }
+}
+
+export async function removeBookmark(bookmarkId: string): Promise<ActionResult> {
+  const { error: denied } = await requireChannelManager();
+  if (denied) return { error: denied };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("chat_channel_bookmarks").delete().eq("id", bookmarkId);
+    if (error) return { error: error.message };
+    revalidatePath("/chat");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "No se pudo quitar el marcador." };
+  }
+}
+
+export async function listBookmarks(channelId: string): Promise<{ id: string; nombre: string; url: string }[]> {
+  try {
+    await requireProfile();
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("chat_channel_bookmarks")
+      .select("id, nombre, url")
+      .eq("channel_id", channelId)
+      .order("created_at");
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getChannelDetails(channelId: string): Promise<{
   members: { id: string; name: string; avatar_url: string | null }[];
   files: { name: string; url: string; size: number | null; created_at: string }[];

@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChannelPanel } from "@/components/chat/channel-panel";
 import { CreateChannelButton } from "@/components/chat/create-channel-button";
+import { BookmarksBar } from "@/components/chat/bookmarks-bar";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂"];
 // Adjuntos: tope razonable para el bucket de Supabase Storage. Para
@@ -467,6 +468,8 @@ export function ChatView({
             onDeleted={() => setSelection(channels[0] ? { type: "channel", id: channels[0].id } : null)}
           />
         )}
+
+        {activeChannel && <BookmarksBar channelId={activeChannel.id} canManage={canManageChannels} />}
 
         <div className="flex flex-1 flex-col overflow-y-auto p-4">
           {messages.map((m) => {
