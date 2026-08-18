@@ -167,7 +167,7 @@ export default async function RequerimientosPage() {
               <div className="overflow-x-auto rounded-md border bg-background">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="[&>th]:border-r [&>th:last-child]:border-r-0">
                       <TableHead>ID</TableHead>
                       <TableHead>{esLanding ? "Diseñador" : "Encargado"}</TableHead>
                       <TableHead>Estado</TableHead>
@@ -251,7 +251,7 @@ export default async function RequerimientosPage() {
           <div className="overflow-x-auto rounded-md border bg-background">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="[&>th]:border-r [&>th:last-child]:border-r-0">
                   <TableHead>ID</TableHead>
                   <TableHead>Encargado</TableHead>
                   <TableHead>Estado</TableHead>

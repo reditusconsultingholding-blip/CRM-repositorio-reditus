@@ -35,8 +35,10 @@ type IngresoRow = {
   estado_pago: EstadoPago;
   cotizacion_numero: string | null;
   cuenta_cobro_numero: string | null;
-  client: { name: string; whatsapp_number: string } | null;
+  responsable_id: string | null;
+  client: { name: string; whatsapp_number: string; tax_id: string | null } | null;
   responsable: { name: string } | null;
+  ingreso_items: { servicio: string | null; producto: string; cantidad: number; precio_unitario: number }[] | null;
 };
 
 export default async function IngresosPage() {
@@ -46,7 +48,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, moneda, estado_pago, cotizacion_numero, cuenta_cobro_numero, client:clients(name, whatsapp_number), responsable:users(name)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, moneda, estado_pago, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -137,7 +139,31 @@ export default async function IngresosPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <DeleteIngresoButton ingresoId={row.id} trackingId={row.tracking_id} />
+                  <div className="flex justify-end gap-1">
+                    <IngresoFormDialog
+                      responsables={users ?? []}
+                      ingreso={{
+                        id: row.id,
+                        client_name: row.client?.name ?? "",
+                        whatsapp_number: row.client?.whatsapp_number ?? "",
+                        pais: row.pais,
+                        client_tax_id: row.client?.tax_id ?? null,
+                        moneda: row.moneda,
+                        precio_final_descuento: row.precio_final_descuento,
+                        responsable_id: row.responsable_id,
+                        items:
+                          row.ingreso_items && row.ingreso_items.length > 0
+                            ? row.ingreso_items.map((it) => ({
+                                servicio: it.servicio ?? "",
+                                producto: it.producto,
+                                cantidad: it.cantidad,
+                                precio_unitario: it.precio_unitario,
+                              }))
+                            : [{ servicio: row.servicio ?? "", producto: row.producto ?? "", cantidad: 1, precio_unitario: row.precio_final_descuento ?? 0 }],
+                      }}
+                    />
+                    <DeleteIngresoButton ingresoId={row.id} trackingId={row.tracking_id} />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

@@ -2,8 +2,8 @@
 
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
-import { createIngreso } from "@/app/(protected)/ingresos/actions";
+import { Plus, Trash2, Pencil } from "lucide-react";
+import { createIngreso, updateIngreso } from "@/app/(protected)/ingresos/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,11 +34,30 @@ type Item = {
 
 const EMPTY_ITEM: Item = { servicio: "", producto: "", cantidad: 1, precio_unitario: 0 };
 
-export function IngresoFormDialog({ responsables }: { responsables: Responsable[] }) {
+export type EditableIngreso = {
+  id: string;
+  client_name: string;
+  whatsapp_number: string;
+  pais: string | null;
+  client_tax_id: string | null;
+  moneda: "USD" | "COP";
+  precio_final_descuento: number | null;
+  responsable_id: string | null;
+  items: Item[];
+};
+
+export function IngresoFormDialog({
+  responsables,
+  ingreso,
+}: {
+  responsables: Responsable[];
+  ingreso?: EditableIngreso;
+}) {
+  const isEdit = !!ingreso;
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [items, setItems] = useState<Item[]>([{ ...EMPTY_ITEM }]);
-  const [moneda, setMoneda] = useState<"USD" | "COP">("USD");
+  const [items, setItems] = useState<Item[]>(ingreso?.items.length ? ingreso.items : [{ ...EMPTY_ITEM }]);
+  const [moneda, setMoneda] = useState<"USD" | "COP">(ingreso?.moneda ?? "USD");
   const formRef = useRef<HTMLFormElement>(null);
 
   function updateItem(index: number, patch: Partial<Item>) {
@@ -59,13 +78,15 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
     formData.set("items_json", JSON.stringify(items));
     formData.set("moneda", moneda);
     startTransition(async () => {
-      const result = await createIngreso(formData);
+      const result = isEdit ? await updateIngreso(ingreso!.id, formData) : await createIngreso(formData);
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Ingreso creado");
-        formRef.current?.reset();
-        setItems([{ ...EMPTY_ITEM }]);
+        toast.success(isEdit ? "Ingreso actualizado" : "Ingreso creado");
+        if (!isEdit) {
+          formRef.current?.reset();
+          setItems([{ ...EMPTY_ITEM }]);
+        }
         setOpen(false);
       }
     });
@@ -73,23 +94,39 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>Nuevo ingreso</DialogTrigger>
+      <DialogTrigger
+        render={
+          isEdit ? (
+            <Button type="button" size="icon-sm" variant="outline" title="Editar ingreso" />
+          ) : (
+            <Button />
+          )
+        }
+      >
+        {isEdit ? <Pencil className="size-3.5" /> : "Nuevo ingreso"}
+      </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Nuevo ingreso</DialogTitle>
+          <DialogTitle>{isEdit ? "Editar ingreso" : "Nuevo ingreso"}</DialogTitle>
         </DialogHeader>
         <form ref={formRef} action={handleSubmit} className="grid grid-cols-2 gap-3">
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="client_name">Nombre del cliente</Label>
-            <Input id="client_name" name="client_name" required />
+            <Input id="client_name" name="client_name" defaultValue={ingreso?.client_name} required />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="whatsapp_number">Número de WhatsApp</Label>
-            <Input id="whatsapp_number" name="whatsapp_number" required placeholder="+57..." />
+            <Input
+              id="whatsapp_number"
+              name="whatsapp_number"
+              defaultValue={ingreso?.whatsapp_number}
+              required
+              placeholder="+57..."
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="pais">País</Label>
-            <Input id="pais" name="pais" />
+            <Input id="pais" name="pais" defaultValue={ingreso?.pais ?? ""} />
           </div>
 
           <div className="col-span-2 flex flex-col gap-2 rounded-md border p-3">
@@ -174,17 +211,29 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
             <Label htmlFor="precio_final_descuento">
               Precio final en {moneda} (opcional — solo si aplica un descuento distinto a la suma)
             </Label>
-            <Input id="precio_final_descuento" name="precio_final_descuento" type="number" step="0.01" />
+            <Input
+              id="precio_final_descuento"
+              name="precio_final_descuento"
+              type="number"
+              step="0.01"
+              defaultValue={ingreso?.precio_final_descuento ?? undefined}
+            />
           </div>
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="client_tax_id">NIT o Cédula del cliente (opcional)</Label>
-            <Input id="client_tax_id" name="client_tax_id" placeholder="Para la cuenta de cobro/factura" />
+            <Input
+              id="client_tax_id"
+              name="client_tax_id"
+              placeholder="Para la cuenta de cobro/factura"
+              defaultValue={ingreso?.client_tax_id ?? ""}
+            />
           </div>
           <div className="col-span-2 flex flex-col gap-2">
             <Label>Responsable</Label>
             <Select
               name="responsable_id"
               items={Object.fromEntries(responsables.map((r) => [r.id, r.name]))}
+              defaultValue={ingreso?.responsable_id ?? undefined}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona un responsable" />
@@ -200,7 +249,7 @@ export function IngresoFormDialog({ responsables }: { responsables: Responsable[
           </div>
           <DialogFooter className="col-span-2 mt-2">
             <Button type="submit" disabled={pending}>
-              {pending ? "Guardando…" : "Crear ingreso"}
+              {pending ? "Guardando…" : isEdit ? "Guardar cambios" : "Crear ingreso"}
             </Button>
           </DialogFooter>
         </form>

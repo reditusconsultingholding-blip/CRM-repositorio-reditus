@@ -61,9 +61,23 @@ export async function updateClient(id: string, formData: FormData): Promise<Acti
       return { error: "Nombre y WhatsApp son obligatorios." };
     }
 
+    // Ajustes manuales al histórico — vacío = deja el total calculado tal
+    // cual, tal como estaba antes de que existiera este campo.
+    const pedidosRaw = String(formData.get("historico_pedidos_ajuste") ?? "").trim();
+    const gastoRaw = String(formData.get("historico_gasto_ajuste_usd") ?? "").trim();
+    const historico_pedidos_ajuste = pedidosRaw === "" ? null : Number(pedidosRaw);
+    const historico_gasto_ajuste_usd = gastoRaw === "" ? null : Number(gastoRaw);
+
     const { error } = await supabase
       .from("clients")
-      .update({ name, whatsapp_number, country: country || null, tax_id: tax_id || null })
+      .update({
+        name,
+        whatsapp_number,
+        country: country || null,
+        tax_id: tax_id || null,
+        historico_pedidos_ajuste,
+        historico_gasto_ajuste_usd,
+      })
       .eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/clientes");

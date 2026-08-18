@@ -101,15 +101,42 @@ export async function removeChannelMember(channelId: string, userId: string): Pr
   }
 }
 
-export async function addBookmark(channelId: string, nombre: string, url: string): Promise<ActionResult> {
+export type BookmarkTipo = "link" | "nota" | "recordatorio";
+
+const MAX_BOOKMARKS_POR_CANAL = 3;
+
+export async function addBookmark(
+  channelId: string,
+  nombre: string,
+  contenido: string,
+  tipo: BookmarkTipo = "link",
+  recordatorioEn?: string | null,
+): Promise<ActionResult> {
   const { profile, error: denied } = await requireChannelManager();
   if (denied) return { error: denied };
   try {
-    if (!nombre.trim() || !url.trim()) return { error: "Nombre y link son obligatorios." };
+    if (!nombre.trim()) return { error: "Ponle un nombre." };
+    if (tipo === "link" && !contenido.trim()) return { error: "El link es obligatorio." };
+
     const supabase = await createClient();
-    const { error } = await supabase
+
+    const { count } = await supabase
       .from("chat_channel_bookmarks")
-      .insert({ channel_id: channelId, nombre: nombre.trim(), url: url.trim(), created_by: profile!.id });
+      .select("id", { count: "exact", head: true })
+      .eq("channel_id", channelId);
+    if ((count ?? 0) >= MAX_BOOKMARKS_POR_CANAL) {
+      return { error: `Ya hay ${MAX_BOOKMARKS_POR_CANAL} fijados en este canal — quita uno antes de agregar otro.` };
+    }
+
+    const { error } = await supabase.from("chat_channel_bookmarks").insert({
+      channel_id: channelId,
+      nombre: nombre.trim(),
+      tipo,
+      url: tipo === "link" ? contenido.trim() : null,
+      nota: tipo === "nota" ? contenido.trim() : null,
+      recordatorio_en: tipo === "recordatorio" && recordatorioEn ? recordatorioEn : null,
+      created_by: profile!.id,
+    });
     if (error) return { error: error.message };
     revalidatePath("/chat");
     return {};
@@ -132,16 +159,25 @@ export async function removeBookmark(bookmarkId: string): Promise<ActionResult> 
   }
 }
 
-export async function listBookmarks(channelId: string): Promise<{ id: string; nombre: string; url: string }[]> {
+export type ChannelBookmark = {
+  id: string;
+  nombre: string;
+  tipo: BookmarkTipo;
+  url: string | null;
+  nota: string | null;
+  recordatorio_en: string | null;
+};
+
+export async function listBookmarks(channelId: string): Promise<ChannelBookmark[]> {
   try {
     await requireProfile();
     const supabase = await createClient();
     const { data } = await supabase
       .from("chat_channel_bookmarks")
-      .select("id, nombre, url")
+      .select("id, nombre, tipo, url, nota, recordatorio_en")
       .eq("channel_id", channelId)
       .order("created_at");
-    return data ?? [];
+    return (data ?? []) as ChannelBookmark[];
   } catch {
     return [];
   }

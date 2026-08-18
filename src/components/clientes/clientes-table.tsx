@@ -30,6 +30,8 @@ export type ClienteRow = {
   whatsapp_number: string;
   country: string | null;
   tax_id: string | null;
+  historico_pedidos_ajuste: number | null;
+  historico_gasto_ajuste_usd: number | null;
   pedidosActuales: number;
   gastoActual: number;
   pedidosHistoricos: number;
@@ -78,6 +80,41 @@ function ClienteForm({
         <Label htmlFor="tax_id">NIT / Cédula</Label>
         <Input id="tax_id" name="tax_id" defaultValue={cliente?.tax_id ?? ""} />
       </div>
+      {cliente && (
+        <div className="grid gap-2 rounded-md border p-3">
+          <p className="text-xs text-muted-foreground">
+            Ajuste manual del histórico (opcional) — corrige el pedido/gasto importado sin tocar el
+            resto. Déjalo vacío para seguir mostrando el total calculado automáticamente. Los pedidos
+            y el gasto registrados en la app se editan desde{" "}
+            <span className="font-medium text-foreground">Ingresos</span>, no aquí.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="historico_pedidos_ajuste">Pedidos históricos</Label>
+              <Input
+                id="historico_pedidos_ajuste"
+                name="historico_pedidos_ajuste"
+                type="number"
+                min={0}
+                step="1"
+                placeholder={String(cliente.pedidosHistoricos)}
+                defaultValue={cliente.historico_pedidos_ajuste ?? ""}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="historico_gasto_ajuste_usd">Gasto histórico (USD)</Label>
+              <Input
+                id="historico_gasto_ajuste_usd"
+                name="historico_gasto_ajuste_usd"
+                type="number"
+                step="0.01"
+                placeholder={cliente.gastoHistorico.toFixed(2)}
+                defaultValue={cliente.historico_gasto_ajuste_usd ?? ""}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       <DialogFooter>
         <Button type="submit" disabled={pending}>
           {pending ? "Guardando…" : "Guardar"}
@@ -118,8 +155,13 @@ function downloadCsv(rows: ClienteRow[]) {
   const a = document.createElement("a");
   a.href = url;
   a.download = `clientes-reditus-${new Date().toISOString().slice(0, 10)}.csv`;
+  // Firefox (y algunos navegadores móviles) no dispara la descarga si el
+  // <a> no está montado en el documento al hacer click — por eso antes no
+  // funcionaba en algunos casos.
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function ClienteRowActions({ cliente }: { cliente: ClienteRow }) {
@@ -166,7 +208,7 @@ export function ClientesTable({ rows, rateCop }: { rows: ClienteRow[]; rateCop: 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => downloadCsv(rows)}>
           <Download className="size-3.5" />
-          Exportar CSV
+          Descargar CSV
         </Button>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger render={<Button type="button" size="sm" className="gap-1.5" />}>

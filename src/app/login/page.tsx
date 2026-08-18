@@ -5,6 +5,7 @@ import { signIn } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InstallAppButton } from "@/components/install-app-button";
 import {
   Card,
   CardContent,
@@ -46,6 +47,9 @@ export default function LoginPage() {
               {pending ? "Ingresando…" : "Ingresar"}
             </Button>
           </form>
+          <div className="mt-4 flex justify-center border-t pt-4">
+            <InstallAppButton />
+          </div>
         </CardContent>
       </Card>
     </div>

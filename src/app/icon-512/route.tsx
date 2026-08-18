@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { REDITUS_ISOTIPO_DATA_URI } from "@/lib/brand-icon";
 
 export const runtime = "nodejs";
 
@@ -14,18 +15,17 @@ export async function GET() {
           alignItems: "center",
           justifyContent: "center",
           background: "#1a3a7a",
+          overflow: "hidden",
         }}
       >
-        <div
-          style={{
-            fontSize: 260,
-            fontWeight: 700,
-            color: "#ffffff",
-            fontFamily: "sans-serif",
-          }}
-        >
-          R
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={REDITUS_ISOTIPO_DATA_URI}
+          width={size}
+          height={size}
+          style={{ objectFit: "cover" }}
+          alt=""
+        />
       </div>
     ),
     { width: size, height: size },

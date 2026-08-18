@@ -180,6 +180,106 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
   }
 }
 
+/** Edita un ingreso ya existente (cliente, servicios/productos, precio,
+ * moneda, país, responsable) — antes solo se podía crear, sin forma de
+ * corregir un error de digitación. Solo CEO/Gerente Comercial, igual que
+ * el borrado, porque toca datos sensibles (precio, cliente). */
+export async function updateIngreso(id: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const profile = await requireProfile();
+    if (!(INGRESOS_ROLES as string[]).includes(profile.role)) {
+      return { error: "No tienes permiso para editar ingresos." };
+    }
+
+    const supabase = await createClient();
+
+    const whatsappNumber = String(formData.get("whatsapp_number") ?? "").trim();
+    const clientName = String(formData.get("client_name") ?? "").trim();
+    const country = String(formData.get("pais") ?? "").trim() || null;
+    const taxId = String(formData.get("client_tax_id") ?? "").trim() || null;
+    const moneda = String(formData.get("moneda") ?? "USD") === "COP" ? "COP" : "USD";
+
+    if (!whatsappNumber || !clientName) {
+      return { error: "Número de WhatsApp y nombre del cliente son obligatorios." };
+    }
+
+    let items: ItemInput[] = [];
+    try {
+      const raw = JSON.parse(String(formData.get("items_json") ?? "[]")) as unknown[];
+      items = (Array.isArray(raw) ? raw : [])
+        .map((it) => {
+          const o = it as Record<string, unknown>;
+          return {
+            servicio: String(o.servicio ?? "").trim(),
+            producto: String(o.producto ?? "").trim(),
+            cantidad: Number(o.cantidad) || 1,
+            precio_unitario: Number(o.precio_unitario) || 0,
+          };
+        })
+        .filter((it) => it.producto);
+    } catch {
+      items = [];
+    }
+
+    if (items.length === 0) {
+      return { error: "Agrega al menos un servicio/producto al ingreso." };
+    }
+
+    const { data: existingIngreso, error: fetchError } = await supabase
+      .from("ingresos")
+      .select("client_id")
+      .eq("id", id)
+      .single();
+    if (fetchError || !existingIngreso) return { error: "Ese ingreso ya no existe." };
+
+    const { error: clientError } = await supabase
+      .from("clients")
+      .update({ name: clientName, whatsapp_number: whatsappNumber, country, tax_id: taxId })
+      .eq("id", existingIngreso.client_id);
+    if (clientError) return { error: clientError.message };
+
+    const responsableId = String(formData.get("responsable_id") ?? "") || null;
+    const cantidadTotal = items.reduce((sum, it) => sum + it.cantidad, 0);
+    const precioTotal = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
+    const precioFinalOverride = Number(formData.get("precio_final_descuento") ?? 0) || null;
+
+    const { error } = await supabase
+      .from("ingresos")
+      .update({
+        servicio: items.map((it) => it.servicio).filter(Boolean).join(", ") || null,
+        pais: country,
+        producto: items.map((it) => it.producto).join(", ") || null,
+        cantidad: cantidadTotal,
+        precio_total: precioTotal,
+        precio_final_descuento: precioFinalOverride ?? precioTotal,
+        moneda,
+        responsable_id: responsableId,
+      })
+      .eq("id", id);
+    if (error) return { error: error.message };
+
+    // Reemplaza las líneas de servicio en vez de diferenciar item por item —
+    // más simple y confiable, y son listas cortas.
+    await supabase.from("ingreso_items").delete().eq("ingreso_id", id);
+    const { error: itemsError } = await supabase.from("ingreso_items").insert(
+      items.map((it) => ({
+        ingreso_id: id,
+        servicio: it.servicio || null,
+        producto: it.producto,
+        cantidad: it.cantidad,
+        precio_unitario: it.precio_unitario,
+      })),
+    );
+    if (itemsError) return { error: itemsError.message };
+
+    revalidatePath("/ingresos");
+    revalidatePath("/clientes");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
 export async function updateEstadoPago(id: string, estadoPago: EstadoPago): Promise<ActionResult> {
   try {
     const supabase = await createClient();

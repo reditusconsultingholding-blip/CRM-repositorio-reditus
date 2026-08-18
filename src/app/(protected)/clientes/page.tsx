@@ -20,7 +20,10 @@ export default async function ClientesPage() {
   const supabase = await createClient();
 
   const [{ data: clients }, { data: ingresos }, { data: historicos }, usdCop] = await Promise.all([
-    supabase.from("clients").select("id, name, whatsapp_number, country, tax_id").order("name"),
+    supabase
+      .from("clients")
+      .select("id, name, whatsapp_number, country, tax_id, historico_pedidos_ajuste, historico_gasto_ajuste_usd")
+      .order("name"),
     supabase.from("ingresos").select("client_id, precio_final_descuento, moneda"),
     // Puede no existir todavía si la migración 0002b/histórica no se ha corrido —
     // se maneja con gracia en vez de romper la página.
@@ -52,13 +55,17 @@ export default async function ClientesPage() {
     .map((c) => {
       const actual = actualByClient.get(c.id) ?? { total: 0, count: 0 };
       const historico = historicoByClient.get(c.id) ?? { total: 0, count: 0 };
+      // Si el CEO/Gerente Comercial dejó un ajuste manual, ese número manda
+      // sobre el calculado desde la importación histórica.
+      const pedidosHistoricos = c.historico_pedidos_ajuste ?? historico.count;
+      const gastoHistorico = c.historico_gasto_ajuste_usd ?? historico.total;
       return {
         ...c,
         pedidosActuales: actual.count,
         gastoActual: actual.total,
-        pedidosHistoricos: historico.count,
-        gastoHistorico: historico.total,
-        gastoTotal: actual.total + historico.total,
+        pedidosHistoricos,
+        gastoHistorico,
+        gastoTotal: actual.total + gastoHistorico,
       };
     })
     .sort((a, b) => b.gastoTotal - a.gastoTotal);

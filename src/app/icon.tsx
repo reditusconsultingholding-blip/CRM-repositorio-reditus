@@ -2,10 +2,10 @@ import { ImageResponse } from "next/og";
 import { REDITUS_ISOTIPO_DATA_URI } from "@/lib/brand-icon";
 
 export const runtime = "nodejs";
-export const size = { width: 180, height: 180 };
+export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
-export default function AppleIcon() {
+export default function Icon() {
   return new ImageResponse(
     (
       <div
