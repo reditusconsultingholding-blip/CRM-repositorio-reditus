@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Pipeline } from "@/lib/statuses";
+import { PIPELINES, type Pipeline } from "@/lib/statuses";
 
 type Encargado = { id: string; name: string };
 
@@ -57,7 +57,7 @@ export function RequerimientoFormDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            Nuevo requerimiento — {pipeline === "video" ? "Video" : "Landing"}
+            Nuevo requerimiento — {PIPELINES.find((p) => p.value === pipeline)?.label ?? pipeline}
           </DialogTitle>
         </DialogHeader>
         <form ref={formRef} action={handleSubmit} className="grid grid-cols-2 gap-3">

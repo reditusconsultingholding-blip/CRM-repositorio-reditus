@@ -71,7 +71,7 @@ export default async function IngresosPage() {
       <div className="overflow-x-auto rounded-md border bg-background">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="[&>th]:border-r [&>th:last-child]:border-r-0">
               <TableHead>ID</TableHead>
               <TableHead>Fecha</TableHead>
               <TableHead>Cliente</TableHead>

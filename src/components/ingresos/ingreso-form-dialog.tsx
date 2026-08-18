@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { INGRESO_SERVICIOS } from "@/lib/statuses";
 
 type Responsable = { id: string; name: string };
 
@@ -163,11 +164,18 @@ export function IngresoFormDialog({
                 <div key={i} className="grid grid-cols-12 items-end gap-2">
                   <div className="col-span-3 flex flex-col gap-1">
                     {i === 0 && <Label className="text-xs text-muted-foreground">Servicio</Label>}
-                    <Input
-                      value={item.servicio}
-                      onChange={(e) => updateItem(i, { servicio: e.target.value })}
-                      placeholder="Landing page"
-                    />
+                    <Select value={item.servicio} onValueChange={(v) => updateItem(i, { servicio: v ?? "" })}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Elige uno" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INGRESO_SERVICIOS.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-4 flex flex-col gap-1">
                     {i === 0 && <Label className="text-xs text-muted-foreground">Producto</Label>}

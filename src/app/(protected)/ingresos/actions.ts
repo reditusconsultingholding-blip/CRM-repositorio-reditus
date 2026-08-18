@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { IngresoEstado, EstadoPago } from "@/lib/statuses";
+import { SERVICIO_TO_PIPELINE, type IngresoEstado, type EstadoPago, type IngresoServicio } from "@/lib/statuses";
 import { notifyNewIngreso } from "@/lib/notify-new-ingreso";
 import { verifyTotpCode } from "@/lib/totp";
 import { getOrCreateClienteDriveFolders } from "@/lib/google-drive";
@@ -21,11 +21,11 @@ type ActionResult = { error?: string } | undefined;
 // servicio, por seguridad (ej. si alguien escribe "500" por error).
 const MAX_AUTO_REQUERIMIENTOS_POR_ITEM = 30;
 
-function inferPipeline(texto: string): "video" | "landing" | null {
-  const t = texto.toLowerCase();
-  if (/landing|p[aá]gina|web|sitio/.test(t)) return "landing";
-  if (/video|reel|edici[oó]n/.test(t)) return "video";
-  return null;
+// El servicio ahora viene de un desplegable cerrado (INGRESO_SERVICIOS),
+// no de texto libre — así el mapeo a pipeline es exacto, no una
+// adivinanza por palabras clave que podía fallar.
+function inferPipeline(servicio: string) {
+  return SERVICIO_TO_PIPELINE[servicio as IngresoServicio] ?? null;
 }
 
 /** Crea automáticamente un requerimiento por cada unidad de un ingreso
@@ -57,7 +57,7 @@ async function autoCrearRequerimientos(
 
   let creoAlguno = false;
   for (const item of items) {
-    const pipeline = inferPipeline(`${item.servicio} ${item.producto}`);
+    const pipeline = inferPipeline(item.servicio);
     if (!pipeline) continue;
     creoAlguno = true;
 

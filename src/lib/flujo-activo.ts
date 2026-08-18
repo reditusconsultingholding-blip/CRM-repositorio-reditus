@@ -1,7 +1,13 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
-export type FlujoItemRole = "comercial" | "operativa" | "landing" | "video" | "programador";
+export type FlujoItemRole = "comercial" | "operativa" | "landing" | "video" | "claude" | "programador";
+
+function roleForPipeline(pipeline: string): "video" | "landing" | "claude" {
+  if (pipeline === "video") return "video";
+  if (pipeline === "claude") return "claude";
+  return "landing";
+}
 
 export type FlujoItem = {
   id: string;
@@ -92,12 +98,12 @@ export async function getFlujoActivo(): Promise<FlujoItem[]> {
       responsableId = programador?.id ?? encargado?.id ?? null;
       responsableNombre = programador?.name ?? encargado?.name ?? null;
     } else if (r.estado === "Terminado") {
-      role = r.pipeline === "video" ? "video" : "programador";
+      role = r.pipeline === "landing" ? "programador" : roleForPipeline(r.pipeline);
       etapaLabel = "Entrega";
       responsableId = encargado?.id ?? null;
       responsableNombre = encargado?.name ?? null;
     } else if (r.estado === "En progreso") {
-      role = r.pipeline === "video" ? "video" : "landing";
+      role = roleForPipeline(r.pipeline);
       etapaLabel = "Producción";
       responsableId = encargado?.id ?? null;
       responsableNombre = encargado?.name ?? null;
