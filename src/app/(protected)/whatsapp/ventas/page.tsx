@@ -2,17 +2,23 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { getBotKnowledgeSections } from "@/lib/bot-knowledge";
+import { getVentasPipeline } from "@/lib/ventas-pipeline";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BotKnowledgeEditor } from "@/components/whatsapp/bot-knowledge-editor";
-import { ArrowLeft, Bot, Settings2 } from "lucide-react";
+import { VentasPipelineBoard } from "@/components/whatsapp/ventas-pipeline-board";
+import { LiveSync } from "@/components/live-sync";
+import { ArrowLeft, Bot, Settings2, KanbanSquare } from "lucide-react";
 
 export default async function LineaVentasPage() {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) redirect("/dashboard");
 
   const conectado = !!process.env.WHATSAPP_SALES_PHONE_NUMBER_ID;
-  const sections = profile.role === "ceo" ? await getBotKnowledgeSections() : null;
+  const [sections, pipeline] = await Promise.all([
+    profile.role === "ceo" ? getBotKnowledgeSections() : Promise.resolve(null),
+    getVentasPipeline(),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -56,6 +62,19 @@ export default async function LineaVentasPage() {
               ver qué falta exactamente.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <KanbanSquare className="size-4" />
+            Conversaciones (pipeline)
+          </CardTitle>
+          <LiveSync tables={["prospectos"]} />
+        </CardHeader>
+        <CardContent>
+          <VentasPipelineBoard items={pipeline} />
         </CardContent>
       </Card>
 

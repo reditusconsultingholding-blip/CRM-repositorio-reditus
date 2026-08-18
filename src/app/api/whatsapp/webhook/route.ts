@@ -60,36 +60,41 @@ export async function POST(request: NextRequest) {
 
   const { data: existing } = await admin
     .from("prospectos")
-    .select("id, historial_whatsapp")
+    .select("id, historial_whatsapp, bot_activo")
     .eq("whatsapp_number", fromWhatsappNumber)
     .eq("origen", "whatsapp")
     .maybeSingle();
 
   const history = (existing?.historial_whatsapp as { role: "user" | "assistant"; content: string }[]) ?? [];
+  const botActivo = existing?.bot_activo ?? true;
 
-  const result = await runSalesAgentTurn({
-    fromWhatsappNumber,
-    incomingMessage: incomingText,
-    history,
-  });
+  // Si alguien apagó el bot en esta conversación (tomó el control manual),
+  // igual guardamos el mensaje entrante para que se vea en el hilo, pero
+  // no generamos ni mandamos respuesta automática.
+  const result = botActivo
+    ? await runSalesAgentTurn({ fromWhatsappNumber, incomingMessage: incomingText, history })
+    : null;
 
   const newHistory = [
     ...history,
     { role: "user" as const, content: incomingText },
-    { role: "assistant" as const, content: result.reply },
+    ...(result ? [{ role: "assistant" as const, content: result.reply }] : []),
   ].slice(-40); // cap para no crecer sin límite
 
   if (existing) {
     await admin
       .from("prospectos")
-      .update({ historial_whatsapp: newHistory, estado: result.prospectoEstado })
+      .update({
+        historial_whatsapp: newHistory,
+        ...(result ? { estado: result.prospectoEstado } : {}),
+      })
       .eq("id", existing.id);
   } else {
     await admin.from("prospectos").insert({
       nombre: `WhatsApp ${fromWhatsappNumber}`,
       whatsapp_number: fromWhatsappNumber,
       origen: "whatsapp",
-      estado: result.prospectoEstado,
+      estado: result?.prospectoEstado ?? "calificando",
       historial_whatsapp: newHistory,
     });
 
@@ -104,7 +109,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await sendWhatsAppMessage(fromWhatsappNumber, result.reply);
+  if (result) {
+    await sendWhatsAppMessage(fromWhatsappNumber, result.reply);
+  }
 
   return NextResponse.json({ ok: true });
 }

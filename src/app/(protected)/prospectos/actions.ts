@@ -18,6 +18,21 @@ export async function updateProspectoEstado(id: string, estado: ProspectoEstado)
   }
 }
 
+/** Apaga/prende el agente de IA para una conversación puntual — cuando
+ * está apagado, los mensajes entrantes se siguen guardando pero nadie
+ * responde solo, para que un humano tome el control manual. */
+export async function toggleBotActivo(id: string, activo: boolean): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("prospectos").update({ bot_activo: activo }).eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/whatsapp/ventas");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
 export async function createProspectoManual(formData: FormData): Promise<ActionResult> {
   try {
     const supabase = await createClient();

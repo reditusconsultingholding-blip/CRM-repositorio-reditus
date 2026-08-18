@@ -140,6 +140,15 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
       await supabase.from("clients").update({ tax_id: taxId }).eq("id", clientId);
     }
 
+    // Si este cliente llegó como prospecto de WhatsApp, lo marca como
+    // "convertido" y lo liga al cliente real — así la Línea de ventas
+    // puede mostrar el pipeline completo (interesado → convertido).
+    await supabase
+      .from("prospectos")
+      .update({ client_id: clientId, estado: "convertido" })
+      .eq("whatsapp_number", whatsappNumber)
+      .neq("estado", "convertido");
+
     const responsableId = String(formData.get("responsable_id") ?? "") || null;
 
     const cantidadTotal = items.reduce((sum, it) => sum + it.cantidad, 0);
