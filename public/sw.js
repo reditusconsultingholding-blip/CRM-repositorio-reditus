@@ -7,6 +7,15 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Chrome exige un listener de "fetch" para considerar el sitio realmente
+// instalable como app (no solo un acceso directo/bookmark) — sin esto,
+// "Agregar a inicio" en algunos Android termina creando un simple enlace
+// en vez de instalar la app de verdad. No cachea nada, solo deja pasar
+// la petición tal cual a la red — la app siempre trae datos en vivo.
+self.addEventListener("fetch", (event) => {
+  event.respondWith(fetch(event.request));
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   let payload;

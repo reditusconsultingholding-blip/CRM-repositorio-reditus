@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
-import { getBotKnowledgeSections } from "@/lib/bot-knowledge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BotKnowledgeEditor } from "@/components/whatsapp/bot-knowledge-editor";
-import { MessageCircle, Bot, Users, CalendarCheck } from "lucide-react";
+import { MessageCircle, Bot, Users, CalendarCheck, ChevronRight } from "lucide-react";
 
 export default async function WhatsAppPage() {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) redirect("/dashboard");
-  const sections = profile.role === "ceo" ? await getBotKnowledgeSections() : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -22,29 +19,25 @@ export default async function WhatsAppPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Bot className="size-4" />
-              Línea de ventas (agente IA)
-            </CardTitle>
-            <Badge variant="outline">Próximamente</Badge>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
-            <p>
+        <Link href="/whatsapp/ventas" className="group">
+          <Card className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-muted/30">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bot className="size-4" />
+                Línea de ventas (agente IA)
+              </CardTitle>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="outline">Próximamente</Badge>
+                <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </div>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
               Número dedicado a prospectos nuevos, con un agente de IA que sigue el protocolo comercial
               (saludo, portafolio, precios, agendar, cerrar) y escala a un humano cuando hace falta.
-            </p>
-            {sections !== null && (
-              <div className="rounded-md border bg-background p-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground">
-                  Base de conocimiento del agente
-                </p>
-                <BotKnowledgeEditor sections={sections} />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              Entra aquí para conectar el número y configurar el bot.
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
@@ -94,8 +87,8 @@ export default async function WhatsAppPage() {
           <p>
             El receptor ya está construido y desplegado (<code>/api/whatsapp/webhook</code>) — apenas
             tengas las credenciales, conectar es solo: pegar 3 variables en Vercel y dar &quot;Verificar y
-            guardar&quot; en Meta. El agente de ventas (<code>src/lib/whatsapp-agent.ts</code>) ya sigue el
-            protocolo y la base de conocimiento de arriba.
+            guardar&quot; en Meta. El agente de ventas ya sigue el protocolo y la base de conocimiento que
+            configures en <Link href="/whatsapp/ventas" className="text-primary hover:underline">Línea de ventas</Link>.
           </p>
         </CardContent>
       </Card>
