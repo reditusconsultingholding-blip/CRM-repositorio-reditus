@@ -1,69 +1,105 @@
 import "server-only";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { CEO_KNOWLEDGE } from "@/lib/ceo-knowledge";
 
-// Contenido inicial de la base de conocimiento del agente de ventas de
-// WhatsApp — combina el documento maestro comercial/operativo (ya
-// extraído en ceo-knowledge.ts) con los dos formularios de recepción de
-// información que Sebastián compartió. Esta es solo la semilla: la fila
-// real vive en bot_knowledge_base y el CEO la edita libremente desde
-// /whatsapp — sirve de contexto para que el agente pueda cotizar,
-// resolver objeciones y pedir la información correcta a un prospecto.
-export const BOT_KNOWLEDGE_SEED = `
-${CEO_KNOWLEDGE}
+export type BotKnowledgeSection = { id: string; titulo: string; contenido: string; orden: number };
+
+const PREGUNTAS_AGENDAMIENTO = `Nombre comercial del producto:
+Recomendaciones de ángulos de venta:
+Precios del producto (Valor x1 - Valor x2 - Valor x3). Si tiene obsequios, añadirlos.
+Si cuenta con alguna oferta (2x1, envío contra entrega, envío gratis u obsequios que incluya el pedido):
+Métodos de pago vigentes actualmente:
+Identidad Gráfica o redes sociales:`;
+
+const ESTRUCTURA_TECNICA = `Información del producto/servicio: qué vende, presentaciones/planes y precios, qué incluye
+cada uno, beneficios/características principales, respaldo o certificación si tiene.
+Uso/experiencia: cómo se usa, para quién es (y para quién no), condiciones o cuidados especiales,
+frecuencia de recompra.
+Logística: políticas de envío, cómo se conserva el producto, garantía/cambios/devoluciones.
+Preguntas frecuentes y objeciones: las 5-10 preguntas más comunes antes de comprar, las objeciones
+más frecuentes (precio, confianza, comparación con competencia), con qué otras marcas comparan.`;
+
+// Semilla inicial — 4 secciones que cualquier CEO puede seguir editando o
+// ampliando desde /whatsapp. Solo se usa la primera vez (tabla vacía).
+const DEFAULT_SECTIONS: { titulo: string; contenido: string; orden: number }[] = [
+  {
+    orden: 0,
+    titulo: "Misión",
+    contenido:
+      "Convertir prospectos que escriben por WhatsApp en llamadas agendadas para Reditus Consulting — calificando lo suficiente para no perder tiempo con quien claramente no aplica, sin sonar como un formulario ni un bot genérico.",
+  },
+  {
+    orden: 1,
+    titulo: "Qué debe hacer",
+    contenido: `1. Saluda de forma personalizada y pregunta en qué puedes ayudar.
+2. Si piden ejemplos o precios, comparte referencias generales usando el Contexto del negocio (no inventes precios que no estén ahí).
+3. Haz 1-2 preguntas para entender si el negocio es real y tiene sentido para nosotros. No interrogues largo — Calendly recoge el detalle fino al agendar.
+4. Si hay interés genuino, comparte el link: https://calendly.com/reditusconsultingholding/15min — explica que es una sesión de diagnóstico estratégico gratuita de 15 minutos.
+5. Si es claramente spam, broma, o no tiene nada que ver con nuestros servicios, despídete cordialmente sin insistir.
+6. Nunca inventes precios exactos ni fechas de entrega que no estén respaldados por el Contexto del negocio.`,
+  },
+  {
+    orden: 2,
+    titulo: "Personalidad",
+    contenido:
+      "Cálido pero directo, en español latino. Mensajes cortos como de WhatsApp real, nunca párrafos largos de correo. Seguro de lo que ofrece, sin sonar arrogante ni desesperado por vender. Nunca insiste con alguien que ya dijo que no aplica.",
+  },
+  {
+    orden: 3,
+    titulo: "Contexto del negocio",
+    contenido: `${CEO_KNOWLEDGE}
 
 === PREGUNTAS CLAVE PARA UN EXCELENTE AGENDAMIENTO ===
-(Se le piden al cliente una vez confirma que quiere avanzar, antes o durante el agendamiento)
-
-- Nombre comercial del producto.
-- Recomendaciones de ángulos de venta.
-- Precios del producto (valor x1 - x2 - x3). Si tiene obsequios, incluirlos.
-- Si cuenta con alguna oferta (2x1, envío contra entrega, envío gratis, obsequios incluidos).
-- Métodos de pago vigentes actualmente.
-- Identidad gráfica o redes sociales.
+${PREGUNTAS_AGENDAMIENTO}
 
 === ESTRUCTURA TÉCNICA — INFORMACIÓN A RECOLECTAR DEL CLIENTE ===
+${ESTRUCTURA_TECNICA}`,
+  },
+];
 
-Información del producto/servicio:
-- ¿Qué producto o servicio vende? Descripción breve.
-- ¿Qué presentaciones, versiones o planes ofrece (y precio de cada uno)?
-- ¿Qué incluye cada presentación/plan (envío, bonos, extras)?
-- ¿Cuáles son los beneficios o características principales?
-- ¿Tiene algún respaldo, certificación o registro oficial (ej. INVIMA, ISO, garantías legales)?
+function serviceClient() {
+  return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+}
 
-Uso / experiencia del cliente:
-- ¿Cómo se usa, se aplica o se consume?
-- ¿Para quién es (y para quién NO es)?
-- ¿Hay alguna condición, restricción o cuidado especial que el cliente deba conocer antes de comprar?
-- ¿Con qué frecuencia se usa o se repite la compra?
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function seedIfEmpty(supabase: any) {
+  const { count } = await supabase.from("bot_knowledge_sections").select("id", { count: "exact", head: true });
+  if ((count ?? 0) === 0) {
+    await supabase.from("bot_knowledge_sections").insert(DEFAULT_SECTIONS);
+  }
+}
 
-Logística:
-- Políticas de envío (cobertura, tiempos, costos).
-- Cómo se conserva, almacena o mantiene el producto (si aplica).
-- Política de garantía, cambios o devoluciones.
-
-Preguntas frecuentes y objeciones:
-- Las 5-10 preguntas que más hacen los clientes antes de comprar.
-- Objeciones o dudas más comunes que frenan la compra (precio, confianza, comparación con competencia).
-- Comparaciones que hacen los clientes con otras marcas o alternativas del mercado.
-
-=== INFORMACIÓN DE VENTAS ADICIONAL ===
-(El CEO puede seguir agregando aquí — ejemplos de portafolio, guiones que funcionan, objeciones
-específicas por nicho, casos de éxito, etc.)
-`.trim();
-
-export async function getBotKnowledge(): Promise<string> {
+/** Para la pantalla de edición en /whatsapp (sesión del CEO, sujeta a RLS). */
+export async function getBotKnowledgeSections(): Promise<BotKnowledgeSection[]> {
   try {
     const supabase = await createClient();
+    await seedIfEmpty(supabase);
     const { data } = await supabase
-      .from("bot_knowledge_base")
-      .select("contenido")
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data?.contenido) return data.contenido;
+      .from("bot_knowledge_sections")
+      .select("id, titulo, contenido, orden")
+      .order("orden");
+    return data ?? [];
   } catch {
-    // Tabla todavía no migrada en producción — cae al contenido semilla.
+    return DEFAULT_SECTIONS.map((s, i) => ({ id: `seed-${i}`, ...s }));
   }
-  return BOT_KNOWLEDGE_SEED;
+}
+
+/** Para el agente de ventas real (webhook de WhatsApp — corre sin sesión
+ * de usuario, así que usa la service role en vez de depender de cookies/
+ * RLS; antes de este cambio el agente nunca alcanzaba a leer lo que el
+ * CEO editaba porque el cliente con cookies no tiene sesión ahí). */
+export async function getBotKnowledgeForAgent(): Promise<string> {
+  try {
+    const supabase = serviceClient();
+    await seedIfEmpty(supabase);
+    const { data } = await supabase
+      .from("bot_knowledge_sections")
+      .select("titulo, contenido")
+      .order("orden");
+    if (!data || data.length === 0) throw new Error("vacío");
+    return data.map((s) => `=== ${s.titulo.toUpperCase()} ===\n${s.contenido}`).join("\n\n");
+  } catch {
+    return DEFAULT_SECTIONS.map((s) => `=== ${s.titulo.toUpperCase()} ===\n${s.contenido}`).join("\n\n");
+  }
 }

@@ -22,12 +22,13 @@
 //      por Calendly, el cron diario (`src/lib/calendly.ts`) lo pasa a
 //      `'agendado'` automáticamente.
 //
-// La base de conocimiento (precios, protocolo, preguntas de agendamiento)
-// vive en bot_knowledge_base y la edita el CEO desde /whatsapp — este
-// archivo solo trae el "cómo comportarse", el contenido real llega vía
-// getBotKnowledge().
+// La base de conocimiento (misión, instrucciones, personalidad, contexto
+// del negocio) vive en bot_knowledge_sections y la edita el CEO desde
+// /whatsapp (dentro de la tarjeta "Línea de ventas") — este archivo solo
+// trae el "cómo comportarse", el contenido real llega vía
+// getBotKnowledgeForAgent().
 
-import { getBotKnowledge } from "@/lib/bot-knowledge";
+import { getBotKnowledgeForAgent } from "@/lib/bot-knowledge";
 
 function buildSystemPrompt(knowledge: string) {
   return `Eres el primer punto de contacto por WhatsApp de Reditus Consulting,
@@ -83,7 +84,7 @@ export async function runSalesAgentTurn(params: {
     { role: "user" as const, content: params.incomingMessage },
   ];
 
-  const knowledge = await getBotKnowledge();
+  const knowledge = await getBotKnowledgeForAgent();
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

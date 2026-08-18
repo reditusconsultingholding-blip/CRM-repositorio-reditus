@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
-import { getBotKnowledge } from "@/lib/bot-knowledge";
+import { getBotKnowledgeSections } from "@/lib/bot-knowledge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BotKnowledgeEditor } from "@/components/whatsapp/bot-knowledge-editor";
-import { MessageCircle, Bot, Users, CalendarCheck, BookOpen } from "lucide-react";
+import { MessageCircle, Bot, Users, CalendarCheck } from "lucide-react";
 
 export default async function WhatsAppPage() {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) redirect("/dashboard");
-  const knowledge = profile.role === "ceo" ? await getBotKnowledge() : null;
+  const sections = profile.role === "ceo" ? await getBotKnowledgeSections() : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -30,9 +30,19 @@ export default async function WhatsAppPage() {
             </CardTitle>
             <Badge variant="outline">Próximamente</Badge>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Número dedicado a prospectos nuevos, con un agente de IA que sigue el protocolo comercial
-            (saludo, portafolio, precios, agendar, cerrar) y escala a un humano cuando hace falta.
+          <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
+            <p>
+              Número dedicado a prospectos nuevos, con un agente de IA que sigue el protocolo comercial
+              (saludo, portafolio, precios, agendar, cerrar) y escala a un humano cuando hace falta.
+            </p>
+            {sections !== null && (
+              <div className="rounded-md border bg-background p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground">
+                  Base de conocimiento del agente
+                </p>
+                <BotKnowledgeEditor sections={sections} />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -85,24 +95,10 @@ export default async function WhatsAppPage() {
             El receptor ya está construido y desplegado (<code>/api/whatsapp/webhook</code>) — apenas
             tengas las credenciales, conectar es solo: pegar 3 variables en Vercel y dar &quot;Verificar y
             guardar&quot; en Meta. El agente de ventas (<code>src/lib/whatsapp-agent.ts</code>) ya sigue el
-            protocolo de tu documento maestro y comparte el link de Calendly cuando corresponde.
+            protocolo y la base de conocimiento de arriba.
           </p>
         </CardContent>
       </Card>
-
-      {knowledge !== null && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <BookOpen className="size-4" />
-              Base de conocimiento del agente (editable)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BotKnowledgeEditor initialContenido={knowledge} />
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
