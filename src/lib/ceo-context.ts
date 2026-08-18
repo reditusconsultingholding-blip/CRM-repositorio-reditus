@@ -12,7 +12,7 @@ export async function buildExtendedBusinessContext(): Promise<string> {
   const [{ data: clients }, { data: ingresos }, { data: historicos }, { data: prospectos }, { data: team }, usdCop] =
     await Promise.all([
       supabase.from("clients").select("id, name"),
-      supabase.from("ingresos").select("client_id, precio_final_descuento, moneda"),
+      supabase.from("ingresos").select("client_id, precio_final_descuento, moneda").eq("estado_comercial", "Cerrado"),
       supabase.from("historical_ingresos").select("client_id, precio_usd_aprox"),
       supabase.from("prospectos").select("estado"),
       supabase.from("users").select("name, role").eq("active", true).neq("role", "ceo"),

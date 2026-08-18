@@ -30,12 +30,14 @@ export default async function DashboardPage() {
       ? supabase
           .from("ingresos")
           .select("precio_final_descuento, moneda", { count: "exact" })
+          .eq("estado_comercial", "Cerrado")
           .eq("fecha", today)
       : Promise.resolve({ data: [], count: 0 }),
     canSeeIngresos
       ? supabase
           .from("ingresos")
           .select("fecha, precio_final_descuento, moneda")
+          .eq("estado_comercial", "Cerrado")
           .gte("fecha", monthStart)
           .lt("fecha", monthEnd)
       : Promise.resolve({ data: [] }),

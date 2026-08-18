@@ -18,7 +18,12 @@ export async function getRevenueForRange(
     const supabase = await createClient();
 
     const [{ data, error }, usdCop] = await Promise.all([
-      supabase.from("ingresos").select("precio_final_descuento, moneda").gte("fecha", start).lte("fecha", end),
+      supabase
+        .from("ingresos")
+        .select("precio_final_descuento, moneda")
+        .eq("estado_comercial", "Cerrado")
+        .gte("fecha", start)
+        .lte("fecha", end),
       getUsdCopRate(),
     ]);
 

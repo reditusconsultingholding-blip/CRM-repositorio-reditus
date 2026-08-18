@@ -96,11 +96,13 @@ export async function computeCeoReport(): Promise<CeoReport> {
     supabase
       .from("ingresos")
       .select("precio_final_descuento, moneda")
+      .eq("estado_comercial", "Cerrado")
       .gte("fecha", isoDate(weekStart))
       .lt("fecha", isoDate(weekEnd)),
     supabase
       .from("ingresos")
       .select("precio_final_descuento, moneda")
+      .eq("estado_comercial", "Cerrado")
       .gte("fecha", isoDate(monthStart))
       .lt("fecha", isoDate(monthEnd)),
     supabase.from("users").select("id, role").eq("active", true).eq("incluir_en_nomina", true).neq("role", "ceo"),

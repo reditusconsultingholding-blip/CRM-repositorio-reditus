@@ -129,6 +129,17 @@ export function IngresoFormDialog({
             <Input id="pais" name="pais" defaultValue={ingreso?.pais ?? ""} />
           </div>
 
+          {!isEdit && (
+            <label className="col-span-2 flex items-start gap-2 rounded-md border border-dashed p-3 text-sm">
+              <input type="checkbox" name="es_cotizacion" className="mt-0.5" />
+              <span>
+                <span className="font-medium">Todavía es una cotización</span> — el cliente no ha
+                confirmado. No cuenta como ingreso ni dispara producción hasta que la cierres (botón
+                &quot;Marcar como cerrado&quot; en la tabla).
+              </span>
+            </label>
+          )}
+
           <div className="col-span-2 flex flex-col gap-2 rounded-md border p-3">
             <div className="flex items-center justify-between">
               <Label>Servicios / productos</Label>

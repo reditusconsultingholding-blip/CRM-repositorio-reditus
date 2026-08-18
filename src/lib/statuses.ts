@@ -120,6 +120,17 @@ export const ESTADO_PAGO_COLORS: Record<EstadoPago, string> = {
   Pagado: "bg-green-300 text-green-950",
 };
 
+// Etapas 2 (Cotización) y 3 (Cierre) del flujo comercial — separadas para
+// poder distinguir un pedido que ya se confirmó (Cerrado, cuenta como
+// ingreso real) de una cotización enviada que el cliente todavía no
+// confirma (Cotizado, no cuenta en las sumas de ingresos/rentabilidad).
+export const ESTADOS_COMERCIALES = ["Cotizado", "Cerrado"] as const;
+export type EstadoComercial = (typeof ESTADOS_COMERCIALES)[number];
+export const ESTADO_COMERCIAL_COLORS: Record<EstadoComercial, string> = {
+  Cotizado: "bg-sky-200 text-sky-950",
+  Cerrado: "bg-green-300 text-green-950",
+};
+
 export const PIPELINES = [
   { value: "video", label: "Videos Creativos" },
   { value: "landing", label: "Landing Pages" },

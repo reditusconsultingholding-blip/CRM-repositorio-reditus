@@ -15,6 +15,7 @@ import { GastosFijosTable } from "@/components/ceo/gastos-fijos-table";
 import { PayrollRatesTable, type PersonRate } from "@/components/ceo/payroll-rates-table";
 import { PayrollChecklist } from "@/components/ceo/payroll-checklist";
 import { CredentialsVault } from "@/components/ceo/credentials-vault";
+import { SentryTestButton } from "@/components/ceo/sentry-test-button";
 import { LiveSync } from "@/components/live-sync";
 
 function fmtUsd(n: number) {
@@ -72,6 +73,7 @@ export default async function CeoPage() {
           <TabsTrigger value="checklist">Checklist de pago</TabsTrigger>
           <TabsTrigger value="contrasenas">Contraseñas</TabsTrigger>
           <TabsTrigger value="asistente">Asistente CEO</TabsTrigger>
+          <TabsTrigger value="sistema">Sistema</TabsTrigger>
         </TabsList>
 
         <TabsContent value="rentabilidad" className="flex flex-col gap-4">
@@ -196,6 +198,28 @@ export default async function CeoPage() {
 
         <TabsContent value="asistente">
           <CeoAssistant />
+        </TabsContent>
+
+        <TabsContent value="sistema">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Monitoreo de errores (Sentry)</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Con el DSN configurado, cualquier error real en producción llega directo a tu dashboard
+                de Sentry, con el stack trace completo — sin tener que esperar a que alguien te avise.
+                Usa este botón para confirmar que quedó bien conectado.
+              </p>
+              <div>
+                <SentryTestButton />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Al hacer clic vas a ver la pantalla de error de la app (es esperado, es la prueba) — si
+                el error aparece en sentry.io en menos de un minuto, quedó funcionando.
+              </p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

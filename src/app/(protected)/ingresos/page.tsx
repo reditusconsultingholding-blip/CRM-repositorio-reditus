@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { updateIngresoEstado, updateEstadoPago } from "./actions";
 import { IngresoFormDialog } from "@/components/ingresos/ingreso-form-dialog";
 import { DeleteIngresoButton } from "@/components/ingresos/delete-ingreso-button";
+import { EstadoComercialCell } from "@/components/ingresos/estado-comercial-cell";
 import { EstadoSelect } from "@/components/estado-select";
 import { LiveSync } from "@/components/live-sync";
 import {
@@ -11,6 +12,7 @@ import {
   ESTADO_PAGO_COLORS,
   type IngresoEstado,
   type EstadoPago,
+  type EstadoComercial,
 } from "@/lib/statuses";
 import {
   Table,
@@ -33,6 +35,7 @@ type IngresoRow = {
   precio_final_descuento: number | null;
   moneda: "USD" | "COP";
   estado_pago: EstadoPago;
+  estado_comercial: EstadoComercial;
   cotizacion_numero: string | null;
   cuenta_cobro_numero: string | null;
   responsable_id: string | null;
@@ -48,7 +51,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, moneda, estado_pago, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -76,6 +79,7 @@ export default async function IngresosPage() {
               <TableHead>País</TableHead>
               <TableHead>Producto</TableHead>
               <TableHead>Precio final</TableHead>
+              <TableHead>Comercial</TableHead>
               <TableHead>Pago</TableHead>
               <TableHead>Responsable</TableHead>
               <TableHead>Estado</TableHead>
@@ -101,6 +105,9 @@ export default async function IngresosPage() {
                         currency: row.moneda ?? "USD",
                       })
                     : "—"}
+                </TableCell>
+                <TableCell>
+                  <EstadoComercialCell ingresoId={row.id} estado={row.estado_comercial} />
                 </TableCell>
                 <TableCell>
                   <EstadoSelect
@@ -169,7 +176,7 @@ export default async function IngresosPage() {
             ))}
             {(ingresos ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-muted-foreground">
+                <TableCell colSpan={13} className="text-center text-muted-foreground">
                   Todavía no hay ingresos registrados.
                 </TableCell>
               </TableRow>

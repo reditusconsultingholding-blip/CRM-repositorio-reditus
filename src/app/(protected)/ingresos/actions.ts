@@ -146,6 +146,12 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     const precioTotal = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
     const precioFinalOverride = Number(formData.get("precio_final_descuento") ?? 0) || null;
 
+    // Etapa 2 vs 3 del flujo comercial: si es solo una cotización enviada
+    // (el cliente no ha confirmado), no cuenta como ingreso real todavía
+    // y no se dispara producción — eso pasa recién cuando se cierre.
+    const esCotizacion = String(formData.get("es_cotizacion") ?? "") === "on";
+    const estadoComercial = esCotizacion ? "Cotizado" : "Cerrado";
+
     const { data: ingreso, error } = await supabase
       .from("ingresos")
       .insert({
@@ -158,6 +164,7 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
         precio_final_descuento: precioFinalOverride ?? precioTotal,
         moneda,
         responsable_id: responsableId,
+        estado_comercial: estadoComercial,
       })
       .select("id, tracking_id")
       .single();
@@ -175,11 +182,74 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     );
     if (itemsError) return { error: itemsError.message };
 
-    await autoCrearRequerimientos(supabase, ingreso.id, ingreso.tracking_id, items, country, clientName);
+    if (!esCotizacion) {
+      await autoCrearRequerimientos(supabase, ingreso.id, ingreso.tracking_id, items, country, clientName);
+      await notifyNewIngreso({
+        producto: items.map((it) => it.producto).join(", "),
+        totalUsd: precioFinalOverride ?? precioTotal,
+        clienteNombre: clientName,
+      });
+    }
 
+    revalidatePath("/ingresos");
+    revalidatePath("/requerimientos");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
+/** Etapa 3 (Cierre): el cliente confirma una cotización que estaba
+ * pendiente — recién aquí se dispara lo que antes pasaba siempre al
+ * crear el ingreso (auto-crear requerimientos + notificar), porque hasta
+ * ahora no era un pedido real todavía. */
+export async function marcarIngresoCerrado(id: string): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const { data: ingreso, error: fetchError } = await supabase
+      .from("ingresos")
+      .select(
+        "id, tracking_id, pais, producto, precio_final_descuento, estado_comercial, client:clients(name)",
+      )
+      .eq("id", id)
+      .single<{
+        id: string;
+        tracking_id: string;
+        pais: string | null;
+        producto: string | null;
+        precio_final_descuento: number | null;
+        estado_comercial: string;
+        client: { name: string } | { name: string }[] | null;
+      }>();
+    if (fetchError || !ingreso) return { error: "Ese ingreso ya no existe." };
+    if (ingreso.estado_comercial === "Cerrado") return {};
+
+    const { data: items } = await supabase
+      .from("ingreso_items")
+      .select("servicio, producto, cantidad, precio_unitario")
+      .eq("ingreso_id", id);
+
+    const { error } = await supabase.from("ingresos").update({ estado_comercial: "Cerrado" }).eq("id", id);
+    if (error) return { error: error.message };
+
+    const clientName = (Array.isArray(ingreso.client) ? ingreso.client[0]?.name : ingreso.client?.name) ?? "Cliente";
+    await autoCrearRequerimientos(
+      supabase,
+      ingreso.id,
+      ingreso.tracking_id,
+      (items ?? []).map((it) => ({
+        servicio: it.servicio ?? "",
+        producto: it.producto,
+        cantidad: it.cantidad,
+        precio_unitario: it.precio_unitario,
+      })),
+      ingreso.pais,
+      clientName,
+    );
     await notifyNewIngreso({
-      producto: items.map((it) => it.producto).join(", "),
-      totalUsd: precioFinalOverride ?? precioTotal,
+      producto: ingreso.producto ?? "",
+      totalUsd: Number(ingreso.precio_final_descuento ?? 0),
       clienteNombre: clientName,
     });
 

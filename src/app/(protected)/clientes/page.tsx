@@ -24,7 +24,7 @@ export default async function ClientesPage() {
       .from("clients")
       .select("id, name, whatsapp_number, country, tax_id, historico_pedidos_ajuste, historico_gasto_ajuste_usd")
       .order("name"),
-    supabase.from("ingresos").select("client_id, precio_final_descuento, moneda"),
+    supabase.from("ingresos").select("client_id, precio_final_descuento, moneda").eq("estado_comercial", "Cerrado"),
     // Puede no existir todavía si la migración 0002b/histórica no se ha corrido —
     // se maneja con gracia en vez de romper la página.
     supabase.from("historical_ingresos").select("client_id, precio_usd_aprox"),

@@ -27,7 +27,7 @@ export async function getFlujoActivo(): Promise<FlujoItem[]> {
   const [{ data: ingresos }, { data: requerimientos }] = await Promise.all([
     supabase
       .from("ingresos")
-      .select("id, tracking_id, producto, estado_pago, responsable:users(id, name), client:clients(name)")
+      .select("id, tracking_id, producto, estado_pago, estado_comercial, responsable:users(id, name), client:clients(name)")
       .neq("estado_pago", "Pagado")
       .order("created_at", { ascending: false }),
     supabase
@@ -51,7 +51,8 @@ export async function getFlujoActivo(): Promise<FlujoItem[]> {
       titulo: `${client?.name ?? "Cliente"} — ${r.producto ?? "pedido"}`,
       estado: r.estado_pago,
       role: "comercial",
-      etapaLabel: "Comercial (cotización/cierre/pago)",
+      etapaLabel:
+        r.estado_comercial === "Cotizado" ? "Cotización (esperando cierre)" : "Cierre / Pago",
       responsableId: responsable?.id ?? null,
       responsableNombre: responsable?.name ?? null,
       href: "/ingresos",
@@ -68,7 +69,14 @@ export async function getFlujoActivo(): Promise<FlujoItem[]> {
     let responsableId: string | null = null;
     let responsableNombre: string | null = null;
 
-    if (r.estado === "Corregir") {
+    if (r.estado === "ESPERA INFO") {
+      // Etapa 5 (Información) bloqueada de verdad — falta algo del cliente
+      // antes de poder agendar, sea cual sea si ya hay encargado o no.
+      role = "operativa";
+      etapaLabel = "Información incompleta (bloqueado)";
+      responsableId = encargado?.id ?? null;
+      responsableNombre = encargado?.name ?? null;
+    } else if (r.estado === "Corregir") {
       role = "operativa";
       etapaLabel = "Correcciones";
       responsableId = encargado?.id ?? null;
