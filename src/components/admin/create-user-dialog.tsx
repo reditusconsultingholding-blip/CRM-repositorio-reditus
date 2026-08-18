@@ -57,10 +57,10 @@ export function CreateUserDialog() {
             <Label htmlFor="email">Correo</Label>
             <Input id="email" name="email" type="email" required />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Contraseña temporal</Label>
-            <Input id="password" name="password" type="text" minLength={8} required />
-          </div>
+          <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+            No necesitas ponerle contraseña — la persona la crea ella misma la primera vez que entra
+            con su correo.
+          </p>
           <div className="flex flex-col gap-2">
             <Label>Rol</Label>
             <Select name="role" required items={ROLE_LABELS}>

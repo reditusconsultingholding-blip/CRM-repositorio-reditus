@@ -23,22 +23,22 @@ export async function createUser(formData: FormData): Promise<ActionResult> {
     const email = String(formData.get("email") ?? "").trim();
     const name = String(formData.get("name") ?? "").trim();
     const role = String(formData.get("role") ?? "") as UserRole;
-    const password = String(formData.get("password") ?? "");
 
-    if (!email || !name || !role || password.length < 8) {
-      return { error: "Completa todos los campos (contraseña mínimo 8 caracteres)." };
+    if (!email || !name || !role) {
+      return { error: "Completa todos los campos." };
     }
 
+    // Sin contraseña — la persona crea la suya la primera vez que entra a
+    // /login con su correo (ver checkEmailStatus/createPasswordAndSignIn).
     const { data, error } = await admin.auth.admin.createUser({
       email,
-      password,
       email_confirm: true,
     });
     if (error) return { error: error.message };
 
     const { error: profileError } = await admin
       .from("users")
-      .insert({ id: data.user.id, name, email, role });
+      .insert({ id: data.user.id, name, email, role, password_set: false });
 
     if (profileError) {
       await admin.auth.admin.deleteUser(data.user.id);
