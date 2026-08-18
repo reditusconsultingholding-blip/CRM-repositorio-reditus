@@ -68,6 +68,7 @@ export function CeoAssistant() {
   const recognitionRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null);
   const conversationModeRef = useRef(false);
   const gotResultRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
   const micSupported = getSpeechRecognitionCtor() !== null;
   const spokenCountRef = useRef(1); // el mensaje inicial no se lee solo
@@ -144,7 +145,49 @@ export function CeoAssistant() {
     } else {
       recognitionRef.current?.stop();
       window.speechSynthesis?.cancel();
+      audioRef.current?.pause();
       setListening(false);
+    }
+  }
+
+  function continueConversationAfterSpeaking() {
+    if (conversationModeRef.current) setTimeout(() => conversationModeRef.current && startListening(), 300);
+  }
+
+  function speakWithBrowser(text: string) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(markdownToSpeechText(text));
+    utterance.lang = "es-CO";
+    utterance.rate = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const esVoice = voices.find((v) => v.lang.startsWith("es"));
+    if (esVoice) utterance.voice = esVoice;
+    utterance.onend = continueConversationAfterSpeaking;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Intenta la voz de ElevenLabs primero (más natural) — si no está
+  // configurada o falla, cae de vuelta a la voz nativa del navegador.
+  async function speak(text: string) {
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error("tts no disponible");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (!audioRef.current) audioRef.current = new Audio();
+      const audio = audioRef.current;
+      audio.src = url;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        continueConversationAfterSpeaking();
+      };
+      await audio.play();
+    } catch {
+      if (speechSupported) speakWithBrowser(text);
     }
   }
 
@@ -152,26 +195,18 @@ export function CeoAssistant() {
   // está activado (no lee el mensaje de bienvenida inicial). En modo
   // conversación, al terminar de hablar vuelve a activar el micrófono solo.
   useEffect(() => {
-    if (!voiceOn || !speechSupported) return;
+    if (!voiceOn) return;
     if (messages.length <= spokenCountRef.current) return;
     spokenCountRef.current = messages.length;
 
     const last = messages[messages.length - 1];
     if (last.role !== "assistant") return;
 
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(markdownToSpeechText(last.content));
-    utterance.lang = "es-CO";
-    utterance.rate = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const esVoice = voices.find((v) => v.lang.startsWith("es"));
-    if (esVoice) utterance.voice = esVoice;
-    utterance.onend = () => {
-      if (conversationModeRef.current) setTimeout(() => conversationModeRef.current && startListening(), 300);
-    };
-    window.speechSynthesis.speak(utterance);
+    window.speechSynthesis?.cancel();
+    if (audioRef.current) audioRef.current.pause();
+    speak(last.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, voiceOn, speechSupported]);
+  }, [messages, voiceOn]);
 
   return (
     <Card>
@@ -200,7 +235,10 @@ export function CeoAssistant() {
               variant={voiceOn ? "default" : "outline"}
               className="gap-1.5"
               onClick={() => {
-                if (voiceOn) window.speechSynthesis.cancel();
+                if (voiceOn) {
+                  window.speechSynthesis?.cancel();
+                  audioRef.current?.pause();
+                }
                 setVoiceOn((v) => !v);
               }}
             >
