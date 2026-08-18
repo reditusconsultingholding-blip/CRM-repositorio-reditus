@@ -125,9 +125,24 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
   },
+  totalsBlock: {
+    marginTop: 16,
+    alignSelf: "flex-end",
+    width: 220,
+  },
+  subtotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    fontSize: 9,
+    color: "#444444",
+    marginBottom: 3,
+  },
   totalRow: {
-    marginTop: 20,
-    textAlign: "right",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
+    paddingTop: 6,
+    borderTop: "1pt solid #999999",
     fontFamily: "Helvetica-Bold",
     fontSize: 11,
     color: BLUE,
@@ -167,6 +182,7 @@ export type DocumentoIngreso = {
   moneda: "USD" | "COP" | null;
   cotizacion_numero: string | null;
   cuenta_cobro_numero: string | null;
+  comision_plataforma: number | null;
   created_at: string;
 };
 
@@ -219,9 +235,11 @@ export function DocumentoReditus({
           },
         ];
 
-  const total = items && items.length > 0
+  const subtotal = items && items.length > 0
     ? items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0)
     : ingreso.precio_final_descuento ?? 0;
+  const comisionPlataforma = ingreso.comision_plataforma ?? 0;
+  const total = subtotal + comisionPlataforma;
   const numeroConsecutivo = isCuentaCobro ? ingreso.cuenta_cobro_numero : ingreso.cotizacion_numero;
 
   return (
@@ -324,7 +342,24 @@ export function DocumentoReditus({
             ))}
           </View>
 
-          <Text style={styles.totalRow}>Total a pagar: {formatMoney(total, moneda)}</Text>
+          <View style={styles.totalsBlock}>
+            {comisionPlataforma > 0 && (
+              <>
+                <View style={styles.subtotalRow}>
+                  <Text>Subtotal</Text>
+                  <Text>{formatMoney(subtotal, moneda)}</Text>
+                </View>
+                <View style={styles.subtotalRow}>
+                  <Text>Comisión plataforma</Text>
+                  <Text>{formatMoney(comisionPlataforma, moneda)}</Text>
+                </View>
+              </>
+            )}
+            <View style={styles.totalRow}>
+              <Text>Total a pagar</Text>
+              <Text>{formatMoney(total, moneda)}</Text>
+            </View>
+          </View>
 
           <View style={styles.signature}>
             <Text style={styles.signatureScript}>{PRESTADOR.firma}</Text>

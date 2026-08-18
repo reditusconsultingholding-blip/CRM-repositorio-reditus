@@ -154,6 +154,7 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     const cantidadTotal = items.reduce((sum, it) => sum + it.cantidad, 0);
     const precioTotal = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
     const precioFinalOverride = Number(formData.get("precio_final_descuento") ?? 0) || null;
+    const comisionPlataforma = Number(formData.get("comision_plataforma") ?? 0) || 0;
 
     // Etapa 2 vs 3 del flujo comercial: si es solo una cotización enviada
     // (el cliente no ha confirmado), no cuenta como ingreso real todavía
@@ -171,6 +172,7 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
         cantidad: cantidadTotal,
         precio_total: precioTotal,
         precio_final_descuento: precioFinalOverride ?? precioTotal,
+        comision_plataforma: comisionPlataforma,
         moneda,
         responsable_id: responsableId,
         estado_comercial: estadoComercial,
@@ -332,6 +334,7 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
     const cantidadTotal = items.reduce((sum, it) => sum + it.cantidad, 0);
     const precioTotal = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
     const precioFinalOverride = Number(formData.get("precio_final_descuento") ?? 0) || null;
+    const comisionPlataforma = Number(formData.get("comision_plataforma") ?? 0) || 0;
 
     const { error } = await supabase
       .from("ingresos")
@@ -342,6 +345,7 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
         cantidad: cantidadTotal,
         precio_total: precioTotal,
         precio_final_descuento: precioFinalOverride ?? precioTotal,
+        comision_plataforma: comisionPlataforma,
         moneda,
         responsable_id: responsableId,
       })

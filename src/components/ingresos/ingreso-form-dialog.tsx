@@ -43,6 +43,7 @@ export type EditableIngreso = {
   client_tax_id: string | null;
   moneda: "USD" | "COP";
   precio_final_descuento: number | null;
+  comision_plataforma: number | null;
   responsable_id: string | null;
   items: Item[];
 };
@@ -226,7 +227,7 @@ export function IngresoFormDialog({
             </p>
           </div>
 
-          <div className="col-span-2 flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="precio_final_descuento">
               Precio final en {moneda} (opcional — solo si aplica un descuento distinto a la suma)
             </Label>
@@ -236,6 +237,17 @@ export function IngresoFormDialog({
               type="number"
               step="0.01"
               defaultValue={ingreso?.precio_final_descuento ?? undefined}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="comision_plataforma">Comisión plataforma en {moneda} (opcional)</Label>
+            <Input
+              id="comision_plataforma"
+              name="comision_plataforma"
+              type="number"
+              step="0.01"
+              placeholder="Ej. lo que cobra Wompi/PayU"
+              defaultValue={ingreso?.comision_plataforma ?? undefined}
             />
           </div>
           <div className="col-span-2 flex flex-col gap-2">

@@ -33,6 +33,7 @@ type IngresoRow = {
   producto: string | null;
   precio_total: number | null;
   precio_final_descuento: number | null;
+  comision_plataforma: number | null;
   moneda: "USD" | "COP";
   estado_pago: EstadoPago;
   estado_comercial: EstadoComercial;
@@ -51,7 +52,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -99,12 +100,22 @@ export default async function IngresosPage() {
                 <TableCell>{row.pais}</TableCell>
                 <TableCell>{row.producto}</TableCell>
                 <TableCell>
-                  {row.precio_final_descuento != null
-                    ? Number(row.precio_final_descuento).toLocaleString("es-CO", {
+                  <div>
+                    {row.precio_final_descuento != null
+                      ? Number(row.precio_final_descuento).toLocaleString("es-CO", {
+                          style: "currency",
+                          currency: row.moneda ?? "USD",
+                        })
+                      : "—"}
+                  </div>
+                  {!!row.comision_plataforma && (
+                    <div className="text-xs text-muted-foreground">
+                      Comisión: {Number(row.comision_plataforma).toLocaleString("es-CO", {
                         style: "currency",
                         currency: row.moneda ?? "USD",
-                      })
-                    : "—"}
+                      })}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <EstadoComercialCell ingresoId={row.id} estado={row.estado_comercial} />
@@ -157,6 +168,7 @@ export default async function IngresosPage() {
                         client_tax_id: row.client?.tax_id ?? null,
                         moneda: row.moneda,
                         precio_final_descuento: row.precio_final_descuento,
+                        comision_plataforma: row.comision_plataforma,
                         responsable_id: row.responsable_id,
                         items:
                           row.ingreso_items && row.ingreso_items.length > 0
