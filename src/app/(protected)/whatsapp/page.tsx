@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
+import { getBotKnowledge } from "@/lib/bot-knowledge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Bot, Users, CalendarCheck } from "lucide-react";
+import { BotKnowledgeEditor } from "@/components/whatsapp/bot-knowledge-editor";
+import { MessageCircle, Bot, Users, CalendarCheck, BookOpen } from "lucide-react";
 
 export default async function WhatsAppPage() {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) redirect("/dashboard");
+  const knowledge = profile.role === "ceo" ? await getBotKnowledge() : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -86,6 +89,20 @@ export default async function WhatsAppPage() {
           </p>
         </CardContent>
       </Card>
+
+      {knowledge !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="size-4" />
+              Base de conocimiento del agente (editable)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BotKnowledgeEditor initialContenido={knowledge} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

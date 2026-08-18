@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { IngresoEstado, EstadoPago } from "@/lib/statuses";
 import { notifyNewIngreso } from "@/lib/notify-new-ingreso";
 import { verifyTotpCode } from "@/lib/totp";
+import { getOrCreateClienteDriveFolders } from "@/lib/google-drive";
 
 type ItemInput = {
   servicio: string;
@@ -39,6 +40,7 @@ async function autoCrearRequerimientos(
   trackingId: string,
   items: ItemInput[],
   pais: string | null,
+  clientName: string,
 ) {
   const { data: directoras } = await supabase
     .from("users")
@@ -48,9 +50,16 @@ async function autoCrearRequerimientos(
     .limit(1);
   const directoraId: string | null = directoras?.[0]?.id ?? null;
 
+  // Carpeta de Drive del cliente (o su siguiente "Proyecto #N" si ya
+  // existía) — si Drive no está configurado esto devuelve null y
+  // simplemente se deja el campo vacío, no bloquea nada.
+  const drive = await getOrCreateClienteDriveFolders(clientName);
+
+  let creoAlguno = false;
   for (const item of items) {
     const pipeline = inferPipeline(`${item.servicio} ${item.producto}`);
     if (!pipeline) continue;
+    creoAlguno = true;
 
     const unidades = Math.min(Math.max(item.cantidad, 1), MAX_AUTO_REQUERIMIENTOS_POR_ITEM);
     const encargadoId = pipeline === "landing" ? directoraId : null;
@@ -62,10 +71,12 @@ async function autoCrearRequerimientos(
       encargado_id: encargadoId,
       estado: encargadoId ? "En progreso" : "Nuevo pedido",
       ingreso_id: ingresoId,
+      carpeta_drive_url: drive?.proyectoFolderUrl ?? null,
     }));
 
     await supabase.from("requerimientos").insert(rows);
   }
+  return creoAlguno;
 }
 
 export async function createIngreso(formData: FormData): Promise<ActionResult> {
@@ -164,7 +175,7 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     );
     if (itemsError) return { error: itemsError.message };
 
-    await autoCrearRequerimientos(supabase, ingreso.id, ingreso.tracking_id, items, country);
+    await autoCrearRequerimientos(supabase, ingreso.id, ingreso.tracking_id, items, country, clientName);
 
     await notifyNewIngreso({
       producto: items.map((it) => it.producto).join(", "),

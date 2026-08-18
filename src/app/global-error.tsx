@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 /** Red de seguridad final — si hasta el layout raíz falla al renderizar
  * (algo que error.tsx no puede atrapar porque vive dentro del layout),
@@ -8,6 +9,7 @@ import { useEffect } from "react";
  * intenta una recarga automática una vez. */
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   useEffect(() => {
+    Sentry.captureException(error);
     const already = sessionStorage.getItem("reditus-auto-reload-once-root");
     if (already) return;
     sessionStorage.setItem("reditus-auto-reload-once-root", "1");

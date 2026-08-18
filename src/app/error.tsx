@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { RefreshCw } from "lucide-react";
+import * as Sentry from "@sentry/nextjs";
 import { Button } from "@/components/ui/button";
 
 /** Boundary de errores de toda la app. Antes no existía ninguno, así que
@@ -23,6 +24,10 @@ export default function GlobalErrorBoundary({
 }) {
   const reloadedOnceKey = "reditus-auto-reload-once";
   const attempted = useRef(false);
+
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
 
   useEffect(() => {
     const isChunkError =

@@ -21,14 +21,22 @@
 //      (`estado: 'nuevo' | 'calificando' | 'descartado'`); cuando agenda
 //      por Calendly, el cron diario (`src/lib/calendly.ts`) lo pasa a
 //      `'agendado'` automáticamente.
+//
+// La base de conocimiento (precios, protocolo, preguntas de agendamiento)
+// vive en bot_knowledge_base y la edita el CEO desde /whatsapp — este
+// archivo solo trae el "cómo comportarse", el contenido real llega vía
+// getBotKnowledge().
 
-export const SALES_AGENT_SYSTEM_PROMPT = `Eres el primer punto de contacto por WhatsApp de Reditus Consulting,
+import { getBotKnowledge } from "@/lib/bot-knowledge";
+
+function buildSystemPrompt(knowledge: string) {
+  return `Eres el primer punto de contacto por WhatsApp de Reditus Consulting,
 una agencia de marketing digital (landing pages y videos creativos) en LatAm. Respondes en español, cálido
 pero directo, siguiendo este protocolo:
 
 1. Saluda de forma personalizada y pregunta en qué puedes ayudar.
-2. Si piden ejemplos o precios, comparte referencias generales (no cotices con precisión por chat — eso
-   se define en la llamada).
+2. Si piden ejemplos o precios, comparte referencias generales usando la base de conocimiento de abajo
+   (no inventes precios que no estén ahí — para el detalle exacto, eso se confirma en la llamada).
 3. Haz 1-2 preguntas para entender si el negocio es real y tiene sentido para nosotros (¿tiene un
    negocio o marca activa? ¿qué está buscando lograr?). No hagas un interrogatorio largo — Calendly ya
    recoge el detalle fino al agendar.
@@ -38,8 +46,13 @@ pero directo, siguiendo este protocolo:
 5. Si es claramente spam, broma, o no tiene nada que ver con nuestros servicios, despídete cordialmente
    sin insistir.
 
-Nunca inventes precios exactos ni fechas de entrega — eso se confirma en la llamada o con el equipo
-comercial. Sé breve: mensajes de WhatsApp, no párrafos largos.`;
+Nunca inventes precios exactos ni fechas de entrega que no estén respaldados por la base de conocimiento
+— eso se confirma en la llamada o con el equipo comercial. Sé breve: mensajes de WhatsApp, no párrafos
+largos.
+
+=== BASE DE CONOCIMIENTO (precios, protocolo, información a recolectar) ===
+${knowledge}`;
+}
 
 export type SalesAgentResult = {
   reply: string;
@@ -70,6 +83,8 @@ export async function runSalesAgentTurn(params: {
     { role: "user" as const, content: params.incomingMessage },
   ];
 
+  const knowledge = await getBotKnowledge();
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -80,7 +95,7 @@ export async function runSalesAgentTurn(params: {
     body: JSON.stringify({
       model: "claude-sonnet-5",
       max_tokens: 400,
-      system: SALES_AGENT_SYSTEM_PROMPT,
+      system: buildSystemPrompt(knowledge),
       messages,
     }),
   });
