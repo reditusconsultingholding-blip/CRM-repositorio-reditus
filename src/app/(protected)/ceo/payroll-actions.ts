@@ -15,23 +15,50 @@ async function requireCeoOrError(): Promise<{ error: string } | null> {
   return null;
 }
 
-/** Costos fijos mensuales de SaaS — no varían por persona. */
-export async function updateSaasSettings(formData: FormData): Promise<ActionResult> {
+/** Gastos fijos mensuales (SaaS y similares) — lista libre, el CEO agrega
+ * o quita lo que quiera sin que nadie tenga que tocar código. */
+export async function addGastoFijo(formData: FormData): Promise<ActionResult> {
+  const denied = await requireCeoOrError();
+  if (denied) return denied;
+  try {
+    const nombre = String(formData.get("nombre") ?? "").trim();
+    const montoUsd = Number(formData.get("monto_usd") ?? 0);
+    if (!nombre || !montoUsd || montoUsd <= 0) return { error: "Nombre y monto válido son obligatorios." };
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("gastos_fijos").insert({ nombre, monto_usd: montoUsd });
+    if (error) return { error: error.message };
+    revalidatePath("/ceo");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
+export async function updateGastoFijo(id: string, nombre: string, montoUsd: number): Promise<ActionResult> {
+  const denied = await requireCeoOrError();
+  if (denied) return denied;
+  try {
+    if (!nombre.trim() || !montoUsd || montoUsd <= 0) return { error: "Nombre y monto válido son obligatorios." };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("gastos_fijos")
+      .update({ nombre: nombre.trim(), monto_usd: montoUsd })
+      .eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/ceo");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
+export async function deleteGastoFijo(id: string): Promise<ActionResult> {
   const denied = await requireCeoOrError();
   if (denied) return denied;
   try {
     const supabase = await createClient();
-    const num = (key: string) => Number(formData.get(key) ?? 0) || 0;
-
-    const { error } = await supabase
-      .from("payroll_settings")
-      .update({
-        elevenlabs_usd_mes: num("elevenlabs_usd_mes"),
-        google_storage_usd_mes: num("google_storage_usd_mes"),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", true);
-
+    const { error } = await supabase.from("gastos_fijos").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/ceo");
     return {};

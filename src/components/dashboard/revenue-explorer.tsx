@@ -12,6 +12,10 @@ function fmtUsd(n: number) {
   return n.toLocaleString("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 }
 
+function fmtCop(n: number) {
+  return `${Math.round(n).toLocaleString("es-CO")} COP`;
+}
+
 function isoDaysAgo(days: number) {
   const d = new Date();
   d.setDate(d.getDate() - days);
@@ -23,7 +27,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function RevenueExplorer() {
   const [start, setStart] = useState(today());
   const [end, setEnd] = useState(today());
-  const [result, setResult] = useState<{ total: number; count: number; label: string } | null>(null);
+  const [result, setResult] = useState<{ total: number; rateCop: number; count: number; label: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   function run(s: string, e: string, label: string) {
@@ -75,8 +79,9 @@ export function RevenueExplorer() {
         {result && (
           <div className="rounded-md border bg-muted/40 p-3">
             <p className="text-xs text-muted-foreground">{result.label}</p>
-            <p className="text-2xl font-semibold">{fmtUsd(result.total)}</p>
-            <p className="text-xs text-muted-foreground">{result.count} pedido(s)</p>
+            <p className="text-2xl font-semibold">{fmtCop(result.total * result.rateCop)}</p>
+            <p className="text-sm font-medium text-muted-foreground">{fmtUsd(result.total)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{result.count} pedido(s)</p>
           </div>
         )}
       </CardContent>

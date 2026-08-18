@@ -6,6 +6,7 @@ import { RequerimientoFormDialog } from "@/components/requerimientos/requerimien
 import { AssignSelect } from "@/components/requerimientos/assign-select";
 import { ProgramadorSelect } from "@/components/requerimientos/programador-select";
 import { EstadoSelect } from "@/components/estado-select";
+import { InlineTextCell } from "@/components/requerimientos/inline-text-cell";
 import { LiveSync } from "@/components/live-sync";
 import {
   REQUERIMIENTO_ESTADOS,
@@ -14,6 +15,7 @@ import {
   REQUERIMIENTO_PAGADO_COLORS,
   PRUEBA_SOCIAL_ESTADOS,
   PRUEBA_SOCIAL_COLORS,
+  REQUERIMIENTO_TERMINADOS,
   PIPELINES,
   type RequerimientoEstado,
   type RequerimientoPagadoEstado,
@@ -37,16 +39,31 @@ type RequerimientoRow = {
   pagado: RequerimientoPagadoEstado;
   prueba_social: PruebaSocialEstado;
   nombre_producto: string | null;
+  requerimiento_texto: string | null;
   pais_acento: string | null;
   f_entrega_prometida: string | null;
   encargado_id: string | null;
   programador_id: string | null;
+  carpeta_drive_url: string | null;
+  documento_inf_url: string | null;
+  psd_url: string | null;
+  notas: string | null;
+  permisos: string | null;
+  plataforma: string | null;
+  tienda: string | null;
+  oferta_precios: string | null;
+  link_producto_imagen: string | null;
+  link_pagina_subida: string | null;
+  created_at: string;
   encargado: { name: string } | null;
   programador: { name: string } | null;
-  ingreso: { tracking_id: string } | null;
+  ingreso: { tracking_id: string; client: { name: string } | { name: string }[] | null } | null;
 };
 
-const TERMINADOS: RequerimientoEstado[] = ["Terminado", "ENTREGADO", "SUBIDA"];
+function clientName(row: RequerimientoRow) {
+  const client = row.ingreso?.client;
+  return (Array.isArray(client) ? client[0]?.name : client?.name) ?? "—";
+}
 
 export default async function RequerimientosPage() {
   const profile = await requireProfile();
@@ -57,7 +74,7 @@ export default async function RequerimientosPage() {
     supabase
       .from("requerimientos")
       .select(
-        "id, pipeline, estado, pagado, prueba_social, nombre_producto, pais_acento, f_entrega_prometida, encargado_id, programador_id, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name), ingreso:ingresos(tracking_id)",
+        "id, pipeline, estado, pagado, prueba_social, nombre_producto, requerimiento_texto, pais_acento, f_entrega_prometida, encargado_id, programador_id, carpeta_drive_url, documento_inf_url, psd_url, notas, permisos, plataforma, tienda, oferta_precios, link_producto_imagen, link_pagina_subida, created_at, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name), ingreso:ingresos(tracking_id, client:clients(name))",
       )
       .order("created_at", { ascending: false })
       .returns<RequerimientoRow[]>(),
@@ -72,75 +89,53 @@ export default async function RequerimientosPage() {
     (r) => r.pipeline === "landing" && (r.estado === "POR SUBIR" || r.programador_id != null),
   );
 
-  function renderRow(row: RequerimientoRow, withProgramador: boolean) {
+  function estadoCell(row: RequerimientoRow) {
     return (
-      <TableRow key={row.id}>
-        <TableCell className="font-mono text-xs text-muted-foreground">
-          {row.ingreso?.tracking_id ?? "—"}
-        </TableCell>
-        <TableCell className="max-w-48 truncate">{row.nombre_producto}</TableCell>
-        {!withProgramador && <TableCell>{row.pais_acento ?? "—"}</TableCell>}
-        {!withProgramador && <TableCell>{row.f_entrega_prometida ?? "—"}</TableCell>}
-        <TableCell>
-          <AssignSelect
-            requerimientoId={row.id}
-            currentEncargadoId={row.encargado_id}
-            people={users ?? []}
-          />
-        </TableCell>
-        {withProgramador && (
-          <TableCell>
-            <ProgramadorSelect
-              requerimientoId={row.id}
-              currentProgramadorId={row.programador_id}
-              people={programadores ?? []}
-            />
-          </TableCell>
-        )}
-        <TableCell>
-          <EstadoSelect
-            value={row.estado}
-            estados={REQUERIMIENTO_ESTADOS}
-            colors={REQUERIMIENTO_ESTADO_COLORS}
-            onChange={updateRequerimientoEstado.bind(null, row.id)}
-          />
-        </TableCell>
-        <TableCell>
-          {canManageDinero ? (
-            <EstadoSelect
-              value={row.pagado}
-              estados={REQUERIMIENTO_PAGADO_ESTADOS}
-              colors={REQUERIMIENTO_PAGADO_COLORS}
-              onChange={updateRequerimientoPagado.bind(null, row.id)}
-            />
-          ) : (
-            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${REQUERIMIENTO_PAGADO_COLORS[row.pagado]}`}>
-              {row.pagado}
-            </span>
-          )}
-        </TableCell>
-        <TableCell>
-          {TERMINADOS.includes(row.estado) && canManageDinero ? (
-            <EstadoSelect
-              value={row.prueba_social}
-              estados={PRUEBA_SOCIAL_ESTADOS}
-              colors={PRUEBA_SOCIAL_COLORS}
-              onChange={updatePruebaSocial.bind(null, row.id)}
-            />
-          ) : TERMINADOS.includes(row.estado) ? (
-            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${PRUEBA_SOCIAL_COLORS[row.prueba_social]}`}>
-              {row.prueba_social}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          )}
-        </TableCell>
-        <TableCell>
-          <Link href={`/requerimientos/${row.id}`} className="text-sm font-medium text-primary hover:underline">
-            Ver
-          </Link>
-        </TableCell>
-      </TableRow>
+      <EstadoSelect
+        value={row.estado}
+        estados={REQUERIMIENTO_ESTADOS}
+        colors={REQUERIMIENTO_ESTADO_COLORS}
+        onChange={updateRequerimientoEstado.bind(null, row.id)}
+      />
+    );
+  }
+
+  function pagadoCell(row: RequerimientoRow) {
+    return canManageDinero ? (
+      <EstadoSelect
+        value={row.pagado}
+        estados={REQUERIMIENTO_PAGADO_ESTADOS}
+        colors={REQUERIMIENTO_PAGADO_COLORS}
+        onChange={updateRequerimientoPagado.bind(null, row.id)}
+      />
+    ) : (
+      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${REQUERIMIENTO_PAGADO_COLORS[row.pagado]}`}>
+        {row.pagado}
+      </span>
+    );
+  }
+
+  function pruebaSocialCell(row: RequerimientoRow) {
+    if (!REQUERIMIENTO_TERMINADOS.includes(row.estado)) return <span className="text-xs text-muted-foreground">—</span>;
+    return canManageDinero ? (
+      <EstadoSelect
+        value={row.prueba_social}
+        estados={PRUEBA_SOCIAL_ESTADOS}
+        colors={PRUEBA_SOCIAL_COLORS}
+        onChange={updatePruebaSocial.bind(null, row.id)}
+      />
+    ) : (
+      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${PRUEBA_SOCIAL_COLORS[row.prueba_social]}`}>
+        {row.prueba_social}
+      </span>
+    );
+  }
+
+  function verCell(row: RequerimientoRow) {
+    return (
+      <Link href={`/requerimientos/${row.id}`} className="text-sm font-medium text-primary hover:underline">
+        Ver
+      </Link>
     );
   }
 
@@ -163,6 +158,7 @@ export default async function RequerimientosPage() {
 
         {PIPELINES.map((p) => {
           const rows = (requerimientos ?? []).filter((r) => r.pipeline === p.value);
+          const esLanding = p.value === "landing";
           return (
             <TabsContent key={p.value} value={p.value} className="flex flex-col gap-3">
               <div className="flex justify-end">
@@ -173,21 +169,67 @@ export default async function RequerimientosPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>ID</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>País (acento)</TableHead>
-                      <TableHead>Entrega prometida</TableHead>
-                      <TableHead>A cargo</TableHead>
+                      <TableHead>{esLanding ? "Diseñador" : "Encargado"}</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>F Entr</TableHead>
+                      <TableHead>Nombre del producto</TableHead>
+                      <TableHead>Requerimiento</TableHead>
+                      <TableHead>{esLanding ? "País" : "País (voz)"}</TableHead>
+                      <TableHead>Carpeta de Drive</TableHead>
+                      <TableHead>Documento Inf</TableHead>
+                      {esLanding && <TableHead>PSD</TableHead>}
                       <TableHead>Pagado</TableHead>
+                      <TableHead>Notas</TableHead>
+                      {esLanding && <TableHead>Link PG</TableHead>}
                       <TableHead>Prueba social</TableHead>
                       <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rows.map((row) => renderRow(row, false))}
+                    {rows.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {row.ingreso?.tracking_id ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          <AssignSelect requerimientoId={row.id} currentEncargadoId={row.encargado_id} people={users ?? []} />
+                        </TableCell>
+                        <TableCell>{estadoCell(row)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{row.f_entrega_prometida ?? "—"}</TableCell>
+                        <TableCell className="max-w-40 truncate" title={row.nombre_producto ?? ""}>
+                          {row.nombre_producto}
+                        </TableCell>
+                        <TableCell className="max-w-48 truncate text-xs text-muted-foreground" title={row.requerimiento_texto ?? ""}>
+                          {row.requerimiento_texto || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs">{row.pais_acento ?? "—"}</TableCell>
+                        <TableCell>
+                          <InlineTextCell requerimientoId={row.id} campo="carpeta_drive_url" valor={row.carpeta_drive_url} placeholder="Link Drive" isLink />
+                        </TableCell>
+                        <TableCell>
+                          <InlineTextCell requerimientoId={row.id} campo="documento_inf_url" valor={row.documento_inf_url} placeholder="Link doc" isLink />
+                        </TableCell>
+                        {esLanding && (
+                          <TableCell>
+                            <InlineTextCell requerimientoId={row.id} campo="psd_url" valor={row.psd_url} placeholder="Link PSD" isLink />
+                          </TableCell>
+                        )}
+                        <TableCell>{pagadoCell(row)}</TableCell>
+                        <TableCell>
+                          <InlineTextCell requerimientoId={row.id} campo="notas" valor={row.notas} placeholder="Notas…" />
+                        </TableCell>
+                        {esLanding && (
+                          <TableCell>
+                            <InlineTextCell requerimientoId={row.id} campo="link_pagina_subida" valor={row.link_pagina_subida} placeholder="Link página" isLink />
+                          </TableCell>
+                        )}
+                        <TableCell>{pruebaSocialCell(row)}</TableCell>
+                        <TableCell>{verCell(row)}</TableCell>
+                      </TableRow>
+                    ))}
                     {rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center text-muted-foreground">
+                        <TableCell colSpan={esLanding ? 15 : 12} className="text-center text-muted-foreground">
                           Sin requerimientos todavía.
                         </TableCell>
                       </TableRow>
@@ -211,20 +253,63 @@ export default async function RequerimientosPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
-                  <TableHead>Producto</TableHead>
-                  <TableHead>A cargo</TableHead>
-                  <TableHead>Programador</TableHead>
+                  <TableHead>Encargado</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead>Pagado</TableHead>
-                  <TableHead>Prueba social</TableHead>
+                  <TableHead>Fecha asig.</TableHead>
+                  <TableHead>Permisos</TableHead>
+                  <TableHead>Plataforma</TableHead>
+                  <TableHead>Tienda</TableHead>
+                  <TableHead>Nombre del producto</TableHead>
+                  <TableHead>País</TableHead>
+                  <TableHead>Oferta y precios</TableHead>
+                  <TableHead>Link producto/imagen</TableHead>
+                  <TableHead>Link de la página subida</TableHead>
+                  <TableHead>Cliente</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {programadorRows.map((row) => renderRow(row, true))}
+                {programadorRows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {row.ingreso?.tracking_id ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <ProgramadorSelect requerimientoId={row.id} currentProgramadorId={row.programador_id} people={programadores ?? []} />
+                    </TableCell>
+                    <TableCell>{estadoCell(row)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                      {new Date(row.created_at).toLocaleDateString("es-CO")}
+                    </TableCell>
+                    <TableCell>
+                      <InlineTextCell requerimientoId={row.id} campo="permisos" valor={row.permisos} placeholder="Permisos…" />
+                    </TableCell>
+                    <TableCell>
+                      <InlineTextCell requerimientoId={row.id} campo="plataforma" valor={row.plataforma} placeholder="Shopify…" />
+                    </TableCell>
+                    <TableCell>
+                      <InlineTextCell requerimientoId={row.id} campo="tienda" valor={row.tienda} placeholder="Tienda…" />
+                    </TableCell>
+                    <TableCell className="max-w-40 truncate" title={row.nombre_producto ?? ""}>
+                      {row.nombre_producto}
+                    </TableCell>
+                    <TableCell className="text-xs">{row.pais_acento ?? "—"}</TableCell>
+                    <TableCell>
+                      <InlineTextCell requerimientoId={row.id} campo="oferta_precios" valor={row.oferta_precios} placeholder="Oferta y precios…" />
+                    </TableCell>
+                    <TableCell>
+                      <InlineTextCell requerimientoId={row.id} campo="link_producto_imagen" valor={row.link_producto_imagen} placeholder="Link producto/imagen" isLink />
+                    </TableCell>
+                    <TableCell>
+                      <InlineTextCell requerimientoId={row.id} campo="link_pagina_subida" valor={row.link_pagina_subida} placeholder="Link página subida" isLink />
+                    </TableCell>
+                    <TableCell className="text-xs">{clientName(row)}</TableCell>
+                    <TableCell>{verCell(row)}</TableCell>
+                  </TableRow>
+                ))}
                 {programadorRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground">
+                    <TableCell colSpan={14} className="text-center text-muted-foreground">
                       Nada pendiente de publicar por ahora.
                     </TableCell>
                   </TableRow>

@@ -41,6 +41,45 @@ export async function updateRequerimientoPagado(id: string, pagado: Requerimient
   }
 }
 
+// Lista blanca de campos de texto libre que se pueden editar en línea
+// desde la tabla — evita que un id de columna arbitrario llegue a un
+// update() sin control.
+const CAMPOS_TEXTO_EDITABLES = [
+  "notas",
+  "carpeta_drive_url",
+  "documento_inf_url",
+  "psd_url",
+  "permisos",
+  "plataforma",
+  "tienda",
+  "oferta_precios",
+  "link_producto_imagen",
+  "link_pagina_subida",
+] as const;
+export type CampoTextoRequerimiento = (typeof CAMPOS_TEXTO_EDITABLES)[number];
+
+export async function updateRequerimientoTexto(
+  id: string,
+  campo: CampoTextoRequerimiento,
+  valor: string,
+): Promise<ActionResult> {
+  try {
+    await requireProfile();
+    if (!CAMPOS_TEXTO_EDITABLES.includes(campo)) return { error: "Campo no permitido." };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("requerimientos")
+      .update({ [campo]: valor.trim() || null })
+      .eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/requerimientos");
+    revalidatePath(`/requerimientos/${id}`);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
 export async function createRequerimiento(formData: FormData): Promise<ActionResult> {
   try {
     const supabase = await createClient();

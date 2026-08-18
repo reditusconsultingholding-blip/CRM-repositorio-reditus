@@ -62,6 +62,13 @@ export default async function DashboardPage() {
 
   const rateCop = usdCop ?? 4000;
 
+  function fmtCop(n: number) {
+    return `${Math.round(n * rateCop).toLocaleString("es-CO")} COP`;
+  }
+  function fmtUsd(n: number) {
+    return n.toLocaleString("es-CO", { style: "currency", currency: "USD" });
+  }
+
   const totalHoy =
     (ingresosHoy.data ?? []).reduce(
       (sum, r) => sum + ingresoToUsd(r.precio_final_descuento, r.moneda, rateCop),
@@ -97,10 +104,9 @@ export default async function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">
-                {totalHoy.toLocaleString("es-CO", { style: "currency", currency: "USD" })}
-              </p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-3xl font-semibold">{fmtCop(totalHoy)}</p>
+              <p className="text-sm font-medium text-muted-foreground">{fmtUsd(totalHoy)}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
                 {ingresosHoy.count ?? 0} pedido(s) registrados hoy
               </p>
             </CardContent>
@@ -114,10 +120,9 @@ export default async function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold">
-                {totalMes.toLocaleString("es-CO", { style: "currency", currency: "USD" })}
-              </p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-3xl font-semibold">{fmtCop(totalMes)}</p>
+              <p className="text-sm font-medium text-muted-foreground">{fmtUsd(totalMes)}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
                 {(ingresosMes.data ?? []).length} pedido(s) este mes
               </p>
             </CardContent>

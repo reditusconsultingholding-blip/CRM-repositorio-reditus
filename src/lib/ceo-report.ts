@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { SEMANAS_POR_MES, fijosMensualesUsd } from "@/lib/payroll";
-import { getPayrollSettings } from "@/lib/payroll-settings";
+import { SEMANAS_POR_MES } from "@/lib/payroll";
+import { getGastosFijos } from "@/lib/gastos-fijos";
 
 // Semana ISO: lunes 00:00 (UTC) → lunes siguiente 00:00 (UTC). Aproximado —
 // no ajusta por zona horaria de Colombia, suficiente para una vista gerencial.
@@ -92,7 +92,7 @@ export async function computeCeoReport(): Promise<CeoReport> {
     { count: abiertosLandingCount },
     usdCop,
   ] = await Promise.all([
-    getPayrollSettings(),
+    getGastosFijos(),
     supabase
       .from("ingresos")
       .select("precio_final_descuento, moneda")
@@ -196,7 +196,7 @@ export async function computeCeoReport(): Promise<CeoReport> {
     }
   }
 
-  const costoFijoMensual = fijosMensualesUsd(settings);
+  const costoFijoMensual = settings.totalUsd;
   const costoFijoProrrateadoSemana = costoFijoMensual / SEMANAS_POR_MES;
 
   const videosSemana = [...videoCountsSemana.values()].reduce((a, b) => a + b, 0);

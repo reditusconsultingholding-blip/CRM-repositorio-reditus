@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { computeCeoReport } from "@/lib/ceo-report";
-import { getPayrollSettings } from "@/lib/payroll-settings";
+import { getGastosFijos } from "@/lib/gastos-fijos";
 import { getWeeklyPayrollChecklist } from "@/lib/payroll-checklist";
 import { listVaultEntries } from "@/lib/vault-actions";
 import { SEMANAS_POR_MES } from "@/lib/payroll";
@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CeoAssistant } from "@/components/ceo/ceo-assistant";
-import { PayrollSettingsForm } from "@/components/ceo/payroll-settings-form";
+import { GastosFijosTable } from "@/components/ceo/gastos-fijos-table";
 import { PayrollRatesTable, type PersonRate } from "@/components/ceo/payroll-rates-table";
 import { PayrollChecklist } from "@/components/ceo/payroll-checklist";
 import { CredentialsVault } from "@/components/ceo/credentials-vault";
@@ -27,9 +27,9 @@ export default async function CeoPage() {
 
   const supabase = await createClient();
 
-  const [r, payrollSettings, checklist, { data: users }, { data: rates }, vaultEntries] = await Promise.all([
+  const [r, gastosFijos, checklist, { data: users }, { data: rates }, vaultEntries] = await Promise.all([
     computeCeoReport(),
-    getPayrollSettings(),
+    getGastosFijos(),
     getWeeklyPayrollChecklist(),
     supabase
       .from("users")
@@ -105,10 +105,10 @@ export default async function CeoPage() {
               <CardContent className="flex flex-col gap-2 text-sm">
                 <Row label="Ingresos (ventas)" value={fmtUsd(r.ingresosMesUsd)} />
                 <Row
-                  label="Salarios fijos (aprox., 4.345 semanas)"
+                  label={`Salarios fijos (${SEMANAS_POR_MES} semanas/mes)`}
                   value={`-${fmtUsd(r.costoFijoSemanal * SEMANAS_POR_MES)}`}
                 />
-                <Row label="Costos fijos SaaS (ElevenLabs + Google Storage)" value={`-${fmtUsd(r.costoFijoMensual)}`} />
+                <Row label="Gastos fijos (SaaS y similares)" value={`-${fmtUsd(r.costoFijoMensual)}`} />
                 <Row
                   label={`Editores de video (${r.videosMes} entregados)`}
                   value={`-${fmtUsd(r.costoVideoMes)}`}
@@ -147,13 +147,15 @@ export default async function CeoPage() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Costos fijos de SaaS</CardTitle>
-              <PayrollSettingsForm settings={payrollSettings} />
+            <CardHeader>
+              <CardTitle className="text-base">Gastos fijos mensuales</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Herramientas y suscripciones fijas (SaaS y similares) — agrégalos o quítalos aquí, se
+                actualiza solo en Rentabilidad.
+              </p>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2 text-sm">
-              <Row label="ElevenLabs" value={`$${payrollSettings.elevenLabsUsdMes}/mes`} />
-              <Row label="Google Storage" value={`$${payrollSettings.googleStorageUsdMes}/mes`} />
+            <CardContent>
+              <GastosFijosTable items={gastosFijos.items} />
             </CardContent>
           </Card>
         </TabsContent>
