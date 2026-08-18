@@ -3,21 +3,23 @@ import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { getBotKnowledgeSections } from "@/lib/bot-knowledge";
 import { getVentasPipeline } from "@/lib/ventas-pipeline";
+import { getConnectedPhoneInfo } from "@/lib/whatsapp-send";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BotKnowledgeEditor } from "@/components/whatsapp/bot-knowledge-editor";
 import { VentasPipelineBoard } from "@/components/whatsapp/ventas-pipeline-board";
 import { LiveSync } from "@/components/live-sync";
-import { ArrowLeft, Bot, Settings2, KanbanSquare } from "lucide-react";
+import { ArrowLeft, Bot, Settings2, KanbanSquare, Phone } from "lucide-react";
 
 export default async function LineaVentasPage() {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) redirect("/dashboard");
 
   const conectado = !!process.env.WHATSAPP_SALES_PHONE_NUMBER_ID;
-  const [sections, pipeline] = await Promise.all([
+  const [sections, pipeline, phoneInfo] = await Promise.all([
     profile.role === "ceo" ? getBotKnowledgeSections() : Promise.resolve(null),
     getVentasPipeline(),
+    conectado ? getConnectedPhoneInfo() : Promise.resolve(null),
   ]);
 
   return (
@@ -51,10 +53,18 @@ export default async function LineaVentasPage() {
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           {conectado ? (
-            <p>
-              Ya tienes un número activo — los mensajes entrantes los responde el agente automáticamente
-              siguiendo la configuración de abajo.
-            </p>
+            <div className="flex flex-col gap-1">
+              {phoneInfo ? (
+                <p className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Phone className="size-3.5" />
+                  {phoneInfo.displayNumber}
+                  {phoneInfo.verifiedName && <span className="font-normal text-muted-foreground">· {phoneInfo.verifiedName}</span>}
+                </p>
+              ) : (
+                <p>No se pudo consultar el número en Meta ahora mismo (puede tardar unos minutos después de conectarlo).</p>
+              )}
+              <p>Los mensajes entrantes los responde el agente automáticamente siguiendo la configuración de abajo.</p>
+            </div>
           ) : (
             <p>
               Todavía no hay un número conectado. Falta la credencial de <strong>Meta Business Manager</strong> —
