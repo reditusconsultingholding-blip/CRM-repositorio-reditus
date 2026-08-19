@@ -101,6 +101,7 @@ export function ChatView({
   currentUserName,
   canModerate = false,
   canManageChannels = false,
+  hideSidebar = false,
 }: {
   channels: Channel[];
   people: Person[];
@@ -109,6 +110,10 @@ export function ChatView({
   currentUserName: string;
   canModerate?: boolean;
   canManageChannels?: boolean;
+  /** Oculta la columna de canales/DMs y deja fijo el primer canal de
+   * `channels` — se usa para la pestaña "Voz", donde el chat de texto es
+   * siempre el de la sala de voz, sin necesidad de elegir. */
+  hideSidebar?: boolean;
 }) {
   const [channelPanelOpen, setChannelPanelOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(
@@ -402,45 +407,47 @@ export function ChatView({
 
   return (
     <div className="flex flex-1 overflow-hidden rounded-md border bg-background">
-      <div className="w-52 shrink-0 overflow-y-auto border-r p-2">
-        <div className="flex items-center justify-between px-2.5 pb-1 pt-2">
-          <p className="text-[11px] font-semibold uppercase text-muted-foreground">Canales</p>
-          {canManageChannels && <CreateChannelButton />}
-        </div>
-        {channels.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setSelection({ type: "channel", id: c.id })}
-            className={cn(
-              "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
-              selection?.type === "channel" && selection.id === c.id && "bg-muted font-medium text-foreground",
-            )}
-          >
-            <Hash className="size-3.5 shrink-0" />
-            <span className="truncate">{c.name}</span>
-          </button>
-        ))}
+      {!hideSidebar && (
+        <div className="w-52 shrink-0 overflow-y-auto border-r p-2">
+          <div className="flex items-center justify-between px-2.5 pb-1 pt-2">
+            <p className="text-[11px] font-semibold uppercase text-muted-foreground">Canales</p>
+            {canManageChannels && <CreateChannelButton />}
+          </div>
+          {channels.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setSelection({ type: "channel", id: c.id })}
+              className={cn(
+                "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
+                selection?.type === "channel" && selection.id === c.id && "bg-muted font-medium text-foreground",
+              )}
+            >
+              <Hash className="size-3.5 shrink-0" />
+              <span className="truncate">{c.name}</span>
+            </button>
+          ))}
 
-        <p className="px-2.5 pb-1 pt-3 text-[11px] font-semibold uppercase text-muted-foreground">
-          Mensajes directos
-        </p>
-        {people.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setSelection({ type: "dm", userId: p.id })}
-            className={cn(
-              "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
-              selection?.type === "dm" && selection.userId === p.id && "bg-muted font-medium text-foreground",
-            )}
-          >
-            <Avatar name={p.name} url={p.avatar_url} />
-            <span className="truncate">{p.name}</span>
-          </button>
-        ))}
-        {people.length === 0 && (
-          <p className="px-2.5 py-2 text-xs text-muted-foreground">No hay más usuarios activos.</p>
-        )}
-      </div>
+          <p className="px-2.5 pb-1 pt-3 text-[11px] font-semibold uppercase text-muted-foreground">
+            Mensajes directos
+          </p>
+          {people.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setSelection({ type: "dm", userId: p.id })}
+              className={cn(
+                "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
+                selection?.type === "dm" && selection.userId === p.id && "bg-muted font-medium text-foreground",
+              )}
+            >
+              <Avatar name={p.name} url={p.avatar_url} />
+              <span className="truncate">{p.name}</span>
+            </button>
+          ))}
+          {people.length === 0 && (
+            <p className="px-2.5 py-2 text-xs text-muted-foreground">No hay más usuarios activos.</p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-1 flex-col">
         <button

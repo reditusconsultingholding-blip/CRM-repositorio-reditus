@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { INGRESOS_ROLES, ADMIN_ROLES } from "@/lib/roles";
 
 // /api/cron: Vercel Cron llama esta ruta sin sesión de usuario — la
 // autenticación real la hace la propia ruta con CRON_SECRET, no el
@@ -9,9 +10,10 @@ import { NextResponse, type NextRequest } from "next/server";
 // /api/health: monitoreo externo (UptimeRobot y similares) sin sesión.
 // /api/whatsapp/webhook: Meta llama esta ruta directamente, sin sesión.
 const PUBLIC_PATHS = ["/login", "/api/cron", "/encuesta", "/api/health", "/api/whatsapp/webhook"];
-// Roles allowed to see /ingresos. Everyone else with a session is bounced to /requerimientos.
-const INGRESOS_ROLES = ["ceo", "gerente_comercial"];
-const ADMIN_ROLES = ["ceo"];
+// INGRESOS_ROLES/ADMIN_ROLES vienen de lib/roles.ts (antes eran una copia
+// hardcodeada aparte, aquí mismo, que se desincronizó — directora_operativa
+// ya tenía acceso en el resto de la app pero el middleware seguía
+// bloqueándola en silencio antes de que la página llegara a cargar).
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

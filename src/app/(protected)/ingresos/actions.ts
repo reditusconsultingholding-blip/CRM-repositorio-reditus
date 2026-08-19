@@ -153,8 +153,10 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
 
     const cantidadTotal = items.reduce((sum, it) => sum + it.cantidad, 0);
     const precioTotal = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
-    const precioFinalOverride = Number(formData.get("precio_final_descuento") ?? 0) || null;
     const comisionPlataforma = Number(formData.get("comision_plataforma") ?? 0) || 0;
+    const plataformaPago = String(formData.get("plataforma_pago") ?? "").trim() || null;
+    const comprobantePagoUrl = String(formData.get("comprobante_pago_url") ?? "").trim() || null;
+    const comprobantePagoNombre = String(formData.get("comprobante_pago_nombre") ?? "").trim() || null;
 
     // Etapa 2 vs 3 del flujo comercial: si es solo una cotización enviada
     // (el cliente no ha confirmado), no cuenta como ingreso real todavía
@@ -171,8 +173,11 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
         producto: items.map((it) => it.producto).join(", ") || null,
         cantidad: cantidadTotal,
         precio_total: precioTotal,
-        precio_final_descuento: precioFinalOverride ?? precioTotal,
+        precio_final_descuento: precioTotal,
         comision_plataforma: comisionPlataforma,
+        plataforma_pago: plataformaPago,
+        comprobante_pago_url: comprobantePagoUrl,
+        comprobante_pago_nombre: comprobantePagoNombre,
         moneda,
         responsable_id: responsableId,
         estado_comercial: estadoComercial,
@@ -197,7 +202,7 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
       await autoCrearRequerimientos(supabase, ingreso.id, ingreso.tracking_id, items, country, clientName);
       await notifyNewIngreso({
         producto: items.map((it) => it.producto).join(", "),
-        totalUsd: precioFinalOverride ?? precioTotal,
+        totalUsd: precioTotal,
         clienteNombre: clientName,
       });
     }
@@ -333,8 +338,10 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
     const responsableId = String(formData.get("responsable_id") ?? "") || null;
     const cantidadTotal = items.reduce((sum, it) => sum + it.cantidad, 0);
     const precioTotal = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
-    const precioFinalOverride = Number(formData.get("precio_final_descuento") ?? 0) || null;
     const comisionPlataforma = Number(formData.get("comision_plataforma") ?? 0) || 0;
+    const plataformaPago = String(formData.get("plataforma_pago") ?? "").trim() || null;
+    const comprobantePagoUrl = String(formData.get("comprobante_pago_url") ?? "").trim() || null;
+    const comprobantePagoNombre = String(formData.get("comprobante_pago_nombre") ?? "").trim() || null;
 
     const { error } = await supabase
       .from("ingresos")
@@ -344,8 +351,11 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
         producto: items.map((it) => it.producto).join(", ") || null,
         cantidad: cantidadTotal,
         precio_total: precioTotal,
-        precio_final_descuento: precioFinalOverride ?? precioTotal,
+        precio_final_descuento: precioTotal,
         comision_plataforma: comisionPlataforma,
+        plataforma_pago: plataformaPago,
+        comprobante_pago_url: comprobantePagoUrl,
+        comprobante_pago_nombre: comprobantePagoNombre,
         moneda,
         responsable_id: responsableId,
       })

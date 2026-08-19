@@ -19,5 +19,5 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   programador: "Programador",
 };
 
-export const INGRESOS_ROLES: UserRole[] = ["ceo", "gerente_comercial"];
+export const INGRESOS_ROLES: UserRole[] = ["ceo", "gerente_comercial", "directora_operativa"];
 export const ADMIN_ROLES: UserRole[] = ["ceo"];

@@ -24,17 +24,20 @@ import { NotificationBell } from "@/components/notification-bell";
 import { ChatBadge } from "@/components/chat/chat-badge";
 import { CurrencyWidget } from "@/components/currency-widget";
 import { RentabilidadWidget } from "@/components/ceo/rentabilidad-widget";
-import { ROLE_LABELS, type UserRole } from "@/lib/roles";
+import { ROLE_LABELS, INGRESOS_ROLES, ADMIN_ROLES, type UserRole } from "@/lib/roles";
 
+// Ingresos/Prospectos/Clientes/WhatsApp usan INGRESOS_ROLES (de lib/roles.ts)
+// en vez de una lista aparte — antes había una copia hardcodeada acá que se
+// desincronizó del resto de la app (mismo problema que tenía el middleware).
 const ALL_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: null },
-  { href: "/ingresos", label: "Ingresos", icon: DollarSign, roles: ["ceo", "gerente_comercial"] },
+  { href: "/ingresos", label: "Ingresos", icon: DollarSign, roles: INGRESOS_ROLES },
   { href: "/requerimientos", label: "Requerimientos", icon: ClipboardList, roles: null },
   { href: "/chat", label: "Chat interno", icon: MessageSquare, roles: null },
-  { href: "/prospectos", label: "Prospectos", icon: UserPlus, roles: ["ceo", "gerente_comercial"] },
-  { href: "/clientes", label: "Clientes", icon: Contact, roles: ["ceo", "gerente_comercial"] },
-  { href: "/whatsapp", label: "WhatsApp Business", icon: MessageCircle, roles: ["ceo", "gerente_comercial"] },
-  { href: "/admin/usuarios", label: "Usuarios", icon: Users, roles: ["ceo"] },
+  { href: "/prospectos", label: "Prospectos", icon: UserPlus, roles: INGRESOS_ROLES },
+  { href: "/clientes", label: "Clientes", icon: Contact, roles: INGRESOS_ROLES },
+  { href: "/whatsapp", label: "WhatsApp Business", icon: MessageCircle, roles: INGRESOS_ROLES },
+  { href: "/admin/usuarios", label: "Usuarios", icon: Users, roles: ADMIN_ROLES },
   { href: "/flujo", label: "Flujo de trabajo", icon: Workflow, roles: null },
   { href: "/ayuda", label: "¿Cómo funciona?", icon: HelpCircle, roles: null },
 ] as const;

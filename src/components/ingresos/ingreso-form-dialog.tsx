@@ -2,8 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Paperclip, FileIcon, X } from "lucide-react";
 import { createIngreso, updateIngreso } from "@/app/(protected)/ingresos/actions";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,8 +43,10 @@ export type EditableIngreso = {
   pais: string | null;
   client_tax_id: string | null;
   moneda: "USD" | "COP";
-  precio_final_descuento: number | null;
   comision_plataforma: number | null;
+  plataforma_pago: string | null;
+  comprobante_pago_url: string | null;
+  comprobante_pago_nombre: string | null;
   responsable_id: string | null;
   items: Item[];
 };
@@ -60,7 +63,34 @@ export function IngresoFormDialog({
   const [pending, startTransition] = useTransition();
   const [items, setItems] = useState<Item[]>(ingreso?.items.length ? ingreso.items : [{ ...EMPTY_ITEM }]);
   const [moneda, setMoneda] = useState<"USD" | "COP">(ingreso?.moneda ?? "USD");
+  const [comprobante, setComprobante] = useState<{ url: string; nombre: string } | null>(
+    ingreso?.comprobante_pago_url
+      ? { url: ingreso.comprobante_pago_url, nombre: ingreso.comprobante_pago_nombre ?? "Comprobante" }
+      : null,
+  );
+  const [uploadingComprobante, setUploadingComprobante] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const comprobanteInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleComprobante(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingComprobante(true);
+    try {
+      const supabase = createClient();
+      const path = `${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage.from("comprobantes-pago").upload(path, file);
+      if (error) {
+        toast.error(`No se pudo subir el comprobante: ${error.message}`);
+        return;
+      }
+      const { data } = supabase.storage.from("comprobantes-pago").getPublicUrl(path);
+      setComprobante({ url: data.publicUrl, nombre: file.name });
+    } finally {
+      setUploadingComprobante(false);
+    }
+  }
 
   function updateItem(index: number, patch: Partial<Item>) {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -79,6 +109,10 @@ export function IngresoFormDialog({
   function handleSubmit(formData: FormData) {
     formData.set("items_json", JSON.stringify(items));
     formData.set("moneda", moneda);
+    if (comprobante) {
+      formData.set("comprobante_pago_url", comprobante.url);
+      formData.set("comprobante_pago_nombre", comprobante.nombre);
+    }
     startTransition(async () => {
       const result = isEdit ? await updateIngreso(ingreso!.id, formData) : await createIngreso(formData);
       if (result?.error) {
@@ -88,6 +122,7 @@ export function IngresoFormDialog({
         if (!isEdit) {
           formRef.current?.reset();
           setItems([{ ...EMPTY_ITEM }]);
+          setComprobante(null);
         }
         setOpen(false);
       }
@@ -227,28 +262,70 @@ export function IngresoFormDialog({
             </p>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="precio_final_descuento">
-              Precio final en {moneda} (opcional — solo si aplica un descuento distinto a la suma)
-            </Label>
-            <Input
-              id="precio_final_descuento"
-              name="precio_final_descuento"
-              type="number"
-              step="0.01"
-              defaultValue={ingreso?.precio_final_descuento ?? undefined}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="comision_plataforma">Comisión plataforma en {moneda} (opcional)</Label>
-            <Input
-              id="comision_plataforma"
-              name="comision_plataforma"
-              type="number"
-              step="0.01"
-              placeholder="Ej. lo que cobra Wompi/PayU"
-              defaultValue={ingreso?.comision_plataforma ?? undefined}
-            />
+          <div className="col-span-2 grid grid-cols-2 gap-3 rounded-md border p-3">
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="plataforma_pago">Plataforma donde pagó (opcional)</Label>
+              <Input
+                id="plataforma_pago"
+                name="plataforma_pago"
+                placeholder="Ej. Wompi, PayU, Nequi, transferencia…"
+                defaultValue={ingreso?.plataforma_pago ?? ""}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="comision_plataforma">Comisión de esa plataforma en {moneda}</Label>
+              <Input
+                id="comision_plataforma"
+                name="comision_plataforma"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                defaultValue={ingreso?.comision_plataforma ?? undefined}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Comprobante de pago (opcional)</Label>
+              <input
+                ref={comprobanteInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={handleComprobante}
+              />
+              {comprobante ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs">
+                  <a
+                    href={comprobante.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-w-0 items-center gap-1.5 text-primary hover:underline"
+                  >
+                    <FileIcon className="size-3.5 shrink-0" />
+                    <span className="truncate">{comprobante.nombre}</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setComprobante(null)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    title="Quitar"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => comprobanteInputRef.current?.click()}
+                  disabled={uploadingComprobante}
+                >
+                  <Paperclip className="size-3.5" />
+                  {uploadingComprobante ? "Subiendo…" : "Adjuntar comprobante"}
+                </Button>
+              )}
+            </div>
           </div>
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="client_tax_id">NIT o Cédula del cliente (opcional)</Label>

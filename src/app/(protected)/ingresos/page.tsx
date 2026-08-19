@@ -34,6 +34,9 @@ type IngresoRow = {
   precio_total: number | null;
   precio_final_descuento: number | null;
   comision_plataforma: number | null;
+  plataforma_pago: string | null;
+  comprobante_pago_url: string | null;
+  comprobante_pago_nombre: string | null;
   moneda: "USD" | "COP";
   estado_pago: EstadoPago;
   estado_comercial: EstadoComercial;
@@ -52,7 +55,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -110,11 +113,22 @@ export default async function IngresosPage() {
                   </div>
                   {!!row.comision_plataforma && (
                     <div className="text-xs text-muted-foreground">
-                      Comisión: {Number(row.comision_plataforma).toLocaleString("es-CO", {
+                      Comisión{row.plataforma_pago ? ` (${row.plataforma_pago})` : ""}:{" "}
+                      {Number(row.comision_plataforma).toLocaleString("es-CO", {
                         style: "currency",
                         currency: row.moneda ?? "USD",
                       })}
                     </div>
+                  )}
+                  {row.comprobante_pago_url && (
+                    <a
+                      href={row.comprobante_pago_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Ver comprobante
+                    </a>
                   )}
                 </TableCell>
                 <TableCell>
@@ -167,8 +181,10 @@ export default async function IngresosPage() {
                         pais: row.pais,
                         client_tax_id: row.client?.tax_id ?? null,
                         moneda: row.moneda,
-                        precio_final_descuento: row.precio_final_descuento,
                         comision_plataforma: row.comision_plataforma,
+                        plataforma_pago: row.plataforma_pago,
+                        comprobante_pago_url: row.comprobante_pago_url,
+                        comprobante_pago_nombre: row.comprobante_pago_nombre,
                         responsable_id: row.responsable_id,
                         items:
                           row.ingreso_items && row.ingreso_items.length > 0
