@@ -106,6 +106,39 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Recordatorios de ingresos: como el cron corre 1 vez al día, un
+  // recordatorio "en 3 días" avisa en algún momento de ESE día, no a una
+  // hora exacta — es la granularidad que da el plan gratis de Vercel.
+  const { data: recordatoriosDue } = await supabase
+    .from("ingresos")
+    .select("id, tracking_id, producto, recordatorio_nota, responsable_id, client:clients(name)")
+    .lte("recordatorio_fecha", now.toISOString())
+    .eq("recordatorio_enviado", false)
+    .not("recordatorio_fecha", "is", null)
+    .returns<
+      {
+        id: string;
+        tracking_id: string;
+        producto: string | null;
+        recordatorio_nota: string | null;
+        responsable_id: string | null;
+        client: { name: string } | { name: string }[] | null;
+      }[]
+    >();
+
+  if (recordatoriosDue?.length) {
+    for (const r of recordatoriosDue) {
+      const cliente = Array.isArray(r.client) ? r.client[0]?.name : r.client?.name;
+      const titulo = `Recordatorio — ${cliente ?? "cliente"} (${r.tracking_id}): ${r.recordatorio_nota || r.producto || "sin nota"}`;
+      const destinatarios = r.responsable_id ? [r.responsable_id] : ceoIds;
+      for (const id of destinatarios) {
+        await notify(supabase, id, "recordatorio_ingreso", titulo, "/ingresos");
+      }
+      await supabase.from("ingresos").update({ recordatorio_enviado: true }).eq("id", r.id);
+    }
+    tasks.push(`recordatorios_ingresos:${recordatoriosDue.length}`);
+  }
+
   // Sincroniza reuniones agendadas en Calendly a /prospectos — no hace nada
   // si CALENDLY_API_TOKEN no está configurado todavía.
   try {

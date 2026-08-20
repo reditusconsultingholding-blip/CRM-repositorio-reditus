@@ -5,6 +5,7 @@ import { DeleteIngresoButton } from "@/components/ingresos/delete-ingreso-button
 import { EstadoComercialCell } from "@/components/ingresos/estado-comercial-cell";
 import { EstadoSelect } from "@/components/estado-select";
 import { LiveSync } from "@/components/live-sync";
+import { Bell } from "lucide-react";
 import {
   INGRESO_ESTADOS,
   INGRESO_ESTADO_COLORS,
@@ -37,6 +38,9 @@ type IngresoRow = {
   plataforma_pago: string | null;
   comprobante_pago_url: string | null;
   comprobante_pago_nombre: string | null;
+  recordatorio_fecha: string | null;
+  recordatorio_nota: string | null;
+  recordatorio_enviado: boolean;
   moneda: "USD" | "COP";
   estado_pago: EstadoPago;
   estado_comercial: EstadoComercial;
@@ -55,7 +59,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, recordatorio_fecha, recordatorio_nota, recordatorio_enviado, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -101,7 +105,18 @@ export default async function IngresosPage() {
                   {row.client?.whatsapp_number}
                 </TableCell>
                 <TableCell>{row.pais}</TableCell>
-                <TableCell>{row.producto}</TableCell>
+                <TableCell>
+                  <div>{row.producto}</div>
+                  {row.recordatorio_fecha && !row.recordatorio_enviado && (
+                    <div
+                      className="flex items-center gap-1 text-xs text-amber-700"
+                      title={row.recordatorio_nota ?? ""}
+                    >
+                      <Bell className="size-3" />
+                      {new Date(row.recordatorio_fecha).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell>
                   <div>
                     {row.precio_final_descuento != null
@@ -185,6 +200,8 @@ export default async function IngresosPage() {
                         plataforma_pago: row.plataforma_pago,
                         comprobante_pago_url: row.comprobante_pago_url,
                         comprobante_pago_nombre: row.comprobante_pago_nombre,
+                        recordatorio_fecha: row.recordatorio_enviado ? null : row.recordatorio_fecha,
+                        recordatorio_nota: row.recordatorio_nota,
                         responsable_id: row.responsable_id,
                         items:
                           row.ingreso_items && row.ingreso_items.length > 0

@@ -157,6 +157,9 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     const plataformaPago = String(formData.get("plataforma_pago") ?? "").trim() || null;
     const comprobantePagoUrl = String(formData.get("comprobante_pago_url") ?? "").trim() || null;
     const comprobantePagoNombre = String(formData.get("comprobante_pago_nombre") ?? "").trim() || null;
+    const recordatorioAction = String(formData.get("recordatorio_action") ?? "keep");
+    const recordatorioFecha = recordatorioAction === "set" ? String(formData.get("recordatorio_fecha") ?? "") || null : null;
+    const recordatorioNota = recordatorioAction === "set" ? String(formData.get("recordatorio_nota") ?? "").trim() || null : null;
 
     // Etapa 2 vs 3 del flujo comercial: si es solo una cotización enviada
     // (el cliente no ha confirmado), no cuenta como ingreso real todavía
@@ -178,6 +181,8 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
         plataforma_pago: plataformaPago,
         comprobante_pago_url: comprobantePagoUrl,
         comprobante_pago_nombre: comprobantePagoNombre,
+        recordatorio_fecha: recordatorioFecha,
+        recordatorio_nota: recordatorioNota,
         moneda,
         responsable_id: responsableId,
         estado_comercial: estadoComercial,
@@ -343,6 +348,21 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
     const comprobantePagoUrl = String(formData.get("comprobante_pago_url") ?? "").trim() || null;
     const comprobantePagoNombre = String(formData.get("comprobante_pago_nombre") ?? "").trim() || null;
 
+    // "keep" (default) deja el recordatorio existente intacto — solo se
+    // toca si el usuario puso uno nuevo ("set") o le dio Quitar ("clear").
+    const recordatorioAction = String(formData.get("recordatorio_action") ?? "keep");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recordatorioPatch: Record<string, any> = {};
+    if (recordatorioAction === "set") {
+      recordatorioPatch.recordatorio_fecha = String(formData.get("recordatorio_fecha") ?? "") || null;
+      recordatorioPatch.recordatorio_nota = String(formData.get("recordatorio_nota") ?? "").trim() || null;
+      recordatorioPatch.recordatorio_enviado = false;
+    } else if (recordatorioAction === "clear") {
+      recordatorioPatch.recordatorio_fecha = null;
+      recordatorioPatch.recordatorio_nota = null;
+      recordatorioPatch.recordatorio_enviado = false;
+    }
+
     const { error } = await supabase
       .from("ingresos")
       .update({
@@ -358,6 +378,7 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
         comprobante_pago_nombre: comprobantePagoNombre,
         moneda,
         responsable_id: responsableId,
+        ...recordatorioPatch,
       })
       .eq("id", id);
     if (error) return { error: error.message };

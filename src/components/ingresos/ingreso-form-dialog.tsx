@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil, Paperclip, FileIcon, X } from "lucide-react";
+import { Plus, Trash2, Pencil, Paperclip, FileIcon, X, Bell, BellOff } from "lucide-react";
 import { createIngreso, updateIngreso } from "@/app/(protected)/ingresos/actions";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -47,9 +47,17 @@ export type EditableIngreso = {
   plataforma_pago: string | null;
   comprobante_pago_url: string | null;
   comprobante_pago_nombre: string | null;
+  recordatorio_fecha: string | null;
+  recordatorio_nota: string | null;
   responsable_id: string | null;
   items: Item[];
 };
+
+const UNIDADES_RECORDATORIO = [
+  { value: "dias", label: "días", ms: 24 * 60 * 60 * 1000 },
+  { value: "semanas", label: "semanas", ms: 7 * 24 * 60 * 60 * 1000 },
+  { value: "meses", label: "meses", ms: 30 * 24 * 60 * 60 * 1000 },
+] as const;
 
 export function IngresoFormDialog({
   responsables,
@@ -69,6 +77,10 @@ export function IngresoFormDialog({
       : null,
   );
   const [uploadingComprobante, setUploadingComprobante] = useState(false);
+  const [recordatorioActivo, setRecordatorioActivo] = useState(!!ingreso?.recordatorio_fecha);
+  const [recordatorioCantidad, setRecordatorioCantidad] = useState("");
+  const [recordatorioUnidad, setRecordatorioUnidad] = useState<(typeof UNIDADES_RECORDATORIO)[number]["value"]>("dias");
+  const [recordatorioNota, setRecordatorioNota] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const comprobanteInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,6 +125,21 @@ export function IngresoFormDialog({
       formData.set("comprobante_pago_url", comprobante.url);
       formData.set("comprobante_pago_nombre", comprobante.nombre);
     }
+
+    const cantidad = Number(recordatorioCantidad) || 0;
+    if (!recordatorioActivo && ingreso?.recordatorio_fecha) {
+      // Tenía un recordatorio y se le dio "Quitar".
+      formData.set("recordatorio_action", "clear");
+    } else if (cantidad > 0) {
+      const unidad = UNIDADES_RECORDATORIO.find((u) => u.value === recordatorioUnidad)!;
+      const fecha = new Date(Date.now() + cantidad * unidad.ms);
+      formData.set("recordatorio_action", "set");
+      formData.set("recordatorio_fecha", fecha.toISOString());
+      formData.set("recordatorio_nota", recordatorioNota);
+    } else {
+      formData.set("recordatorio_action", "keep");
+    }
+
     startTransition(async () => {
       const result = isEdit ? await updateIngreso(ingreso!.id, formData) : await createIngreso(formData);
       if (result?.error) {
@@ -123,6 +150,13 @@ export function IngresoFormDialog({
           formRef.current?.reset();
           setItems([{ ...EMPTY_ITEM }]);
           setComprobante(null);
+          setRecordatorioCantidad("");
+          setRecordatorioNota("");
+        } else if (recordatorioActivo === false || cantidad > 0) {
+          // Refleja en la UI que el recordatorio quedó puesto/quitado.
+          setRecordatorioActivo(cantidad > 0);
+          setRecordatorioCantidad("");
+          setRecordatorioNota("");
         }
         setOpen(false);
       }
@@ -327,6 +361,79 @@ export function IngresoFormDialog({
               )}
             </div>
           </div>
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border p-3">
+            <Label className="flex items-center gap-1.5">
+              <Bell className="size-3.5" />
+              Recordatorio (opcional)
+            </Label>
+
+            {recordatorioActivo && ingreso?.recordatorio_fecha && (
+              <div className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-2.5 py-1.5 text-xs">
+                <span>
+                  Activo para el{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(ingreso.recordatorio_fecha).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}
+                  </span>
+                  {ingreso.recordatorio_nota ? ` — ${ingreso.recordatorio_nota}` : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRecordatorioActivo(false)}
+                  className="flex shrink-0 items-center gap-1 text-muted-foreground hover:text-destructive"
+                  title="Quitar recordatorio"
+                >
+                  <BellOff className="size-3.5" /> Quitar
+                </button>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              {recordatorioActivo && ingreso?.recordatorio_fecha
+                ? "Llena esto para reemplazarlo por uno nuevo (déjalo vacío para dejar el de arriba tal cual):"
+                : "Se avisa por notificación al responsable (o a ti si no hay responsable) cuando se cumpla:"}
+            </p>
+            <div className="grid grid-cols-[auto_auto_1fr] items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="recordatorio_cantidad" className="text-xs text-muted-foreground">
+                  En cuánto
+                </Label>
+                <Input
+                  id="recordatorio_cantidad"
+                  type="number"
+                  min={1}
+                  step="1"
+                  className="w-20"
+                  placeholder="3"
+                  value={recordatorioCantidad}
+                  onChange={(e) => setRecordatorioCantidad(e.target.value)}
+                />
+              </div>
+              <Select value={recordatorioUnidad} onValueChange={(v) => setRecordatorioUnidad(v as typeof recordatorioUnidad)}>
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNIDADES_RECORDATORIO.map((u) => (
+                    <SelectItem key={u.value} value={u.value}>
+                      {u.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="recordatorio_nota" className="text-xs text-muted-foreground">
+                  Nota (qué recordar)
+                </Label>
+                <Input
+                  id="recordatorio_nota"
+                  placeholder="Ej. Confirmar si ya pagó"
+                  value={recordatorioNota}
+                  onChange={(e) => setRecordatorioNota(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="col-span-2 flex flex-col gap-2">
             <Label htmlFor="client_tax_id">NIT o Cédula del cliente (opcional)</Label>
             <Input
