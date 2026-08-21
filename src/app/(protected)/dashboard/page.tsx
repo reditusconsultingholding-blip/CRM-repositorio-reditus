@@ -1,10 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MonthCalendar, type DiaData } from "@/components/dashboard/month-calendar";
+import { MonthCalendar, type DiaData, type DiaDetalle } from "@/components/dashboard/month-calendar";
 import { LiveSync } from "@/components/live-sync";
 import { RevenueExplorer } from "@/components/dashboard/revenue-explorer";
 import { getUsdCopRate, ingresoToUsd } from "@/lib/ceo-report";
+import { PIPELINES } from "@/lib/statuses";
+
+function normalizeJoin<T>(v: T | T[] | null | undefined): T | null {
+  return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+}
 
 export default async function DashboardPage() {
   const profile = await requireProfile();
@@ -20,6 +25,8 @@ export default async function DashboardPage() {
   const [
     ingresosHoy,
     ingresosMes,
+    entregasDelMes,
+    recordatoriosDelMes,
     videoAbiertos,
     landingAbiertos,
     claudeAbiertos,
@@ -38,10 +45,29 @@ export default async function DashboardPage() {
     canSeeIngresos
       ? supabase
           .from("ingresos")
-          .select("fecha, precio_final_descuento, moneda")
+          .select("fecha, producto, precio_final_descuento, moneda, client:clients!ingresos_client_id_fkey(name)")
           .eq("estado_comercial", "Cerrado")
           .gte("fecha", monthStart)
           .lt("fecha", monthEnd)
+      : Promise.resolve({ data: [] }),
+    canSeeIngresos
+      ? supabase
+          .from("requerimientos")
+          .select(
+            "nombre_producto, pipeline, f_entrega_prometida, encargado:users(name), ingreso:ingresos(client:clients!ingresos_client_id_fkey(name))",
+          )
+          .not("estado", "in", '("ENTREGADO","Terminado")')
+          .not("f_entrega_prometida", "is", null)
+          .gte("f_entrega_prometida", monthStart)
+          .lt("f_entrega_prometida", monthEnd)
+      : Promise.resolve({ data: [] }),
+    canSeeIngresos
+      ? supabase
+          .from("ingresos")
+          .select("producto, recordatorio_fecha, recordatorio_nota, recordatorio_enviado, client:clients!ingresos_client_id_fkey(name)")
+          .not("recordatorio_fecha", "is", null)
+          .gte("recordatorio_fecha", monthStart)
+          .lt("recordatorio_fecha", monthEnd)
       : Promise.resolve({ data: [] }),
     supabase
       .from("requerimientos")
@@ -89,6 +115,12 @@ export default async function DashboardPage() {
     ) || 0;
 
   const calendarData: Record<string, DiaData> = {};
+  const detalle: Record<string, DiaDetalle> = {};
+  function getDetalle(key: string): DiaDetalle {
+    if (!detalle[key]) detalle[key] = { ingresos: [], entregas: [], recordatorios: [] };
+    return detalle[key];
+  }
+
   let totalMes = 0;
   for (const row of ingresosMes.data ?? []) {
     const key = row.fecha as string;
@@ -97,6 +129,32 @@ export default async function DashboardPage() {
     if (!calendarData[key]) calendarData[key] = { count: 0, total: 0 };
     calendarData[key].count += 1;
     calendarData[key].total += monto;
+
+    const cliente = normalizeJoin(row.client)?.name ?? "Cliente";
+    getDetalle(key).ingresos.push({ cliente, producto: row.producto ?? "—", monto });
+  }
+
+  for (const row of entregasDelMes.data ?? []) {
+    const key = String(row.f_entrega_prometida);
+    const pipelineLabel = PIPELINES.find((p) => p.value === row.pipeline)?.label ?? row.pipeline;
+    const cliente = normalizeJoin(normalizeJoin(row.ingreso)?.client)?.name ?? "Cliente";
+    getDetalle(key).entregas.push({
+      producto: row.nombre_producto,
+      cliente,
+      pipeline: pipelineLabel,
+      encargado: normalizeJoin(row.encargado)?.name ?? null,
+    });
+  }
+
+  for (const row of recordatoriosDelMes.data ?? []) {
+    const key = String(row.recordatorio_fecha).slice(0, 10);
+    const cliente = normalizeJoin(row.client)?.name ?? "Cliente";
+    getDetalle(key).recordatorios.push({
+      nota: row.recordatorio_nota,
+      producto: row.producto ?? "—",
+      cliente,
+      enviado: row.recordatorio_enviado,
+    });
   }
 
   return (
@@ -187,7 +245,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <MonthCalendar year={now.getFullYear()} month={now.getMonth()} data={calendarData} />
+            <MonthCalendar year={now.getFullYear()} month={now.getMonth()} data={calendarData} detalle={detalle} />
           </CardContent>
         </Card>
       )}

@@ -254,7 +254,7 @@ export function DocumentoReditus({
           <View style={styles.row}>
             <View style={{ maxWidth: 300 }}>
               <Text style={styles.title}>
-                {isCuentaCobro ? "DOCUMENTO EQUIVALENTE\nA CUENTA DE COBRO" : "COTIZACIÓN"}
+                {isCuentaCobro ? "FACTURA DE COMPRA" : "COTIZACIÓN"}
               </Text>
               {isCuentaCobro && (
                 <Text style={styles.legalText}>
