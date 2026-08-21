@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
   // hora exacta — es la granularidad que da el plan gratis de Vercel.
   const { data: recordatoriosDue } = await supabase
     .from("ingresos")
-    .select("id, tracking_id, producto, recordatorio_nota, responsable_id, client:clients(name)")
+    .select("id, tracking_id, producto, recordatorio_nota, responsable_id, client:clients!ingresos_client_id_fkey(name)")
     .lte("recordatorio_fecha", now.toISOString())
     .eq("recordatorio_enviado", false)
     .not("recordatorio_fecha", "is", null)

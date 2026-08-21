@@ -45,7 +45,7 @@ export async function maybeGenerarEncuestaCalidad(
 
   const { data: ingreso } = await supabase
     .from("ingresos")
-    .select("client_id, tracking_id, client:clients(name)")
+    .select("client_id, tracking_id, client:clients!ingresos_client_id_fkey(name)")
     .eq("id", ingresoId)
     .single<{
       client_id: string;

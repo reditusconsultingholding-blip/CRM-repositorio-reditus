@@ -41,6 +41,8 @@ type IngresoRow = {
   recordatorio_fecha: string | null;
   recordatorio_nota: string | null;
   recordatorio_enviado: boolean;
+  referido_por_client_id: string | null;
+  comision_referido: number | null;
   moneda: "USD" | "COP";
   estado_pago: EstadoPago;
   estado_comercial: EstadoComercial;
@@ -49,8 +51,13 @@ type IngresoRow = {
   responsable_id: string | null;
   client: { name: string; whatsapp_number: string; tax_id: string | null } | null;
   responsable: { name: string } | null;
+  referido: { name: string; whatsapp_number: string } | { name: string; whatsapp_number: string }[] | null;
   ingreso_items: { servicio: string | null; producto: string; cantidad: number; precio_unitario: number }[] | null;
 };
+
+function normalizeJoin<T>(v: T | T[] | null): T | null {
+  return Array.isArray(v) ? (v[0] ?? null) : v;
+}
 
 export default async function IngresosPage() {
   const supabase = await createClient();
@@ -59,7 +66,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, recordatorio_fecha, recordatorio_nota, recordatorio_enviado, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients(name, whatsapp_number, tax_id), responsable:users(name), ingreso_items(servicio, producto, cantidad, precio_unitario)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, recordatorio_fecha, recordatorio_nota, recordatorio_enviado, referido_por_client_id, comision_referido, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients!ingresos_client_id_fkey(name, whatsapp_number, tax_id), responsable:users(name), referido:clients!ingresos_referido_por_client_id_fkey(name, whatsapp_number), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -96,7 +103,9 @@ export default async function IngresosPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(ingresos ?? []).map((row) => (
+            {(ingresos ?? []).map((row) => {
+              const referido = normalizeJoin(row.referido);
+              return (
               <TableRow key={row.id}>
                 <TableCell className="font-mono text-xs">{row.tracking_id}</TableCell>
                 <TableCell>{row.fecha}</TableCell>
@@ -144,6 +153,14 @@ export default async function IngresosPage() {
                     >
                       Ver comprobante
                     </a>
+                  )}
+                  {referido && (
+                    <div className="text-xs text-sky-700 dark:text-sky-400">
+                      Referido por: {referido.name}
+                      {row.comision_referido
+                        ? ` (${Number(row.comision_referido).toLocaleString("es-CO", { style: "currency", currency: row.moneda ?? "USD" })})`
+                        : ""}
+                    </div>
                   )}
                 </TableCell>
                 <TableCell>
@@ -202,6 +219,10 @@ export default async function IngresosPage() {
                         comprobante_pago_nombre: row.comprobante_pago_nombre,
                         recordatorio_fecha: row.recordatorio_enviado ? null : row.recordatorio_fecha,
                         recordatorio_nota: row.recordatorio_nota,
+                        referido_por_client_id: row.referido_por_client_id,
+                        referido_por_nombre: referido?.name ?? null,
+                        referido_por_whatsapp: referido?.whatsapp_number ?? null,
+                        comision_referido: row.comision_referido,
                         responsable_id: row.responsable_id,
                         items:
                           row.ingreso_items && row.ingreso_items.length > 0
@@ -218,7 +239,8 @@ export default async function IngresosPage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
             {(ingresos ?? []).length === 0 && (
               <TableRow>
                 <TableCell colSpan={13} className="text-center text-muted-foreground">

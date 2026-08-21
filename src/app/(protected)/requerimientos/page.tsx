@@ -74,7 +74,7 @@ export default async function RequerimientosPage() {
     supabase
       .from("requerimientos")
       .select(
-        "id, pipeline, estado, pagado, prueba_social, nombre_producto, requerimiento_texto, pais_acento, f_entrega_prometida, encargado_id, programador_id, carpeta_drive_url, documento_inf_url, psd_url, notas, permisos, plataforma, tienda, oferta_precios, link_producto_imagen, link_pagina_subida, created_at, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name), ingreso:ingresos(tracking_id, client:clients(name))",
+        "id, pipeline, estado, pagado, prueba_social, nombre_producto, requerimiento_texto, pais_acento, f_entrega_prometida, encargado_id, programador_id, carpeta_drive_url, documento_inf_url, psd_url, notas, permisos, plataforma, tienda, oferta_precios, link_producto_imagen, link_pagina_subida, created_at, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name), ingreso:ingresos(tracking_id, client:clients!ingresos_client_id_fkey(name))",
       )
       .order("created_at", { ascending: false })
       .returns<RequerimientoRow[]>(),

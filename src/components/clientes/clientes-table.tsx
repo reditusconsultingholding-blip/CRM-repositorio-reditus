@@ -37,6 +37,7 @@ export type ClienteRow = {
   pedidosHistoricos: number;
   gastoHistorico: number;
   gastoTotal: number;
+  comisionesReferidos: number;
 };
 
 function ClienteForm({
@@ -143,9 +144,10 @@ function downloadCsv(rows: ClienteRow[]) {
     "Pedidos historicos",
     "Gasto historico (USD)",
     "Gasto total (USD)",
+    "Comisiones por referidos (USD)",
   ];
   const lines = rows.map((r) =>
-    [r.name, r.whatsapp_number, r.country ?? "", r.tax_id ?? "", r.pedidosActuales, r.gastoActual.toFixed(2), r.pedidosHistoricos, r.gastoHistorico.toFixed(2), r.gastoTotal.toFixed(2)]
+    [r.name, r.whatsapp_number, r.country ?? "", r.tax_id ?? "", r.pedidosActuales, r.gastoActual.toFixed(2), r.pedidosHistoricos, r.gastoHistorico.toFixed(2), r.gastoTotal.toFixed(2), r.comisionesReferidos.toFixed(2)]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
       .join(","),
   );
@@ -236,6 +238,7 @@ export function ClientesTable({ rows, rateCop }: { rows: ClienteRow[]; rateCop: 
               <TableHead>Pedidos históricos</TableHead>
               <TableHead>Gasto histórico</TableHead>
               <TableHead>Gasto total</TableHead>
+              <TableHead>Comisiones por referidos</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -255,6 +258,9 @@ export function ClientesTable({ rows, rateCop }: { rows: ClienteRow[]; rateCop: 
                 <TableCell className="font-semibold">
                   <div>{fmtUsd(r.gastoTotal)}</div>
                 </TableCell>
+                <TableCell className={r.comisionesReferidos > 0 ? "font-medium text-sky-700 dark:text-sky-400" : "text-muted-foreground"}>
+                  {r.comisionesReferidos > 0 ? fmtUsd(r.comisionesReferidos) : "—"}
+                </TableCell>
                 <TableCell>
                   <ClienteRowActions cliente={r} />
                 </TableCell>
@@ -262,7 +268,7 @@ export function ClientesTable({ rows, rateCop }: { rows: ClienteRow[]; rateCop: 
             ))}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground">
+                <TableCell colSpan={10} className="text-center text-muted-foreground">
                   Todavía no hay clientes registrados.
                 </TableCell>
               </TableRow>

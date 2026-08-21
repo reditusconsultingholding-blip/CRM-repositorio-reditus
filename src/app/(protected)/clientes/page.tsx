@@ -24,7 +24,10 @@ export default async function ClientesPage() {
       .from("clients")
       .select("id, name, whatsapp_number, country, tax_id, historico_pedidos_ajuste, historico_gasto_ajuste_usd")
       .order("name"),
-    supabase.from("ingresos").select("client_id, precio_final_descuento, moneda").eq("estado_comercial", "Cerrado"),
+    supabase
+      .from("ingresos")
+      .select("client_id, precio_final_descuento, moneda, referido_por_client_id, comision_referido")
+      .eq("estado_comercial", "Cerrado"),
     // Puede no existir todavía si la migración 0002b/histórica no se ha corrido —
     // se maneja con gracia en vez de romper la página.
     supabase.from("historical_ingresos").select("client_id, precio_usd_aprox"),
@@ -34,12 +37,21 @@ export default async function ClientesPage() {
   const rateCop = usdCop ?? 4000;
 
   const actualByClient = new Map<string, { total: number; count: number }>();
+  const comisionesReferidosByClient = new Map<string, number>();
   for (const r of ingresos ?? []) {
     if (!r.client_id) continue;
     const cur = actualByClient.get(r.client_id) ?? { total: 0, count: 0 };
     cur.total += ingresoToUsd(r.precio_final_descuento, r.moneda, rateCop);
     cur.count += 1;
     actualByClient.set(r.client_id, cur);
+
+    if (r.referido_por_client_id && r.comision_referido) {
+      const prev = comisionesReferidosByClient.get(r.referido_por_client_id) ?? 0;
+      comisionesReferidosByClient.set(
+        r.referido_por_client_id,
+        prev + ingresoToUsd(r.comision_referido, r.moneda, rateCop),
+      );
+    }
   }
 
   const historicoByClient = new Map<string, { total: number; count: number }>();
@@ -66,6 +78,7 @@ export default async function ClientesPage() {
         pedidosHistoricos,
         gastoHistorico,
         gastoTotal: actual.total + gastoHistorico,
+        comisionesReferidos: comisionesReferidosByClient.get(c.id) ?? 0,
       };
     })
     .sort((a, b) => b.gastoTotal - a.gastoTotal);

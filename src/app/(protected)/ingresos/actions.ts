@@ -157,6 +157,8 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     const plataformaPago = String(formData.get("plataforma_pago") ?? "").trim() || null;
     const comprobantePagoUrl = String(formData.get("comprobante_pago_url") ?? "").trim() || null;
     const comprobantePagoNombre = String(formData.get("comprobante_pago_nombre") ?? "").trim() || null;
+    const referidoPorClientId = String(formData.get("referido_por_client_id") ?? "").trim() || null;
+    const comisionReferido = referidoPorClientId ? Number(formData.get("comision_referido") ?? 0) || 0 : null;
     const recordatorioAction = String(formData.get("recordatorio_action") ?? "keep");
     const recordatorioFecha = recordatorioAction === "set" ? String(formData.get("recordatorio_fecha") ?? "") || null : null;
     const recordatorioNota = recordatorioAction === "set" ? String(formData.get("recordatorio_nota") ?? "").trim() || null : null;
@@ -181,6 +183,8 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
         plataforma_pago: plataformaPago,
         comprobante_pago_url: comprobantePagoUrl,
         comprobante_pago_nombre: comprobantePagoNombre,
+        referido_por_client_id: referidoPorClientId,
+        comision_referido: comisionReferido,
         recordatorio_fecha: recordatorioFecha,
         recordatorio_nota: recordatorioNota,
         moneda,
@@ -231,7 +235,7 @@ export async function marcarIngresoCerrado(id: string): Promise<ActionResult> {
     const { data: ingreso, error: fetchError } = await supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, pais, producto, precio_final_descuento, estado_comercial, client:clients(name)",
+        "id, tracking_id, pais, producto, precio_final_descuento, estado_comercial, client:clients!ingresos_client_id_fkey(name)",
       )
       .eq("id", id)
       .single<{
@@ -347,6 +351,8 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
     const plataformaPago = String(formData.get("plataforma_pago") ?? "").trim() || null;
     const comprobantePagoUrl = String(formData.get("comprobante_pago_url") ?? "").trim() || null;
     const comprobantePagoNombre = String(formData.get("comprobante_pago_nombre") ?? "").trim() || null;
+    const referidoPorClientId = String(formData.get("referido_por_client_id") ?? "").trim() || null;
+    const comisionReferido = referidoPorClientId ? Number(formData.get("comision_referido") ?? 0) || 0 : null;
 
     // "keep" (default) deja el recordatorio existente intacto — solo se
     // toca si el usuario puso uno nuevo ("set") o le dio Quitar ("clear").
@@ -376,6 +382,8 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
         plataforma_pago: plataformaPago,
         comprobante_pago_url: comprobantePagoUrl,
         comprobante_pago_nombre: comprobantePagoNombre,
+        referido_por_client_id: referidoPorClientId,
+        comision_referido: comisionReferido,
         moneda,
         responsable_id: responsableId,
         ...recordatorioPatch,

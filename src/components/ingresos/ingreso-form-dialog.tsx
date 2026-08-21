@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil, Paperclip, FileIcon, X, Bell, BellOff } from "lucide-react";
+import { Plus, Trash2, Pencil, Paperclip, FileIcon, X, Bell, BellOff, UserPlus } from "lucide-react";
 import { createIngreso, updateIngreso } from "@/app/(protected)/ingresos/actions";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,10 @@ export type EditableIngreso = {
   comprobante_pago_nombre: string | null;
   recordatorio_fecha: string | null;
   recordatorio_nota: string | null;
+  referido_por_client_id: string | null;
+  referido_por_nombre: string | null;
+  referido_por_whatsapp: string | null;
+  comision_referido: number | null;
   responsable_id: string | null;
   items: Item[];
 };
@@ -81,6 +85,18 @@ export function IngresoFormDialog({
   const [recordatorioCantidad, setRecordatorioCantidad] = useState("");
   const [recordatorioUnidad, setRecordatorioUnidad] = useState<(typeof UNIDADES_RECORDATORIO)[number]["value"]>("dias");
   const [recordatorioNota, setRecordatorioNota] = useState("");
+  const [referidoWhatsapp, setReferidoWhatsapp] = useState(ingreso?.referido_por_whatsapp ?? "");
+  const [referidoMatch, setReferidoMatch] = useState<{ id: string; name: string } | null>(
+    ingreso?.referido_por_client_id && ingreso?.referido_por_nombre
+      ? { id: ingreso.referido_por_client_id, name: ingreso.referido_por_nombre }
+      : null,
+  );
+  const [referidoBuscado, setReferidoBuscado] = useState(false);
+  const [referidoBuscando, setReferidoBuscando] = useState(false);
+  const [comisionReferido, setComisionReferido] = useState(
+    ingreso?.comision_referido != null ? String(ingreso.comision_referido) : "",
+  );
+  const comisionReferidoTocada = useRef(ingreso?.comision_referido != null);
   const formRef = useRef<HTMLFormElement>(null);
   const comprobanteInputRef = useRef<HTMLInputElement>(null);
 
@@ -104,6 +120,33 @@ export function IngresoFormDialog({
     }
   }
 
+  async function handleReferidoBlur() {
+    const value = referidoWhatsapp.trim();
+    if (!value) {
+      setReferidoMatch(null);
+      setReferidoBuscado(false);
+      return;
+    }
+    setReferidoBuscando(true);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("clients")
+        .select("id, name")
+        .ilike("whatsapp_number", `%${value}%`)
+        .limit(1)
+        .maybeSingle();
+      setReferidoMatch(data ?? null);
+      setReferidoBuscado(true);
+      if (data && !comisionReferidoTocada.current) {
+        const sugerido = Math.round(totalCalculado * 0.1 * 100) / 100;
+        setComisionReferido(sugerido > 0 ? String(sugerido) : "");
+      }
+    } finally {
+      setReferidoBuscando(false);
+    }
+  }
+
   function updateItem(index: number, patch: Partial<Item>) {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   }
@@ -124,6 +167,10 @@ export function IngresoFormDialog({
     if (comprobante) {
       formData.set("comprobante_pago_url", comprobante.url);
       formData.set("comprobante_pago_nombre", comprobante.nombre);
+    }
+    if (referidoMatch) {
+      formData.set("referido_por_client_id", referidoMatch.id);
+      formData.set("comision_referido", comisionReferido || "0");
     }
 
     const cantidad = Number(recordatorioCantidad) || 0;
@@ -152,6 +199,11 @@ export function IngresoFormDialog({
           setComprobante(null);
           setRecordatorioCantidad("");
           setRecordatorioNota("");
+          setReferidoWhatsapp("");
+          setReferidoMatch(null);
+          setReferidoBuscado(false);
+          setComisionReferido("");
+          comisionReferidoTocada.current = false;
         } else if (recordatorioActivo === false || cantidad > 0) {
           // Refleja en la UI que el recordatorio quedó puesto/quitado.
           setRecordatorioActivo(cantidad > 0);
@@ -296,7 +348,7 @@ export function IngresoFormDialog({
             </p>
           </div>
 
-          <div className="col-span-2 grid grid-cols-2 gap-3 rounded-md border p-3">
+          <div className="col-span-2 grid grid-cols-2 gap-3 rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
             <div className="col-span-2 flex flex-col gap-1">
               <Label htmlFor="plataforma_pago">Plataforma donde pagó (opcional)</Label>
               <Input
@@ -361,7 +413,7 @@ export function IngresoFormDialog({
               )}
             </div>
           </div>
-          <div className="col-span-2 flex flex-col gap-2 rounded-md border p-3">
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
             <Label className="flex items-center gap-1.5">
               <Bell className="size-3.5" />
               Recordatorio (opcional)
@@ -434,7 +486,7 @@ export function IngresoFormDialog({
             </div>
           </div>
 
-          <div className="col-span-2 flex flex-col gap-2">
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
             <Label htmlFor="client_tax_id">NIT o Cédula del cliente (opcional)</Label>
             <Input
               id="client_tax_id"
@@ -443,6 +495,58 @@ export function IngresoFormDialog({
               defaultValue={ingreso?.client_tax_id ?? ""}
             />
           </div>
+
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
+            <Label className="flex items-center gap-1.5">
+              <UserPlus className="size-3.5" />
+              Cliente que lo refirió (opcional)
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Escribe el WhatsApp del cliente que lo recomendó — si ya está en la base, se detecta
+              automáticamente y se calcula una comisión sugerida del 10%.
+            </p>
+            <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <Input
+                  placeholder="+57..."
+                  value={referidoWhatsapp}
+                  onChange={(e) => {
+                    setReferidoWhatsapp(e.target.value);
+                    setReferidoMatch(null);
+                    setReferidoBuscado(false);
+                  }}
+                  onBlur={handleReferidoBlur}
+                />
+              </div>
+              {referidoMatch && (
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">Comisión ({moneda})</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    className="w-28"
+                    value={comisionReferido}
+                    onChange={(e) => {
+                      comisionReferidoTocada.current = true;
+                      setComisionReferido(e.target.value);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            {referidoBuscando && <p className="text-xs text-muted-foreground">Buscando…</p>}
+            {!referidoBuscando && referidoMatch && (
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                ✓ Coincide con: <span className="font-medium">{referidoMatch.name}</span>
+              </p>
+            )}
+            {!referidoBuscando && referidoBuscado && !referidoMatch && (
+              <p className="text-xs text-muted-foreground">
+                No se encontró ningún cliente con ese número — no se asignará comisión de referido.
+              </p>
+            )}
+          </div>
+
           <div className="col-span-2 flex flex-col gap-2">
             <Label>Responsable</Label>
             <Select

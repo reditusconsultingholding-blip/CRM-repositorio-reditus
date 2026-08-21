@@ -33,7 +33,7 @@ export async function getFlujoActivo(): Promise<FlujoItem[]> {
   const [{ data: ingresos }, { data: requerimientos }] = await Promise.all([
     supabase
       .from("ingresos")
-      .select("id, tracking_id, producto, estado_pago, estado_comercial, responsable:users(id, name), client:clients(name)")
+      .select("id, tracking_id, producto, estado_pago, estado_comercial, responsable:users(id, name), client:clients!ingresos_client_id_fkey(name)")
       .neq("estado_pago", "Pagado")
       .order("created_at", { ascending: false }),
     supabase

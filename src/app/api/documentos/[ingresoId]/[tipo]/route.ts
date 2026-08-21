@@ -26,7 +26,7 @@ export async function GET(
     supabase
       .from("ingresos")
       .select(
-        "tracking_id, cantidad, servicio, producto, precio_final_descuento, moneda, cotizacion_numero, cuenta_cobro_numero, comision_plataforma, created_at, client:clients(name, tax_id)",
+        "tracking_id, cantidad, servicio, producto, precio_final_descuento, moneda, cotizacion_numero, cuenta_cobro_numero, comision_plataforma, created_at, client:clients!ingresos_client_id_fkey(name, tax_id)",
       )
       .eq("id", ingresoId)
       .single(),

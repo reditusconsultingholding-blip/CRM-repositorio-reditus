@@ -26,7 +26,7 @@ export async function generarMensajeRecompra(
 
     const { data: ingreso } = await supabase
       .from("ingresos")
-      .select("producto, client:clients(name)")
+      .select("producto, client:clients!ingresos_client_id_fkey(name)")
       .eq("id", ingresoId)
       .single<{ producto: string | null; client: { name: string } | { name: string }[] | null }>();
     if (!ingreso) return { error: "Ingreso no encontrado." };
