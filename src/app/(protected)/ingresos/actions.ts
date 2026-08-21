@@ -5,6 +5,7 @@ import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { SERVICIO_TO_PIPELINE, type IngresoEstado, type EstadoPago, type IngresoServicio } from "@/lib/statuses";
 import { notifyNewIngreso } from "@/lib/notify-new-ingreso";
+import { notify } from "@/lib/notify";
 import { verifyTotpCode } from "@/lib/totp";
 import { getOrCreateClienteDriveFolders } from "@/lib/google-drive";
 
@@ -74,7 +75,25 @@ async function autoCrearRequerimientos(
       carpeta_drive_url: drive?.proyectoFolderUrl ?? null,
     }));
 
-    await supabase.from("requerimientos").insert(rows);
+    const { data: creados } = await supabase.from("requerimientos").insert(rows).select("id, nombre_producto");
+
+    // La campanita: antes solo se avisaba del ingreso (a CEO/Comercial),
+    // nunca de que existe un requerimiento nuevo por trabajar. Si ya tiene
+    // encargado (landing), le llega a esa persona; si no, le llega a la
+    // Directora Operativa para que lo agende/asigne.
+    for (const r of creados ?? []) {
+      const destinatario = encargadoId ?? directoraId;
+      if (!destinatario) continue;
+      await notify(
+        supabase,
+        destinatario,
+        "asignado",
+        encargadoId
+          ? `Se te asignó un nuevo requerimiento: ${r.nombre_producto}`
+          : `Nuevo requerimiento sin asignar: ${r.nombre_producto}`,
+        `/requerimientos/${r.id}`,
+      );
+    }
   }
   return creoAlguno;
 }

@@ -6,6 +6,7 @@ import { EstadoSelect } from "@/components/estado-select";
 import { AssignSelect } from "@/components/requerimientos/assign-select";
 import { ProgramadorSelect } from "@/components/requerimientos/programador-select";
 import { NextPhaseButton } from "@/components/requerimientos/next-phase-button";
+import { InlineTextCell } from "@/components/requerimientos/inline-text-cell";
 import { CommentForm } from "@/components/requerimientos/comment-form";
 import { SeguimientoRecompra } from "@/components/requerimientos/seguimiento-recompra";
 import {
@@ -37,7 +38,13 @@ export default async function RequerimientoDetailPage({
 
   const [{ data: requerimiento }, { data: users }, { data: programadores }, { data: comments }] =
     await Promise.all([
-      supabase.from("requerimientos").select("*").eq("id", id).single(),
+      supabase
+        .from("requerimientos")
+        .select(
+          "*, ingreso:ingresos(tracking_id, client:clients!ingresos_client_id_fkey(name, whatsapp_number))",
+        )
+        .eq("id", id)
+        .single(),
       supabase.from("users").select("id, name").eq("active", true).order("name"),
       supabase
         .from("users")
@@ -57,8 +64,11 @@ export default async function RequerimientoDetailPage({
 
   if (!requerimiento) notFound();
 
+  const ingresoJoin = Array.isArray(requerimiento.ingreso) ? requerimiento.ingreso[0] : requerimiento.ingreso;
+  const client = ingresoJoin ? (Array.isArray(ingresoJoin.client) ? ingresoJoin.client[0] : ingresoJoin.client) : null;
+
   const nextEstado = getNextEstado(
-    requerimiento.pipeline as "video" | "landing",
+    requerimiento.pipeline as "video" | "landing" | "claude",
     requerimiento.estado as RequerimientoEstado,
   );
 
@@ -82,7 +92,16 @@ export default async function RequerimientoDetailPage({
     <div className="grid gap-4 lg:grid-cols-3">
       <Card className="lg:col-span-2">
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle>{requerimiento.nombre_producto}</CardTitle>
+          <div>
+            <CardTitle>{requerimiento.nombre_producto}</CardTitle>
+            {client && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {client.name}
+                {client.whatsapp_number ? ` · ${client.whatsapp_number}` : ""}
+                {ingresoJoin?.tracking_id ? ` · ${ingresoJoin.tracking_id}` : ""}
+              </p>
+            )}
+          </div>
           <EstadoSelect
             value={requerimiento.estado as RequerimientoEstado}
             estados={REQUERIMIENTO_ESTADOS}
@@ -95,6 +114,10 @@ export default async function RequerimientoDetailPage({
             <p className="text-xs text-muted-foreground">Requerimiento</p>
             <p>{requerimiento.requerimiento_texto || "Sin descripción."}</p>
           </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Notas</p>
+            <InlineTextCell requerimientoId={id} campo="notas" valor={requerimiento.notas} placeholder="Notas para el equipo…" />
+          </div>
           <Separator />
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -106,33 +129,49 @@ export default async function RequerimientoDetailPage({
               <p>{requerimiento.f_entrega_prometida ?? "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Carpeta de Drive</p>
-              {requerimiento.carpeta_drive_url ? (
-                <a
-                  href={requerimiento.carpeta_drive_url}
-                  target="_blank"
-                  className="text-primary hover:underline"
-                >
-                  Abrir carpeta
-                </a>
-              ) : (
-                <p>—</p>
-              )}
+              <p className="text-xs text-muted-foreground">Carpeta de Drive (videos/archivos terminados)</p>
+              <InlineTextCell
+                requerimientoId={id}
+                campo="carpeta_drive_url"
+                valor={requerimiento.carpeta_drive_url}
+                placeholder="Pega el link de la carpeta"
+                isLink
+              />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Documento de información</p>
-              {requerimiento.documento_inf_url ? (
-                <a
-                  href={requerimiento.documento_inf_url}
-                  target="_blank"
-                  className="text-primary hover:underline"
-                >
-                  Abrir documento
-                </a>
-              ) : (
-                <p>—</p>
-              )}
+              <InlineTextCell
+                requerimientoId={id}
+                campo="documento_inf_url"
+                valor={requerimiento.documento_inf_url}
+                placeholder="Pega el link del documento"
+                isLink
+              />
             </div>
+            {requerimiento.pipeline === "landing" && (
+              <>
+                <div>
+                  <p className="text-xs text-muted-foreground">PSD</p>
+                  <InlineTextCell
+                    requerimientoId={id}
+                    campo="psd_url"
+                    valor={requerimiento.psd_url}
+                    placeholder="Pega el link del PSD"
+                    isLink
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Link de la landing page terminada</p>
+                  <InlineTextCell
+                    requerimientoId={id}
+                    campo="link_pagina_subida"
+                    valor={requerimiento.link_pagina_subida}
+                    placeholder="Pega el link de la página ya publicada"
+                    isLink
+                  />
+                </div>
+              </>
+            )}
             <div>
               <p className="text-xs text-muted-foreground">Encargado</p>
               <AssignSelect
