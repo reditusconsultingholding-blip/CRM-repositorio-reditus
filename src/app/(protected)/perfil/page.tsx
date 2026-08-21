@@ -14,6 +14,22 @@ export default async function PerfilPage() {
     <div className="flex flex-col gap-4">
       <h1 className="font-heading text-2xl font-semibold tracking-tight">Mi perfil</h1>
 
+      {profile.role === "ceo" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Código para borrar ingresos</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground">
+              Solo tú ves este código — cámbia cada 30 segundos. Gerente Comercial lo necesita
+              para poder borrar un ingreso, así que si hace falta compártelo de viva voz en el
+              momento.
+            </p>
+            <TotpCodeDisplay />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -62,22 +78,6 @@ export default async function PerfilPage() {
               <PushToggle />
             </CardContent>
           </Card>
-
-          {profile.role === "ceo" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Código para borrar ingresos</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Solo tú ves este código — cámbia cada 30 segundos. Gerente Comercial lo necesita
-                  para poder borrar un ingreso, así que si hace falta compártelo de viva voz en el
-                  momento.
-                </p>
-                <TotpCodeDisplay />
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>

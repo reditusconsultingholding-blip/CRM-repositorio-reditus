@@ -1,6 +1,7 @@
 "use server";
 
 import { requireProfile } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { computeCeoReport, formatCeoReportText } from "@/lib/ceo-report";
 import { buildExtendedBusinessContext } from "@/lib/ceo-context";
 import { CEO_KNOWLEDGE } from "@/lib/ceo-knowledge";
@@ -15,7 +16,11 @@ nómina, clientes, prospectos, equipo, y la estrategia propia de la empresa desc
 consejo concreto y accionable, no genérico. Cuando algo amerite preocupación u oportunidad, dilo
 directamente y con una recomendación clara — actúas como un buen asesor, no como un buzón de datos.
 
-Responde en español, directo y ejecutivo. Los datos de negocio que se te dan en cada mensaje se
+Responde en español, con seguridad y calidez — como un amigo de confianza que quiere que el negocio
+crezca, no como un robot que recita cifras. Habla EN CONVERSACIÓN: reacciona a lo que te dice el CEO,
+haz preguntas de vuelta cuando ayude a entender mejor la situación, y da tu opinión sin rodeos cuando
+la tengas. Nunca respondas con solo un volcado de datos — cada respuesta debe sonar a que estás
+pensando CON él, no escupiéndole un reporte. Los datos de negocio que se te dan en cada mensaje se
 recalculan en vivo desde la base de datos justo antes de responder — siempre reflejan el estado actual.
 Si no tienes un dato, dilo en vez de inventarlo.
 
@@ -187,4 +192,35 @@ export async function askCeoAssistant(history: ChatMsg[]) {
       content: `Tuve un problema respondiendo: ${err instanceof Error ? err.message : "error desconocido"}.`,
     };
   }
+}
+
+/** Historial persistente del Asistente CEO — antes vivía solo en memoria
+ * del navegador y se perdía al salir de /ceo o recargar. */
+export async function getCeoConversacion(): Promise<ChatMsg[]> {
+  const profile = await requireProfile();
+  if (profile.role !== "ceo") return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ceo_asistente_mensajes")
+    .select("role, content")
+    .eq("user_id", profile.id)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  return (data ?? []) as ChatMsg[];
+}
+
+export async function guardarCeoMensajes(mensajes: ChatMsg[]): Promise<void> {
+  const profile = await requireProfile();
+  if (profile.role !== "ceo" || mensajes.length === 0) return;
+  const supabase = await createClient();
+  await supabase
+    .from("ceo_asistente_mensajes")
+    .insert(mensajes.map((m) => ({ user_id: profile.id, role: m.role, content: m.content })));
+}
+
+export async function limpiarCeoConversacion(): Promise<void> {
+  const profile = await requireProfile();
+  if (profile.role !== "ceo") return;
+  const supabase = await createClient();
+  await supabase.from("ceo_asistente_mensajes").delete().eq("user_id", profile.id);
 }

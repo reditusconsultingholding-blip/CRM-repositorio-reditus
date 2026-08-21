@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CeoAssistant } from "@/components/ceo/ceo-assistant";
+import { getCeoConversacion } from "./actions";
+import { PlatformStatus } from "@/components/ceo/platform-status";
 import { GastosFijosTable } from "@/components/ceo/gastos-fijos-table";
 import { PayrollRatesTable, type PersonRate } from "@/components/ceo/payroll-rates-table";
 import { PayrollChecklist } from "@/components/ceo/payroll-checklist";
@@ -28,7 +30,7 @@ export default async function CeoPage() {
 
   const supabase = await createClient();
 
-  const [r, gastosFijos, checklist, { data: users }, { data: rates }, vaultEntries] = await Promise.all([
+  const [r, gastosFijos, checklist, { data: users }, { data: rates }, vaultEntries, ceoMensajes] = await Promise.all([
     computeCeoReport(),
     getGastosFijos(),
     getWeeklyPayrollChecklist(),
@@ -40,6 +42,7 @@ export default async function CeoPage() {
       .order("name"),
     supabase.from("user_payroll_rates").select("user_id, modo, monto, moneda"),
     listVaultEntries().catch(() => []),
+    getCeoConversacion(),
   ]);
 
   const rateByUser = new Map((rates ?? []).map((rt) => [rt.user_id, rt]));
@@ -197,27 +200,26 @@ export default async function CeoPage() {
         </TabsContent>
 
         <TabsContent value="asistente">
-          <CeoAssistant />
+          <CeoAssistant initialMessages={ceoMensajes} />
         </TabsContent>
 
-        <TabsContent value="sistema">
+        <TabsContent value="sistema" className="flex flex-col gap-4">
+          <PlatformStatus />
+
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Monitoreo de errores (Sentry)</CardTitle>
+              <CardTitle className="text-base">Prueba avanzada de Sentry</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
-                Con el DSN configurado, cualquier error real en producción llega directo a tu dashboard
-                de Sentry, con el stack trace completo — sin tener que esperar a que alguien te avise.
-                Usa este botón para confirmar que quedó bien conectado.
+                Esto es solo para confirmar que Sentry captura errores de verdad — lanza un error a
+                propósito, así que vas a ver la pantalla de error de la app (es lo esperado). Si aparece
+                en tu dashboard de sentry.io en menos de un minuto, quedó funcionando. Para el chequeo
+                normal de &quot;¿está todo bien?&quot; usa el panel de arriba, no este botón.
               </p>
               <div>
                 <SentryTestButton />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Al hacer clic vas a ver la pantalla de error de la app (es esperado, es la prueba) — si
-                el error aparece en sentry.io en menos de un minuto, quedó funcionando.
-              </p>
             </CardContent>
           </Card>
         </TabsContent>

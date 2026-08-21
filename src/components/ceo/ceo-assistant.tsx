@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Bot, Send, Mic, Square, Volume2, VolumeX, PhoneCall, PhoneOff } from "lucide-react";
+import { Bot, Send, Mic, Square, Volume2, VolumeX, PhoneCall, PhoneOff, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { askCeoAssistant } from "@/app/(protected)/ceo/actions";
+import { askCeoAssistant, guardarCeoMensajes, limpiarCeoConversacion } from "@/app/(protected)/ceo/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -52,14 +52,16 @@ function AssistantMessage({ content }: { content: string }) {
   );
 }
 
-export function CeoAssistant() {
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    {
-      role: "assistant",
-      content:
-        "Hola, soy tu asesor de negocio privado. Te conozco a fondo: rentabilidad, nómina, clientes, prospectos y tu propia estrategia (documento maestro y manual operativo). Pregúntame lo que sea — si ayuda a explicarlo, te armo tablas o diagramas. Puedes hablarme con el micrófono, o activar la conversación en tiempo real para hablar como en una llamada.",
-    },
-  ]);
+const BIENVENIDA: ChatMsg = {
+  role: "assistant",
+  content:
+    "Hola, soy tu asesor de negocio privado. Te conozco a fondo: rentabilidad, nómina, clientes, prospectos y tu propia estrategia (documento maestro y manual operativo). Pregúntame lo que sea — si ayuda a explicarlo, te armo tablas o diagramas. Puedes hablarme con el micrófono, o activar la conversación en tiempo real para hablar como en una llamada.",
+};
+
+export function CeoAssistant({ initialMessages }: { initialMessages: ChatMsg[] }) {
+  const [messages, setMessages] = useState<ChatMsg[]>(
+    initialMessages.length > 0 ? initialMessages : [BIENVENIDA],
+  );
   const [input, setInput] = useState("");
   const [pending, startTransition] = useTransition();
   const [voiceOn, setVoiceOn] = useState(false);
@@ -76,14 +78,24 @@ export function CeoAssistant() {
   function send(text: string) {
     const clean = text.trim();
     if (!clean) return;
-    const next = [...messages, { role: "user" as const, content: clean }];
+    const userMsg: ChatMsg = { role: "user", content: clean };
+    const next = [...messages, userMsg];
     setMessages(next);
     setInput("");
 
     startTransition(async () => {
       const reply = await askCeoAssistant(next);
       setMessages((prev) => [...prev, reply]);
+      guardarCeoMensajes([userMsg, reply]);
     });
+  }
+
+  function nuevaConversacion() {
+    if (pending) return;
+    if (!confirm("¿Empezar una conversación nueva? Se borra el historial guardado.")) return;
+    setMessages([BIENVENIDA]);
+    spokenCountRef.current = 1;
+    limpiarCeoConversacion();
   }
 
   function startListening() {
@@ -216,6 +228,10 @@ export function CeoAssistant() {
           Asistente CEO
         </CardTitle>
         <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={nuevaConversacion}>
+            <RotateCcw className="size-3.5" />
+            Nueva conversación
+          </Button>
           {speechSupported && micSupported && (
             <Button
               type="button"
