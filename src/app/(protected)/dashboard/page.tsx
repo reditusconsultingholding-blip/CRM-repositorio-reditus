@@ -22,8 +22,10 @@ export default async function DashboardPage() {
     ingresosMes,
     videoAbiertos,
     landingAbiertos,
+    claudeAbiertos,
     videoTotal,
     landingTotal,
+    claudeTotal,
     usdCop,
   ] = await Promise.all([
     canSeeIngresos
@@ -54,11 +56,20 @@ export default async function DashboardPage() {
     supabase
       .from("requerimientos")
       .select("id", { count: "exact", head: true })
+      .eq("pipeline", "claude")
+      .not("estado", "in", '("ENTREGADO","Terminado")'),
+    supabase
+      .from("requerimientos")
+      .select("id", { count: "exact", head: true })
       .eq("pipeline", "video"),
     supabase
       .from("requerimientos")
       .select("id", { count: "exact", head: true })
       .eq("pipeline", "landing"),
+    supabase
+      .from("requerimientos")
+      .select("id", { count: "exact", head: true })
+      .eq("pipeline", "claude"),
     getUsdCopRate(),
   ]);
 
@@ -97,7 +108,7 @@ export default async function DashboardPage() {
         <LiveSync tables={["ingresos", "requerimientos"]} />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {canSeeIngresos && (
           <Card>
             <CardHeader>
@@ -150,6 +161,17 @@ export default async function DashboardPage() {
           <CardContent>
             <p className="text-3xl font-semibold">{landingAbiertos.count ?? 0}</p>
             <p className="text-sm text-muted-foreground">de {landingTotal.count ?? 0} totales</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Claude en curso
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-semibold">{claudeAbiertos.count ?? 0}</p>
+            <p className="text-sm text-muted-foreground">de {claudeTotal.count ?? 0} totales</p>
           </CardContent>
         </Card>
       </div>
