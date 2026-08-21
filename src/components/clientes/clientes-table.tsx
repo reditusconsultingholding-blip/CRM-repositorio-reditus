@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Download } from "lucide-react";
+import { Pencil, Trash2, Plus, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createClient_, updateClient, deleteClient } from "@/app/(protected)/clientes/actions";
+import { createClient_, updateClient, deleteClient, importClientsCsv } from "@/app/(protected)/clientes/actions";
 
 export type ClienteRow = {
   id: string;
@@ -166,6 +166,107 @@ function downloadCsv(rows: ClienteRow[]) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Parser de CSV mínimo pero correcto con campos entre comillas (incluye
+ * comillas escapadas como "" y comas dentro de un campo) — necesario
+ * porque downloadCsv envuelve cada valor en comillas. */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  const clean = text.replace(/^﻿/, "");
+
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    if (inQuotes) {
+      if (c === '"' && clean[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (c === '"') {
+        inQuotes = false;
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ",") {
+      row.push(field);
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && clean[i + 1] === "\n") i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((v) => v.trim() !== ""));
+}
+
+function ImportCsvButton() {
+  const [pending, startTransition] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      const table = parseCsv(text);
+      if (table.length < 2) {
+        toast.error("El CSV está vacío o no tiene filas de datos.");
+        return;
+      }
+      // Columnas por posición, igual al orden que genera "Descargar CSV":
+      // Nombre, WhatsApp, Pais, NIT/Cedula, ...
+      const rows = table.slice(1).map((cols) => ({
+        name: cols[0] ?? "",
+        whatsapp_number: cols[1] ?? "",
+        country: cols[2] ?? "",
+        tax_id: cols[3] ?? "",
+      }));
+
+      startTransition(async () => {
+        const result = await importClientsCsv(rows);
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success(
+          `Importación lista: ${result.creados ?? 0} creados, ${result.actualizados ?? 0} actualizados, ${result.omitidos ?? 0} sin cambios/omitidos.`,
+        );
+      });
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <>
+      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handlePick} />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => fileRef.current?.click()}
+        disabled={pending}
+      >
+        <Upload className="size-3.5" />
+        {pending ? "Importando…" : "Importar CSV"}
+      </Button>
+    </>
+  );
+}
+
 function ClienteRowActions({ cliente }: { cliente: ClienteRow }) {
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -212,6 +313,7 @@ export function ClientesTable({ rows, rateCop }: { rows: ClienteRow[]; rateCop: 
           <Download className="size-3.5" />
           Descargar CSV
         </Button>
+        <ImportCsvButton />
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger render={<Button type="button" size="sm" className="gap-1.5" />}>
             <Plus className="size-3.5" />
