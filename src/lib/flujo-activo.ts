@@ -1,5 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { REQUERIMIENTO_TERMINADOS } from "@/lib/statuses";
+
+const TERMINADOS_FILTER = `(${REQUERIMIENTO_TERMINADOS.map((e) => `"${e}"`).join(",")})`;
 
 export type FlujoItemRole = "comercial" | "operativa" | "landing" | "video" | "claude" | "programador";
 
@@ -41,7 +44,7 @@ export async function getFlujoActivo(): Promise<FlujoItem[]> {
       .select(
         "id, pipeline, estado, nombre_producto, encargado_id, programador_id, encargado:users!requerimientos_encargado_id_fkey(id, name), programador:users!requerimientos_programador_id_fkey(id, name), ingreso:ingresos(tracking_id)",
       )
-      .not("estado", "in", '("ENTREGADO","SUBIDA")')
+      .not("estado", "in", TERMINADOS_FILTER)
       .order("created_at", { ascending: false }),
   ]);
 
