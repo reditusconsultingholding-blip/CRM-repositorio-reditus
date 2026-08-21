@@ -7,6 +7,7 @@ import {
   sendChannelMessage,
   sendDirectMessage,
   markChatRead,
+  markChatEntryRead,
   toggleReaction,
   deleteMessage,
   editMessage,
@@ -129,6 +130,8 @@ export function ChatView({
     { localId: string; url: string; name: string; size: number; sending?: boolean }[]
   >([]);
   const [pending, startTransition] = useTransition();
+  const [unreadChannels, setUnreadChannels] = useState<Set<string>>(new Set());
+  const [unreadPeers, setUnreadPeers] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
@@ -136,6 +139,97 @@ export function ChatView({
   useEffect(() => {
     markChatRead();
   }, []);
+
+  // Burbuja de "no leído" por canal/DM — independiente del contador global
+  // de la campana. Carga el estado inicial y se mantiene al día con los
+  // mensajes nuevos que lleguen mientras la persona navega por el chat.
+  useEffect(() => {
+    let active = true;
+
+    async function loadUnread() {
+      const { data: lecturas } = await supabase
+        .from("chat_lecturas")
+        .select("clave, last_read_at")
+        .eq("user_id", currentUserId);
+      const readMap = new Map((lecturas ?? []).map((r) => [r.clave, r.last_read_at as string]));
+
+      const channelIds = channels.map((c) => c.id);
+      const orParts = [
+        channelIds.length ? `channel_id.in.(${channelIds.join(",")})` : null,
+        `recipient_id.eq.${currentUserId}`,
+      ].filter(Boolean);
+
+      const { data: msgs } = await supabase
+        .from("chat_messages")
+        .select("channel_id, recipient_id, author_id, created_at")
+        .neq("author_id", currentUserId)
+        .or(orParts.join(","))
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      if (!active) return;
+      const nextChannels = new Set<string>();
+      const nextPeers = new Set<string>();
+      for (const m of msgs ?? []) {
+        if (m.channel_id) {
+          const lastRead = readMap.get(`canal:${m.channel_id}`);
+          if (!lastRead || m.created_at > lastRead) nextChannels.add(m.channel_id);
+        } else if (m.recipient_id === currentUserId) {
+          const lastRead = readMap.get(`dm:${m.author_id}`);
+          if (!lastRead || m.created_at > lastRead) nextPeers.add(m.author_id);
+        }
+      }
+      setUnreadChannels(nextChannels);
+      setUnreadPeers(nextPeers);
+    }
+
+    loadUnread();
+
+    const channel = supabase
+      .channel(`chat_unread:${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_messages" },
+        (payload) => {
+          const row = payload.new as { channel_id: string | null; recipient_id: string | null; author_id: string };
+          if (row.author_id === currentUserId) return;
+          if (row.channel_id) {
+            setUnreadChannels((prev) => new Set(prev).add(row.channel_id!));
+          } else if (row.recipient_id === currentUserId) {
+            setUnreadPeers((prev) => new Set(prev).add(row.author_id));
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, channels.map((c) => c.id).join(",")]);
+
+  function selectChannel(id: string) {
+    setSelection({ type: "channel", id });
+    setUnreadChannels((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    markChatEntryRead(`canal:${id}`);
+  }
+
+  function selectDm(userId: string) {
+    setSelection({ type: "dm", userId });
+    setUnreadPeers((prev) => {
+      if (!prev.has(userId)) return prev;
+      const next = new Set(prev);
+      next.delete(userId);
+      return next;
+    });
+    markChatEntryRead(`dm:${userId}`);
+  }
 
   async function loadReactions(messageIds: string[]) {
     if (!messageIds.length) return new Map<string, Reaction[]>();
@@ -416,7 +510,7 @@ export function ChatView({
           {channels.map((c) => (
             <button
               key={c.id}
-              onClick={() => setSelection({ type: "channel", id: c.id })}
+              onClick={() => selectChannel(c.id)}
               className={cn(
                 "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
                 selection?.type === "channel" && selection.id === c.id && "bg-muted font-medium text-foreground",
@@ -424,6 +518,12 @@ export function ChatView({
             >
               <Hash className="size-3.5 shrink-0" />
               <span className="truncate">{c.name}</span>
+              {unreadChannels.has(c.id) && (
+                <span
+                  className="ml-auto size-2 shrink-0 rounded-full bg-primary"
+                  title={`Mensaje nuevo en ${c.name}`}
+                />
+              )}
             </button>
           ))}
 
@@ -433,7 +533,7 @@ export function ChatView({
           {people.map((p) => (
             <button
               key={p.id}
-              onClick={() => setSelection({ type: "dm", userId: p.id })}
+              onClick={() => selectDm(p.id)}
               className={cn(
                 "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
                 selection?.type === "dm" && selection.userId === p.id && "bg-muted font-medium text-foreground",
@@ -441,6 +541,12 @@ export function ChatView({
             >
               <Avatar name={p.name} url={p.avatar_url} />
               <span className="truncate">{p.name}</span>
+              {unreadPeers.has(p.id) && (
+                <span
+                  className="ml-auto size-2 shrink-0 rounded-full bg-primary"
+                  title={`Mensaje nuevo de ${p.name}`}
+                />
+              )}
             </button>
           ))}
           {people.length === 0 && (

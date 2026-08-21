@@ -92,6 +92,25 @@ export async function markChatRead() {
   }
 }
 
+/** Marca como leído un canal o DM puntual (clave = "canal:<id>" o
+ * "dm:<userId>") — a diferencia de markChatRead (global), esto es lo que
+ * hace que la burbuja de "no leído" desaparezca solo para esa conversación
+ * al entrar a ella, no para todo el chat. */
+export async function markChatEntryRead(clave: string): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from("chat_lecturas")
+      .upsert({ user_id: user.id, clave, last_read_at: new Date().toISOString() }, { onConflict: "user_id,clave" });
+  } catch {
+    // best-effort
+  }
+}
+
 export async function toggleReaction(messageId: string, emoji: string): Promise<ActionResult> {
   try {
     const supabase = await createClient();
