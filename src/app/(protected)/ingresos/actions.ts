@@ -29,6 +29,32 @@ function inferPipeline(servicio: string) {
   return SERVICIO_TO_PIPELINE[servicio as IngresoServicio] ?? null;
 }
 
+/** Lee la modalidad de pago del formulario (completo/parcial) y, si es
+ * parcial con fecha de compromiso, arma un recordatorio de cobro
+ * automático — a menos que la persona ya haya puesto un recordatorio
+ * manual en el mismo envío, ese manda. */
+function readModalidadPago(formData: FormData, precioTotal: number, recordatorioAction: string) {
+  const modalidadPago = String(formData.get("modalidad_pago") ?? "completo") === "parcial" ? "parcial" : "completo";
+  if (modalidadPago !== "parcial") {
+    return { modalidadPago, montoPagado: null as number | null, fechaCompromisoSaldo: null as string | null, recordatorioAuto: null };
+  }
+
+  const montoPagado = Number(formData.get("monto_pagado") ?? 0) || 0;
+  const fechaCompromisoSaldo = String(formData.get("fecha_compromiso_saldo") ?? "").trim() || null;
+  const saldo = Math.max(precioTotal - montoPagado, 0);
+  const pctRestante = precioTotal > 0 ? Math.round((saldo / precioTotal) * 100) : 0;
+
+  let recordatorioAuto: { fecha: string; nota: string } | null = null;
+  if (fechaCompromisoSaldo && recordatorioAction === "keep") {
+    recordatorioAuto = {
+      fecha: new Date(`${fechaCompromisoSaldo}T12:00:00`).toISOString(),
+      nota: `Cobrar saldo pendiente: ${saldo.toLocaleString("es-CO", { maximumFractionDigits: 2 })} (${pctRestante}% restante)`,
+    };
+  }
+
+  return { modalidadPago, montoPagado, fechaCompromisoSaldo, recordatorioAuto };
+}
+
 /** Crea automáticamente un requerimiento por cada unidad de un ingreso
  * cuyo servicio se pueda identificar como video o landing — así queda
  * trazabilidad directa (ingreso_id) y el equipo puede empezar sin que
@@ -179,8 +205,18 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     const referidoPorClientId = String(formData.get("referido_por_client_id") ?? "").trim() || null;
     const comisionReferido = referidoPorClientId ? Number(formData.get("comision_referido") ?? 0) || 0 : null;
     const recordatorioAction = String(formData.get("recordatorio_action") ?? "keep");
-    const recordatorioFecha = recordatorioAction === "set" ? String(formData.get("recordatorio_fecha") ?? "") || null : null;
-    const recordatorioNota = recordatorioAction === "set" ? String(formData.get("recordatorio_nota") ?? "").trim() || null : null;
+    let recordatorioFecha = recordatorioAction === "set" ? String(formData.get("recordatorio_fecha") ?? "") || null : null;
+    let recordatorioNota = recordatorioAction === "set" ? String(formData.get("recordatorio_nota") ?? "").trim() || null : null;
+
+    const { modalidadPago, montoPagado, fechaCompromisoSaldo, recordatorioAuto } = readModalidadPago(
+      formData,
+      precioTotal,
+      recordatorioAction,
+    );
+    if (recordatorioAuto) {
+      recordatorioFecha = recordatorioAuto.fecha;
+      recordatorioNota = recordatorioAuto.nota;
+    }
 
     // Etapa 2 vs 3 del flujo comercial: si es solo una cotización enviada
     // (el cliente no ha confirmado), no cuenta como ingreso real todavía
@@ -204,6 +240,9 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
         comprobante_pago_nombre: comprobantePagoNombre,
         referido_por_client_id: referidoPorClientId,
         comision_referido: comisionReferido,
+        modalidad_pago: modalidadPago,
+        monto_pagado: montoPagado,
+        fecha_compromiso_saldo: fechaCompromisoSaldo,
         recordatorio_fecha: recordatorioFecha,
         recordatorio_nota: recordatorioNota,
         moneda,
@@ -376,9 +415,18 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
     // "keep" (default) deja el recordatorio existente intacto — solo se
     // toca si el usuario puso uno nuevo ("set") o le dio Quitar ("clear").
     const recordatorioAction = String(formData.get("recordatorio_action") ?? "keep");
+    const { modalidadPago, montoPagado, fechaCompromisoSaldo, recordatorioAuto } = readModalidadPago(
+      formData,
+      precioTotal,
+      recordatorioAction,
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recordatorioPatch: Record<string, any> = {};
-    if (recordatorioAction === "set") {
+    if (recordatorioAuto) {
+      recordatorioPatch.recordatorio_fecha = recordatorioAuto.fecha;
+      recordatorioPatch.recordatorio_nota = recordatorioAuto.nota;
+      recordatorioPatch.recordatorio_enviado = false;
+    } else if (recordatorioAction === "set") {
       recordatorioPatch.recordatorio_fecha = String(formData.get("recordatorio_fecha") ?? "") || null;
       recordatorioPatch.recordatorio_nota = String(formData.get("recordatorio_nota") ?? "").trim() || null;
       recordatorioPatch.recordatorio_enviado = false;
@@ -403,6 +451,9 @@ export async function updateIngreso(id: string, formData: FormData): Promise<Act
         comprobante_pago_nombre: comprobantePagoNombre,
         referido_por_client_id: referidoPorClientId,
         comision_referido: comisionReferido,
+        modalidad_pago: modalidadPago,
+        monto_pagado: montoPagado,
+        fecha_compromiso_saldo: fechaCompromisoSaldo,
         moneda,
         responsable_id: responsableId,
         ...recordatorioPatch,

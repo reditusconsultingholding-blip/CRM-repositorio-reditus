@@ -43,6 +43,9 @@ type IngresoRow = {
   recordatorio_enviado: boolean;
   referido_por_client_id: string | null;
   comision_referido: number | null;
+  modalidad_pago: "completo" | "parcial";
+  monto_pagado: number | null;
+  fecha_compromiso_saldo: string | null;
   moneda: "USD" | "COP";
   estado_pago: EstadoPago;
   estado_comercial: EstadoComercial;
@@ -66,7 +69,7 @@ export default async function IngresosPage() {
     supabase
       .from("ingresos")
       .select(
-        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, recordatorio_fecha, recordatorio_nota, recordatorio_enviado, referido_por_client_id, comision_referido, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients!ingresos_client_id_fkey(name, whatsapp_number, tax_id), responsable:users(name), referido:clients!ingresos_referido_por_client_id_fkey(name, whatsapp_number), ingreso_items(servicio, producto, cantidad, precio_unitario)",
+        "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, recordatorio_fecha, recordatorio_nota, recordatorio_enviado, referido_por_client_id, comision_referido, modalidad_pago, monto_pagado, fecha_compromiso_saldo, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients!ingresos_client_id_fkey(name, whatsapp_number, tax_id), responsable:users(name), referido:clients!ingresos_referido_por_client_id_fkey(name, whatsapp_number), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
       .order("created_at", { ascending: false })
       .returns<IngresoRow[]>(),
@@ -162,6 +165,16 @@ export default async function IngresosPage() {
                         : ""}
                     </div>
                   )}
+                  {row.modalidad_pago === "parcial" && (
+                    <div className="text-xs text-amber-700 dark:text-amber-500">
+                      Pago parcial: {Number(row.monto_pagado ?? 0).toLocaleString("es-CO", { style: "currency", currency: row.moneda ?? "USD" })}
+                      {row.precio_final_descuento
+                        ? ` (${Math.round(((row.monto_pagado ?? 0) / row.precio_final_descuento) * 100)}%)`
+                        : ""}
+                      {row.fecha_compromiso_saldo &&
+                        ` · resto para el ${new Date(`${row.fecha_compromiso_saldo}T12:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}`}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <EstadoComercialCell ingresoId={row.id} estado={row.estado_comercial} />
@@ -223,6 +236,9 @@ export default async function IngresosPage() {
                         referido_por_nombre: referido?.name ?? null,
                         referido_por_whatsapp: referido?.whatsapp_number ?? null,
                         comision_referido: row.comision_referido,
+                        modalidad_pago: row.modalidad_pago,
+                        monto_pagado: row.monto_pagado,
+                        fecha_compromiso_saldo: row.fecha_compromiso_saldo,
                         responsable_id: row.responsable_id,
                         items:
                           row.ingreso_items && row.ingreso_items.length > 0

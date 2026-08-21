@@ -53,6 +53,9 @@ export type EditableIngreso = {
   referido_por_nombre: string | null;
   referido_por_whatsapp: string | null;
   comision_referido: number | null;
+  modalidad_pago: "completo" | "parcial";
+  monto_pagado: number | null;
+  fecha_compromiso_saldo: string | null;
   responsable_id: string | null;
   items: Item[];
 };
@@ -97,6 +100,9 @@ export function IngresoFormDialog({
     ingreso?.comision_referido != null ? String(ingreso.comision_referido) : "",
   );
   const comisionReferidoTocada = useRef(ingreso?.comision_referido != null);
+  const [modalidadPago, setModalidadPago] = useState<"completo" | "parcial">(ingreso?.modalidad_pago ?? "completo");
+  const [montoPagado, setMontoPagado] = useState(ingreso?.monto_pagado != null ? String(ingreso.monto_pagado) : "");
+  const [fechaCompromisoSaldo, setFechaCompromisoSaldo] = useState(ingreso?.fecha_compromiso_saldo ?? "");
   const formRef = useRef<HTMLFormElement>(null);
   const comprobanteInputRef = useRef<HTMLInputElement>(null);
 
@@ -160,10 +166,18 @@ export function IngresoFormDialog({
   }
 
   const totalCalculado = items.reduce((sum, it) => sum + it.cantidad * it.precio_unitario, 0);
+  const montoPagadoNum = Number(montoPagado) || 0;
+  const saldoPendiente = Math.max(totalCalculado - montoPagadoNum, 0);
+  const porcentajePagado = totalCalculado > 0 ? Math.round((montoPagadoNum / totalCalculado) * 100) : 0;
 
   function handleSubmit(formData: FormData) {
     formData.set("items_json", JSON.stringify(items));
     formData.set("moneda", moneda);
+    formData.set("modalidad_pago", modalidadPago);
+    if (modalidadPago === "parcial") {
+      formData.set("monto_pagado", montoPagado || "0");
+      formData.set("fecha_compromiso_saldo", fechaCompromisoSaldo);
+    }
     if (comprobante) {
       formData.set("comprobante_pago_url", comprobante.url);
       formData.set("comprobante_pago_nombre", comprobante.nombre);
@@ -204,6 +218,9 @@ export function IngresoFormDialog({
           setReferidoBuscado(false);
           setComisionReferido("");
           comisionReferidoTocada.current = false;
+          setModalidadPago("completo");
+          setMontoPagado("");
+          setFechaCompromisoSaldo("");
         } else if (recordatorioActivo === false || cantidad > 0) {
           // Refleja en la UI que el recordatorio quedó puesto/quitado.
           setRecordatorioActivo(cantidad > 0);
@@ -346,6 +363,56 @@ export function IngresoFormDialog({
             <p className="text-right text-sm text-muted-foreground">
               Total: {totalCalculado.toLocaleString("es-CO", { style: "currency", currency: moneda })}
             </p>
+          </div>
+
+          <div className="col-span-2 flex flex-col gap-2 rounded-md border p-3">
+            <div className="flex items-center justify-between">
+              <Label>Modalidad de pago</Label>
+              <Select value={modalidadPago} onValueChange={(v) => setModalidadPago(v as "completo" | "parcial")}>
+                <SelectTrigger className="h-8 w-36 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="completo">Pago completo</SelectItem>
+                  <SelectItem value="parcial">Pago parcial</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {modalidadPago === "parcial" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="monto_pagado" className="text-xs text-muted-foreground">
+                    Monto pagado ahora ({moneda})
+                  </Label>
+                  <Input
+                    id="monto_pagado"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    placeholder="0.00"
+                    value={montoPagado}
+                    onChange={(e) => setMontoPagado(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="fecha_compromiso_saldo" className="text-xs text-muted-foreground">
+                    Se compromete a pagar el resto el
+                  </Label>
+                  <Input
+                    id="fecha_compromiso_saldo"
+                    type="date"
+                    value={fechaCompromisoSaldo}
+                    onChange={(e) => setFechaCompromisoSaldo(e.target.value)}
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  {porcentajePagado}% pagado · Saldo pendiente:{" "}
+                  {saldoPendiente.toLocaleString("es-CO", { style: "currency", currency: moneda })}
+                  {fechaCompromisoSaldo && " · se crea un recordatorio automático para cobrar ese día"}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="col-span-2 grid grid-cols-2 gap-3 rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/50 dark:bg-sky-950/20">
