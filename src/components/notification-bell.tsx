@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -88,14 +89,19 @@ export function NotificationBell({ userId }: { userId: string }) {
             No tienes notificaciones.
           </p>
         )}
-        {notifications.map((n) => (
-          <DropdownMenuItem
-            key={n.id}
-            render={<a href={n.link ?? "#"} />}
-            className={!n.read ? "font-medium" : undefined}
-          >
-            {n.title}
-          </DropdownMenuItem>
+        {notifications.map((n, i) => (
+          <div key={n.id}>
+            {i > 0 && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              render={<a href={n.link ?? "#"} />}
+              className={cn("flex flex-col items-start gap-0.5 whitespace-normal", !n.read && "font-medium")}
+            >
+              <span>{n.title}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {new Date(n.created_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}
+              </span>
+            </DropdownMenuItem>
+          </div>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
