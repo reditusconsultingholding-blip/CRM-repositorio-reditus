@@ -9,6 +9,7 @@ import { NextPhaseButton } from "@/components/requerimientos/next-phase-button";
 import { InlineTextCell } from "@/components/requerimientos/inline-text-cell";
 import { CommentForm } from "@/components/requerimientos/comment-form";
 import { SeguimientoRecompra } from "@/components/requerimientos/seguimiento-recompra";
+import { UnidadesChecklist, type Unidad } from "@/components/requerimientos/unidades-checklist";
 import {
   REQUERIMIENTO_ESTADOS,
   REQUERIMIENTO_ESTADO_COLORS,
@@ -63,6 +64,16 @@ export default async function RequerimientoDetailPage({
     ]);
 
   if (!requerimiento) notFound();
+
+  const { data: unidades } =
+    requerimiento.cantidad > 1
+      ? await supabase
+          .from("requerimiento_unidades")
+          .select("id, unidad_numero, completado, link_entrega, notas")
+          .eq("requerimiento_id", id)
+          .order("unidad_numero", { ascending: true })
+          .returns<Unidad[]>()
+      : { data: null };
 
   const ingresoJoin = Array.isArray(requerimiento.ingreso) ? requerimiento.ingreso[0] : requerimiento.ingreso;
   const client = ingresoJoin ? (Array.isArray(ingresoJoin.client) ? ingresoJoin.client[0] : ingresoJoin.client) : null;
@@ -205,6 +216,12 @@ export default async function RequerimientoDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {requerimiento.cantidad > 1 && (
+        <div className="lg:col-span-3">
+          <UnidadesChecklist unidades={unidades ?? []} cantidad={requerimiento.cantidad} />
+        </div>
+      )}
 
       <Card>
         <CardHeader>

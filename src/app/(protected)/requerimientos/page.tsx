@@ -7,6 +7,7 @@ import { AssignSelect } from "@/components/requerimientos/assign-select";
 import { ProgramadorSelect } from "@/components/requerimientos/programador-select";
 import { EstadoSelect } from "@/components/estado-select";
 import { InlineTextCell } from "@/components/requerimientos/inline-text-cell";
+import { DeleteRequerimientoButton } from "@/components/requerimientos/delete-requerimiento-button";
 import { LiveSync } from "@/components/live-sync";
 import {
   REQUERIMIENTO_ESTADOS,
@@ -39,6 +40,7 @@ type RequerimientoRow = {
   pagado: RequerimientoPagadoEstado;
   prueba_social: PruebaSocialEstado;
   nombre_producto: string | null;
+  cantidad: number;
   requerimiento_texto: string | null;
   pais_acento: string | null;
   f_entrega_prometida: string | null;
@@ -74,7 +76,7 @@ export default async function RequerimientosPage() {
     supabase
       .from("requerimientos")
       .select(
-        "id, pipeline, estado, pagado, prueba_social, nombre_producto, requerimiento_texto, pais_acento, f_entrega_prometida, encargado_id, programador_id, carpeta_drive_url, documento_inf_url, psd_url, notas, permisos, plataforma, tienda, oferta_precios, link_producto_imagen, link_pagina_subida, created_at, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name), ingreso:ingresos(tracking_id, client:clients!ingresos_client_id_fkey(name))",
+        "id, pipeline, estado, pagado, prueba_social, nombre_producto, cantidad, requerimiento_texto, pais_acento, f_entrega_prometida, encargado_id, programador_id, carpeta_drive_url, documento_inf_url, psd_url, notas, permisos, plataforma, tienda, oferta_precios, link_producto_imagen, link_pagina_subida, created_at, encargado:users!requerimientos_encargado_id_fkey(name), programador:users!requerimientos_programador_id_fkey(name), ingreso:ingresos(tracking_id, client:clients!ingresos_client_id_fkey(name))",
       )
       .order("created_at", { ascending: false })
       .returns<RequerimientoRow[]>(),
@@ -133,9 +135,30 @@ export default async function RequerimientosPage() {
 
   function verCell(row: RequerimientoRow) {
     return (
-      <Link href={`/requerimientos/${row.id}`} className="text-sm font-medium text-primary hover:underline">
-        Ver
-      </Link>
+      <div className="flex items-center justify-end gap-1.5">
+        <Link href={`/requerimientos/${row.id}`} className="text-sm font-medium text-primary hover:underline">
+          Ver
+        </Link>
+        <DeleteRequerimientoButton requerimientoId={row.id} nombre={row.nombre_producto ?? "este requerimiento"} />
+      </div>
+    );
+  }
+
+  function nombreProductoCell(row: RequerimientoRow) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="max-w-40 truncate" title={row.nombre_producto ?? ""}>
+          {row.nombre_producto}
+        </span>
+        {row.cantidad > 1 && (
+          <span
+            className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+            title={`${row.cantidad} unidades — ábrelo para ver el desglose`}
+          >
+            x{row.cantidad}
+          </span>
+        )}
+      </div>
     );
   }
 
@@ -196,9 +219,7 @@ export default async function RequerimientosPage() {
                         </TableCell>
                         <TableCell>{estadoCell(row)}</TableCell>
                         <TableCell className="whitespace-nowrap text-xs">{row.f_entrega_prometida ?? "—"}</TableCell>
-                        <TableCell className="max-w-40 truncate" title={row.nombre_producto ?? ""}>
-                          {row.nombre_producto}
-                        </TableCell>
+                        <TableCell>{nombreProductoCell(row)}</TableCell>
                         <TableCell className="max-w-48 truncate text-xs text-muted-foreground" title={row.requerimiento_texto ?? ""}>
                           {row.requerimiento_texto || "—"}
                         </TableCell>
@@ -290,9 +311,7 @@ export default async function RequerimientosPage() {
                     <TableCell>
                       <InlineTextCell requerimientoId={row.id} campo="tienda" valor={row.tienda} placeholder="Tienda…" />
                     </TableCell>
-                    <TableCell className="max-w-40 truncate" title={row.nombre_producto ?? ""}>
-                      {row.nombre_producto}
-                    </TableCell>
+                    <TableCell>{nombreProductoCell(row)}</TableCell>
                     <TableCell className="text-xs">{row.pais_acento ?? "—"}</TableCell>
                     <TableCell>
                       <InlineTextCell requerimientoId={row.id} campo="oferta_precios" valor={row.oferta_precios} placeholder="Oferta y precios…" />

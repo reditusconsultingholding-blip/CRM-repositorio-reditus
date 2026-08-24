@@ -88,36 +88,49 @@ async function autoCrearRequerimientos(
     if (!pipeline) continue;
     creoAlguno = true;
 
-    const unidades = Math.min(Math.max(item.cantidad, 1), MAX_AUTO_REQUERIMIENTOS_POR_ITEM);
+    // Un solo requerimiento por línea, sin importar la cantidad (10 o 20
+    // videos son UN requerimiento con un desglose de unidades adentro, no
+    // 10-20 filas separadas inundando la tabla).
+    const cantidad = Math.min(Math.max(item.cantidad, 1), MAX_AUTO_REQUERIMIENTOS_POR_ITEM);
     const encargadoId = pipeline === "landing" ? directoraId : null;
 
-    const rows = Array.from({ length: unidades }, (_, i) => ({
-      pipeline,
-      nombre_producto: unidades > 1 ? `${item.producto} (${i + 1}/${unidades}) — ${trackingId}` : `${item.producto} — ${trackingId}`,
-      pais_acento: pais,
-      encargado_id: encargadoId,
-      estado: encargadoId ? "En progreso" : "Nuevo pedido",
-      ingreso_id: ingresoId,
-      carpeta_drive_url: drive?.proyectoFolderUrl ?? null,
-    }));
+    const { data: creado, error: eCreado } = await supabase
+      .from("requerimientos")
+      .insert({
+        pipeline,
+        nombre_producto: `${item.producto} — ${trackingId}`,
+        cantidad,
+        pais_acento: pais,
+        encargado_id: encargadoId,
+        estado: encargadoId ? "En progreso" : "Nuevo pedido",
+        ingreso_id: ingresoId,
+        carpeta_drive_url: drive?.proyectoFolderUrl ?? null,
+      })
+      .select("id, nombre_producto")
+      .single();
+    if (eCreado || !creado) continue;
 
-    const { data: creados } = await supabase.from("requerimientos").insert(rows).select("id, nombre_producto");
+    if (cantidad > 1) {
+      await supabase.from("requerimiento_unidades").insert(
+        Array.from({ length: cantidad }, (_, i) => ({ requerimiento_id: creado.id, unidad_numero: i + 1 })),
+      );
+    }
 
     // La campanita: antes solo se avisaba del ingreso (a CEO/Comercial),
     // nunca de que existe un requerimiento nuevo por trabajar. Si ya tiene
     // encargado (landing), le llega a esa persona; si no, le llega a la
     // Directora Operativa para que lo agende/asigne.
-    for (const r of creados ?? []) {
-      const destinatario = encargadoId ?? directoraId;
-      if (!destinatario) continue;
+    const destinatario = encargadoId ?? directoraId;
+    if (destinatario) {
+      const cantidadTexto = cantidad > 1 ? ` (x${cantidad})` : "";
       await notify(
         supabase,
         destinatario,
         "asignado",
         encargadoId
-          ? `Se te asignó un nuevo requerimiento: ${r.nombre_producto}`
-          : `Nuevo requerimiento sin asignar: ${r.nombre_producto}`,
-        `/requerimientos/${r.id}`,
+          ? `Se te asignó un nuevo requerimiento: ${creado.nombre_producto}${cantidadTexto}`
+          : `Nuevo requerimiento sin asignar: ${creado.nombre_producto}${cantidadTexto}`,
+        `/requerimientos/${creado.id}`,
       );
     }
   }

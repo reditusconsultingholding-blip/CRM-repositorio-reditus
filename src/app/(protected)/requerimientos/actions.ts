@@ -9,6 +9,57 @@ import type { RequerimientoEstado, Pipeline, PruebaSocialEstado, RequerimientoPa
 
 type ActionResult = { error?: string } | undefined;
 
+export async function deleteRequerimiento(id: string): Promise<ActionResult> {
+  try {
+    await requireProfile();
+    const supabase = await createClient();
+    const { error } = await supabase.from("requerimientos").delete().eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/requerimientos");
+    revalidatePath("/flujo");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
+/** Cuando el pedido es "10 videos" o "20 landing pages" en una sola línea,
+ * el requerimiento sigue siendo uno solo — esto trackea cada unidad
+ * individual (cuál ya está lista y su link) dentro del mismo. */
+export async function marcarUnidadCompletada(unidadId: string, completado: boolean): Promise<ActionResult> {
+  try {
+    await requireProfile();
+    const supabase = await createClient();
+    const { error } = await supabase.from("requerimiento_unidades").update({ completado }).eq("id", unidadId);
+    if (error) return { error: error.message };
+    revalidatePath("/requerimientos");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
+export async function actualizarUnidadCampo(
+  unidadId: string,
+  campo: "link_entrega" | "notas",
+  valor: string,
+): Promise<ActionResult> {
+  try {
+    await requireProfile();
+    if (campo !== "link_entrega" && campo !== "notas") return { error: "Campo no permitido." };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("requerimiento_unidades")
+      .update({ [campo]: valor.trim() || null })
+      .eq("id", unidadId);
+    if (error) return { error: error.message };
+    revalidatePath("/requerimientos");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
 export async function updatePruebaSocial(id: string, estado: PruebaSocialEstado): Promise<ActionResult> {
   try {
     const profile = await requireProfile();
