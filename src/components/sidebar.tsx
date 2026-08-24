@@ -17,6 +17,7 @@ import {
   Settings,
   LogOut,
   Flame,
+  ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/(protected)/actions";
@@ -40,6 +41,7 @@ const ALL_LINKS = [
   { href: "/whatsapp", label: "WhatsApp Business", icon: MessageCircle, roles: INGRESOS_ROLES },
   { href: "/admin/usuarios", label: "Usuarios", icon: Users, roles: ADMIN_ROLES },
   { href: "/flujo", label: "Flujo de trabajo", icon: Workflow, roles: null },
+  { href: "/checklist", label: "Checklist", icon: ListChecks, roles: null },
   { href: "/reto75", label: "Reto 75 Hard", icon: Flame, roles: null },
   { href: "/ayuda", label: "¿Cómo funciona?", icon: HelpCircle, roles: null },
 ] as const;
