@@ -71,7 +71,7 @@ export default async function IngresosPage() {
       .select(
         "id, tracking_id, fecha, estado, servicio, pais, producto, precio_total, precio_final_descuento, comision_plataforma, plataforma_pago, comprobante_pago_url, comprobante_pago_nombre, recordatorio_fecha, recordatorio_nota, recordatorio_enviado, referido_por_client_id, comision_referido, modalidad_pago, monto_pagado, fecha_compromiso_saldo, moneda, estado_pago, estado_comercial, cotizacion_numero, cuenta_cobro_numero, responsable_id, client:clients!ingresos_client_id_fkey(name, whatsapp_number, tax_id), responsable:users(name), referido:clients!ingresos_referido_por_client_id_fkey(name, whatsapp_number), ingreso_items(servicio, producto, cantidad, precio_unitario)",
       )
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: true })
       .returns<IngresoRow[]>(),
     supabase.from("users").select("id, name").eq("active", true).order("name"),
   ]);
