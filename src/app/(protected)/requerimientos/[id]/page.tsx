@@ -133,11 +133,21 @@ export default async function RequerimientoDetailPage({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-xs text-muted-foreground">País (acento/voz)</p>
-              <p>{requerimiento.pais_acento ?? "—"}</p>
+              <InlineTextCell
+                requerimientoId={id}
+                campo="pais_acento"
+                valor={requerimiento.pais_acento}
+                placeholder="Ej. Colombia"
+              />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Entrega prometida</p>
-              <p>{requerimiento.f_entrega_prometida ?? "—"}</p>
+              <InlineTextCell
+                requerimientoId={id}
+                campo="f_entrega_prometida"
+                valor={requerimiento.f_entrega_prometida}
+                type="date"
+              />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Carpeta de Drive (videos/archivos terminados)</p>

@@ -63,11 +63,12 @@ export async function GET(
 
   const numero =
     documentoTipo === "cuenta_cobro" ? ingreso.cuenta_cobro_numero : ingreso.cotizacion_numero;
+  const nombreArchivo = documentoTipo === "cuenta_cobro" ? "factura" : "cotizacion";
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${documentoTipo}-${numero ?? ingreso.tracking_id}.pdf"`,
+      "Content-Disposition": `attachment; filename="${nombreArchivo}-${numero ?? ingreso.tracking_id}.pdf"`,
     },
   });
 }

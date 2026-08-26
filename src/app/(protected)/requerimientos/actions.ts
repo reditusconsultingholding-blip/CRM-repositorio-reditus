@@ -106,6 +106,8 @@ const CAMPOS_TEXTO_EDITABLES = [
   "oferta_precios",
   "link_producto_imagen",
   "link_pagina_subida",
+  "f_entrega_prometida",
+  "pais_acento",
 ] as const;
 export type CampoTextoRequerimiento = (typeof CAMPOS_TEXTO_EDITABLES)[number];
 
