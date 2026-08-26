@@ -25,6 +25,11 @@ export type Reto75Dia = {
   agua: boolean;
   lectura: boolean;
   foto_url: string | null;
+  dieta_at?: string | null;
+  entreno1_at?: string | null;
+  entreno2_outdoor_at?: string | null;
+  agua_at?: string | null;
+  lectura_at?: string | null;
 };
 
 type Run = { id: string; numero_intento: number; fecha_inicio: string; estado: string };

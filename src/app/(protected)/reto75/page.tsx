@@ -2,6 +2,7 @@ import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Reto75Grid, type Reto75Dia } from "@/components/reto75/reto75-grid";
 import { StartReto75Button } from "@/components/reto75/start-reto75-button";
+import { Reto75DashboardButton } from "@/components/reto75/reto75-dashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LiveSync } from "@/components/live-sync";
 import { Flame } from "lucide-react";
@@ -28,7 +29,9 @@ export default async function Reto75Page() {
   const { data: dias } = run
     ? await supabase
         .from("reto75_dias")
-        .select("id, dia_numero, fecha, dieta, entreno1, entreno2_outdoor, agua, lectura, foto_url")
+        .select(
+          "id, dia_numero, fecha, dieta, entreno1, entreno2_outdoor, agua, lectura, foto_url, dieta_at, entreno1_at, entreno2_outdoor_at, agua_at, lectura_at",
+        )
         .eq("run_id", run.id)
         .order("dia_numero", { ascending: true })
         .returns<Reto75Dia[]>()
@@ -51,7 +54,10 @@ export default async function Reto75Page() {
           </h1>
           <p className="text-sm text-muted-foreground">75 días, sin excepciones — si falla un día, se reinicia.</p>
         </div>
-        <LiveSync tables={["reto75_dias", "reto75_runs"]} />
+        <div className="flex items-center gap-3">
+          {run && <Reto75DashboardButton dias={dias ?? []} />}
+          <LiveSync tables={["reto75_dias", "reto75_runs"]} />
+        </div>
       </div>
 
       {!run ? (

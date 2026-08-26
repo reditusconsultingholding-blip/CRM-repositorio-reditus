@@ -81,9 +81,15 @@ export async function marcarDiaCampo(diaId: string, campo: CampoDia, valor: bool
     if (!CAMPOS_DIA.includes(campo)) return { error: "Campo no permitido." };
     const supabase = await createClient();
 
+    // Guarda a qué hora se marcó cada regla — no se muestra en el
+    // checklist del día, es la materia prima del Dashboard de estabilidad.
     const { error } = await supabase
       .from("reto75_dias")
-      .update({ [campo]: valor, updated_at: new Date().toISOString() })
+      .update({
+        [campo]: valor,
+        [`${campo}_at`]: valor ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", diaId);
     if (error) return { error: error.message };
 
