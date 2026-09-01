@@ -332,7 +332,9 @@ export function DocumentoReditus({
             </View>
             {lineas.map((linea, i) => (
               <View key={i} style={styles.tableRow}>
-                <Text style={styles.tableCell}>{linea.producto}</Text>
+                <Text style={styles.tableCell}>
+                  {linea.servicio ? `${linea.servicio} — ${linea.producto}` : linea.producto}
+                </Text>
                 <Text style={styles.tableCell}>{linea.cantidad}</Text>
                 <Text style={styles.tableCell}>{formatMoney(linea.precio_unitario, moneda)}</Text>
                 <Text style={styles.tableCell}>
