@@ -27,12 +27,7 @@ export default async function DashboardPage() {
     ingresosMes,
     entregasDelMes,
     recordatoriosDelMes,
-    videoAbiertos,
-    landingAbiertos,
-    claudeAbiertos,
-    videoTotal,
-    landingTotal,
-    claudeTotal,
+    pipelineCounts,
     usdCop,
   ] = await Promise.all([
     canSeeIngresos
@@ -69,33 +64,23 @@ export default async function DashboardPage() {
           .gte("recordatorio_fecha", monthStart)
           .lt("recordatorio_fecha", monthEnd)
       : Promise.resolve({ data: [] }),
-    supabase
-      .from("requerimientos")
-      .select("id", { count: "exact", head: true })
-      .eq("pipeline", "video")
-      .not("estado", "in", '("ENTREGADO","Terminado")'),
-    supabase
-      .from("requerimientos")
-      .select("id", { count: "exact", head: true })
-      .eq("pipeline", "landing")
-      .not("estado", "in", '("ENTREGADO","Terminado")'),
-    supabase
-      .from("requerimientos")
-      .select("id", { count: "exact", head: true })
-      .eq("pipeline", "claude")
-      .not("estado", "in", '("ENTREGADO","Terminado")'),
-    supabase
-      .from("requerimientos")
-      .select("id", { count: "exact", head: true })
-      .eq("pipeline", "video"),
-    supabase
-      .from("requerimientos")
-      .select("id", { count: "exact", head: true })
-      .eq("pipeline", "landing"),
-    supabase
-      .from("requerimientos")
-      .select("id", { count: "exact", head: true })
-      .eq("pipeline", "claude"),
+    // Un card por pipeline, generado desde PIPELINES en vez de una
+    // consulta hardcodeada por cada uno — así un pipeline nuevo (ej.
+    // "Imágenes Ads") aparece solo, sin tener que acordarse de duplicar
+    // esto en cuatro sitios distintos.
+    Promise.all(
+      PIPELINES.map(async (p) => {
+        const [abiertos, total] = await Promise.all([
+          supabase
+            .from("requerimientos")
+            .select("id", { count: "exact", head: true })
+            .eq("pipeline", p.value)
+            .not("estado", "in", '("ENTREGADO","Terminado")'),
+          supabase.from("requerimientos").select("id", { count: "exact", head: true }).eq("pipeline", p.value),
+        ]);
+        return { pipeline: p.value, label: p.label, abiertos: abiertos.count ?? 0, total: total.count ?? 0 };
+      }),
+    ),
     getUsdCopRate(),
   ]);
 
@@ -166,7 +151,7 @@ export default async function DashboardPage() {
         <LiveSync tables={["ingresos", "requerimientos"]} />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {canSeeIngresos && (
           <Card>
             <CardHeader>
@@ -199,39 +184,17 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         )}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Videos en curso
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold">{videoAbiertos.count ?? 0}</p>
-            <p className="text-sm text-muted-foreground">de {videoTotal.count ?? 0} totales</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Landing pages en curso
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold">{landingAbiertos.count ?? 0}</p>
-            <p className="text-sm text-muted-foreground">de {landingTotal.count ?? 0} totales</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Claude en curso
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-semibold">{claudeAbiertos.count ?? 0}</p>
-            <p className="text-sm text-muted-foreground">de {claudeTotal.count ?? 0} totales</p>
-          </CardContent>
-        </Card>
+        {pipelineCounts.map((p) => (
+          <Card key={p.pipeline}>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{p.label} en curso</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-semibold">{p.abiertos}</p>
+              <p className="text-sm text-muted-foreground">de {p.total} totales</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {canSeeIngresos && <RevenueExplorer />}

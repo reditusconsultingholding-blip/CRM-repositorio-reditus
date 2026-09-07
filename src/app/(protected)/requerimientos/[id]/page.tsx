@@ -16,6 +16,7 @@ import {
   REQUERIMIENTO_TERMINADOS,
   getNextEstado,
   type RequerimientoEstado,
+  type Pipeline,
 } from "@/lib/statuses";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -79,7 +80,7 @@ export default async function RequerimientoDetailPage({
   const client = ingresoJoin ? (Array.isArray(ingresoJoin.client) ? ingresoJoin.client[0] : ingresoJoin.client) : null;
 
   const nextEstado = getNextEstado(
-    requerimiento.pipeline as "video" | "landing" | "claude",
+    requerimiento.pipeline as Pipeline,
     requerimiento.estado as RequerimientoEstado,
   );
 

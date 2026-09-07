@@ -4,11 +4,12 @@ import { REQUERIMIENTO_TERMINADOS } from "@/lib/statuses";
 
 const TERMINADOS_FILTER = `(${REQUERIMIENTO_TERMINADOS.map((e) => `"${e}"`).join(",")})`;
 
-export type FlujoItemRole = "comercial" | "operativa" | "landing" | "video" | "claude" | "programador";
+export type FlujoItemRole = "comercial" | "operativa" | "landing" | "video" | "claude" | "imagenes_ads" | "programador";
 
-function roleForPipeline(pipeline: string): "video" | "landing" | "claude" {
+function roleForPipeline(pipeline: string): "video" | "landing" | "claude" | "imagenes_ads" {
   if (pipeline === "video") return "video";
   if (pipeline === "claude") return "claude";
+  if (pipeline === "imagenes_ads") return "imagenes_ads";
   return "landing";
 }
 

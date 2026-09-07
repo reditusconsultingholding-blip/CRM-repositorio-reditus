@@ -135,6 +135,7 @@ export const PIPELINES = [
   { value: "video", label: "Videos Creativos" },
   { value: "landing", label: "Landing Pages" },
   { value: "claude", label: "Claude" },
+  { value: "imagenes_ads", label: "Imágenes Ads" },
 ] as const;
 
 export type Pipeline = (typeof PIPELINES)[number]["value"];
@@ -142,13 +143,14 @@ export type Pipeline = (typeof PIPELINES)[number]["value"];
 // Servicios que se pueden elegir al crear un ingreso — un desplegable
 // cerrado en vez de texto libre, así el sistema sabe con certeza qué
 // requerimiento crear (antes se adivinaba por palabras clave del texto).
-export const INGRESO_SERVICIOS = ["Videos IA", "Landing page", "Claude"] as const;
+export const INGRESO_SERVICIOS = ["Videos IA", "Landing page", "Claude", "Imágenes Ads"] as const;
 export type IngresoServicio = (typeof INGRESO_SERVICIOS)[number];
 
 export const SERVICIO_TO_PIPELINE: Record<IngresoServicio, Pipeline> = {
   "Videos IA": "video",
   "Landing page": "landing",
   Claude: "claude",
+  "Imágenes Ads": "imagenes_ads",
 };
 
 // Secuencia "normal" de avance por pipeline, para el botón de "pasar a la
@@ -159,6 +161,7 @@ export const PIPELINE_FLOW: Record<Pipeline, RequerimientoEstado[]> = {
   video: ["Nuevo pedido", "En progreso", "Por revisión", "Terminado", "ENTREGADO"],
   landing: ["Nuevo pedido", "En progreso", "Por revisión", "POR SUBIR", "Terminado", "ENTREGADO"],
   claude: ["Nuevo pedido", "En progreso", "Por revisión", "Terminado", "ENTREGADO"],
+  imagenes_ads: ["Nuevo pedido", "En progreso", "Por revisión", "Terminado", "ENTREGADO"],
 };
 
 export function getNextEstado(

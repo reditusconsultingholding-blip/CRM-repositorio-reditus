@@ -14,6 +14,7 @@ const ROLE_COLOR: Record<Role, string> = {
   landing: "#7a3a9c",
   video: "#b5305c",
   claude: "#c26b1f",
+  imagenes_ads: "#1f9c8f",
   programador: "#2a7a9c",
   todos: "#5b6478",
 };
@@ -25,6 +26,7 @@ const ROLE_LABEL: Record<Role, string> = {
   landing: "Diseñador(a) Landing",
   video: "Editor de Video",
   claude: "Encargado(a) Claude",
+  imagenes_ads: "Diseño de Ads",
   programador: "Programador",
   todos: "Cualquiera",
 };
