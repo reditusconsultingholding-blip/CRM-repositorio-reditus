@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Fingerprint, KeyRound, MailCheck } from "lucide-react";
 import { entrar, enviarRecuperacion, createPasswordAndSignIn, validarSesionHuella } from "./actions";
 import { LoginMarco } from "./marco";
+import { EntrarGoogle } from "./google";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -297,6 +298,7 @@ function Formulario() {
         <KeyRound className="mt-0.5 size-3.5 shrink-0 text-[#5cc8ff]" />
         ¿Primera vez? Escribe tu correo y toca Entrar: te pedimos crear tu contraseña.
       </p>
+      <EntrarGoogle />
     </form>
   );
 }

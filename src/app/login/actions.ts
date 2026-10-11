@@ -205,3 +205,30 @@ export async function validarSesionHuella(): Promise<{ ok: boolean }> {
   }
   return { ok: true };
 }
+
+/** Ingreso con Google: se comprueba el token de Google, se busca el usuario del CRM
+ * con ese correo (o su alias) y, solo si existe y está activo, se le abre la sesión.
+ * Nunca crea usuarios: quien no esté registrado no entra. */
+export async function entrarConGoogle(credential: string): Promise<{ error: string } | undefined> {
+  const { correoDeGoogle } = await import("@/lib/google-token");
+  const { GOOGLE_ALIAS } = await import("@/lib/google-login");
+
+  const correoGoogle = await correoDeGoogle(String(credential ?? ""));
+  if (!correoGoogle) return { error: "No pudimos comprobar tu cuenta de Google. Intenta de nuevo." };
+  const email = GOOGLE_ALIAS[correoGoogle] ?? correoGoogle;
+
+  const admin = createAdminClient();
+  const { data: perfil } = await admin.from("users").select("id, active").eq("email", email).maybeSingle();
+  if (!perfil) return { error: `La cuenta ${correoGoogle} no está registrada en el CRM. Pídele acceso al administrador.` };
+  if (!perfil.active) return { error: "Esta cuenta está desactivada. Contacta al administrador." };
+
+  const { data: enlace, error: errEnlace } = await admin.auth.admin.generateLink({ type: "magiclink", email });
+  const token_hash = enlace?.properties?.hashed_token;
+  if (errEnlace || !token_hash) return { error: "No se pudo iniciar sesión por un problema del servidor. Intenta de nuevo en unos segundos." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({ token_hash, type: "magiclink" });
+  if (error) return { error: "No se pudo iniciar sesión por un problema del servidor. Intenta de nuevo en unos segundos." };
+
+  redirect("/dashboard");
+}
