@@ -9,7 +9,20 @@ import { INGRESOS_ROLES, ADMIN_ROLES, PULSO_ROLES } from "@/lib/roles";
 // /encuesta: el cliente abre este link sin haber iniciado sesión.
 // /api/health: monitoreo externo (UptimeRobot y similares) sin sesión.
 // /api/whatsapp/webhook: Meta llama esta ruta directamente, sin sesión.
-const PUBLIC_PATHS = ["/login", "/api/cron", "/encuesta", "/api/health", "/api/whatsapp/webhook"];
+// /icon, /apple-icon, /icon-192, /icon-512 y /manifest.webmanifest: el ícono de la pestaña y el
+// de la app instalada se piden sin sesión (desde la propia pantalla de ingreso). Sin este
+// permiso el middleware los mandaba a /login y la pestaña quedaba sin ícono.
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/cron",
+  "/encuesta",
+  "/api/health",
+  "/api/whatsapp/webhook",
+  "/icon",
+  "/apple-icon",
+  "/manifest.webmanifest",
+  "/sw.js",
+];
 // INGRESOS_ROLES/ADMIN_ROLES vienen de lib/roles.ts (antes eran una copia
 // hardcodeada aparte, aquí mismo, que se desincronizó — directora_operativa
 // ya tenía acceso en el resto de la app pero el middleware seguía
