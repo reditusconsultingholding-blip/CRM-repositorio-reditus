@@ -6,6 +6,7 @@ import { ChangeEmailForm } from "@/components/perfil/change-email-form";
 import { EditProfileForm } from "@/components/perfil/edit-profile-form";
 import { PushToggle } from "@/components/perfil/push-toggle";
 import { TotpCodeDisplay } from "@/components/perfil/totp-code-display";
+import { PasskeyCard } from "@/components/perfil/passkey-card";
 
 export default async function PerfilPage() {
   const profile = await requireProfile();
@@ -29,6 +30,15 @@ export default async function PerfilPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Entrar con huella o PIN</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PasskeyCard />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

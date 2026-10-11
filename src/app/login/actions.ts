@@ -187,3 +187,21 @@ export async function cambiarClave(_prev: { error?: string } | undefined, formDa
 
   redirect("/dashboard");
 }
+
+/** El ingreso con huella abre la sesión directo en el navegador, sin pasar
+ * por `entrar`. Antes de dejar pasar se confirma aquí que la cuenta exista
+ * y siga activa; si no, se cierra la sesión recién abierta. */
+export async function validarSesionHuella(): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  const { data: perfil } = await createAdminClient().from("users").select("active").eq("id", user.id).maybeSingle();
+  if (!perfil?.active) {
+    await supabase.auth.signOut();
+    return { ok: false };
+  }
+  return { ok: true };
+}
