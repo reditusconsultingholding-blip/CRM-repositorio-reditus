@@ -19,7 +19,13 @@ export function AppSwitcher() {
 
   return (
     <header className="sticky top-0 z-40 flex h-11 w-full shrink-0 items-center justify-center border-b bg-background/95 px-4 backdrop-blur">
-      <nav aria-label="Cambiar de aplicación" className="flex items-center gap-1 rounded-lg bg-muted p-1">
+      <nav aria-label="Cambiar de aplicación" className="relative grid grid-cols-2 rounded-lg bg-muted p-1">
+        {/* Pastilla que se desliza a la opción activa (cada opción ocupa la mitad) */}
+        <span
+          aria-hidden="true"
+          className="rd-pastilla absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-md bg-background shadow-sm"
+          style={{ transform: pathname.startsWith("/pulso") ? "translateX(100%)" : "none" }}
+        />
         {APPS.map((app) => {
           const Icon = app.icon;
           const activa = app.activa(pathname);
@@ -29,8 +35,8 @@ export function AppSwitcher() {
               href={app.href}
               aria-current={activa ? "page" : undefined}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-4 py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                activa && "bg-background text-foreground shadow-sm",
+                "relative z-10 flex items-center justify-center gap-1.5 rounded-md px-5 py-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                activa && "text-foreground",
               )}
             >
               <Icon className="size-3.5" />

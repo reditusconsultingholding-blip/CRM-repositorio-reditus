@@ -137,3 +137,130 @@
     @apply font-sans;
   }
 }
+/* ---------- Movimiento (tokens fijos, 11-oct-2026) ----------
+   micro 0,18 s · entradas 0,5 s · viajes 0,42 s. Todo con transform/opacity
+   y apagado con prefers-reduced-motion. */
+:root {
+  --rd-suave: cubic-bezier(0.22, 1, 0.36, 1);
+  --rd-ida-vuelta: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@keyframes rd-sube {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rd-funde {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Cada pantalla del CRM entra con un fundido corto al cambiar de ruta */
+.rd-entra { animation: rd-funde 0.34s var(--rd-suave) both; }
+
+/* Cascada: los hijos directos entran uno tras otro (máx. 6 con retardo) */
+.rd-cascada > * { animation: rd-sube 0.5s var(--rd-suave) both; }
+.rd-cascada > :nth-child(2) { animation-delay: 0.08s; }
+.rd-cascada > :nth-child(3) { animation-delay: 0.16s; }
+.rd-cascada > :nth-child(4) { animation-delay: 0.24s; }
+.rd-cascada > :nth-child(5) { animation-delay: 0.32s; }
+.rd-cascada > :nth-child(n + 6) { animation-delay: 0.4s; }
+
+/* Paso del formulario de ingreso: lo nuevo aparece fundido, sin salto */
+.rd-paso { animation: rd-funde 0.3s var(--rd-suave) both; }
+
+/* Selector CRM / Pulso: la pastilla se desliza de una opción a la otra */
+.rd-pastilla {
+  transition: transform 0.42s var(--rd-ida-vuelta);
+}
+
+/* ---------- Pantalla de ingreso ---------- */
+.rd-login-fondo {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(125, 180, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 180, 255, 0.07) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 45%, #000 30%, transparent 100%);
+}
+.rd-login-luz {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(620px 420px at 18% 12%, rgba(0, 114, 255, 0.34), transparent 65%),
+    radial-gradient(520px 420px at 86% 92%, rgba(0, 198, 255, 0.2), transparent 62%);
+}
+.rd-login-caja {
+  box-shadow:
+    0 0 0 1px rgba(0, 114, 255, 0.12),
+    0 30px 80px -30px rgba(0, 114, 255, 0.55);
+}
+.rd-login-boton {
+  background-image: linear-gradient(90deg, #0072ff, #00c6ff);
+  color: #fff;
+  border: 0;
+  transition: transform 0.18s var(--rd-suave), box-shadow 0.18s var(--rd-suave), filter 0.18s var(--rd-suave);
+  box-shadow: 0 10px 30px -12px rgba(0, 150, 255, 0.9);
+}
+.rd-login-boton:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.rd-login-boton:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+.rd-login input:-webkit-autofill {
+  -webkit-text-fill-color: #fff;
+  box-shadow: 0 0 0 1000px #101b38 inset;
+  caret-color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-entra, .rd-cascada > *, .rd-paso { animation: none; }
+  .rd-pastilla, .rd-login-boton { transition: none; }
+}
+
+/* Pantalla de ingreso · marca a gran tamaño, escáner y esquinas */
+.rd-login-marca {
+  font-size: clamp(4rem, 11.5vw, 10.5rem);
+  background: linear-gradient(180deg, #ffffff 20%, #8fb8ff 62%, #2b7bff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 46px rgba(0, 114, 255, 0.45));
+}
+.rd-login-punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.18), 0 0 14px #34d399;
+  animation: rd-late 2s ease-in-out infinite;
+}
+@keyframes rd-late {
+  50% { opacity: 0.45; }
+}
+.rd-login-escaner {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 38vh;
+  background: linear-gradient(180deg, transparent, rgba(0, 150, 255, 0.09) 70%, rgba(92, 200, 255, 0.28) 99%, transparent);
+  animation: rd-escanea 7s linear infinite;
+  pointer-events: none;
+}
+@keyframes rd-escanea {
+  from { transform: translateY(-40vh); }
+  to { transform: translateY(105vh); }
+}
+.rd-login-entra { animation: rd-sube 0.6s var(--rd-suave) 0.18s both; }
+.rd-login-esq {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: #00c6ff;
+  border-style: solid;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.rd-login-esq.a { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-top-left-radius: 1.5rem; }
+.rd-login-esq.b { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-bottom-right-radius: 1.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .rd-login-punto, .rd-login-escaner, .rd-login-entra { animation: none; }
+  .rd-login-escaner { display: none; }
+}

@@ -1,6 +1,7 @@
 import { requireProfile } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { AppSwitcher } from "@/components/app-switcher";
+import { PageTransition } from "@/components/page-transition";
 import { PULSO_ROLES } from "@/lib/roles";
 
 export default async function ProtectedLayout({
@@ -22,7 +23,9 @@ export default async function ProtectedLayout({
       {conPulso && <AppSwitcher />}
       <div className="flex w-full flex-1">
         <Sidebar role={profile.role} name={profile.name} userId={profile.id} avatarUrl={profile.avatar_url} />
-        <main className="mx-auto w-full max-w-6xl flex-1 p-6">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 p-6">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </div>
     </div>
   );

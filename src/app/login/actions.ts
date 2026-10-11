@@ -112,3 +112,78 @@ export async function createPasswordAndSignIn(email: string, password: string): 
 
   redirect("/dashboard");
 }
+
+// ---------- Ingreso en un solo paso + recuperación de contraseña ----------
+
+export type EntrarState = { error?: string; crear?: boolean; email?: string } | undefined;
+
+/** Correo y contraseña en la misma pantalla. Si la persona nunca ha creado
+ * contraseña, no se intenta el ingreso: se le devuelve `crear` para que la
+ * pantalla le muestre «crea tu contraseña». */
+export async function entrar(_prev: EntrarState, formData: FormData): Promise<EntrarState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email) return { error: "Escribe tu correo." };
+
+  const status = await checkEmailStatus(email);
+  if (!status.found) return { error: "Ese correo no está registrado. Pídele acceso al administrador.", email };
+  if (!status.active) return { error: "Esta cuenta está desactivada. Contacta al administrador.", email };
+  if (!status.passwordSet) return { crear: true, email };
+
+  const result = await signIn(undefined, formData);
+  return result ? { ...result, email } : undefined;
+}
+
+export type RecuperarState = { error?: string; enviado?: boolean } | undefined;
+
+/** Envía el correo de recuperación. La respuesta es la misma exista o no el
+ * correo, para no revelar quién tiene cuenta. */
+export async function enviarRecuperacion(_prev: RecuperarState, formData: FormData): Promise<RecuperarState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email) return { error: "Escribe tu correo." };
+
+  const status = await checkEmailStatus(email);
+  if (status.found && status.active) {
+    const { headers } = await import("next/headers");
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "www.crmreditusconsulting.company";
+    const proto = h.get("x-forwarded-proto") ?? "https";
+    try {
+      const supabase = await createClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${proto}://${host}/login/confirmar`,
+      });
+      if (error) {
+        if (/rate|limit|seconds/i.test(error.message)) {
+          return { error: "Ya te enviamos un correo hace un momento. Espera un minuto y vuelve a intentarlo." };
+        }
+        return { error: "No se pudo enviar el correo. Intenta de nuevo en unos segundos." };
+      }
+    } catch {
+      return { error: "No se pudo conectar con el servidor. Intenta de nuevo en unos segundos." };
+    }
+  }
+  return { enviado: true };
+}
+
+/** Último paso de la recuperación: la persona ya llegó con la sesión que
+ * abre el enlace del correo y escribe su contraseña nueva. */
+export async function cambiarClave(_prev: { error?: string } | undefined, formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (password.length < 8) return { error: "La contraseña debe tener al menos 8 caracteres." };
+  if (password !== confirm) return { error: "Las contraseñas no coinciden." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "El enlace venció o ya se usó. Pide uno nuevo desde «¿Olvidaste tu contraseña?»." };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: "No se pudo guardar la contraseña. Intenta de nuevo." };
+
+  // Por si la cuenta nunca había creado contraseña: ya la tiene.
+  await createAdminClient().from("users").update({ password_set: true }).eq("id", user.id);
+
+  redirect("/dashboard");
+}

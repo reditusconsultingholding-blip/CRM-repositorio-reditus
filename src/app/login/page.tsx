@@ -1,200 +1,279 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
-import { ArrowLeft } from "lucide-react";
-import { signIn, checkEmailStatus, createPasswordAndSignIn } from "./actions";
+import { Suspense, useActionState, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, ArrowRight, KeyRound, MailCheck } from "lucide-react";
+import { entrar, enviarRecuperacion, createPasswordAndSignIn } from "./actions";
+import { LoginMarco } from "./marco";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { InstallAppButton } from "@/components/install-app-button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 
-type Step = "email" | "password" | "crear";
+// Este navegador recuerda el correo de la última persona que entró (solo el
+// correo, nunca la contraseña): al volver ya viene escrito y el navegador
+// rellena la contraseña guardada, así que basta tocar «Entrar».
+const CLAVE_CORREO = "reditus-crm-correo";
+const CAMPO = "h-12 border-white/15 bg-white/[0.06] text-base text-white placeholder:text-white/30";
 
-export default function LoginPage() {
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [checking, startChecking] = useTransition();
+function recordar(correo: string) {
+  try {
+    window.localStorage.setItem(CLAVE_CORREO, correo);
+  } catch {
+    // almacenamiento bloqueado: se entra igual, sin recordar
+  }
+}
 
-  const [signInState, signInAction, signInPending] = useActionState(signIn, undefined);
+type Modo = "entrar" | "recuperar";
 
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [creating, startCreating] = useTransition();
+function Formulario() {
+  const aviso = useSearchParams().get("aviso");
+  const [modo, setModo] = useState<Modo>("entrar");
+  const correoRef = useRef<HTMLInputElement>(null);
+  const claveRef = useRef<HTMLInputElement>(null);
 
-  function handleEmailSubmit(e: React.FormEvent) {
+  const [estado, accionEntrar, entrando] = useActionState(entrar, undefined);
+  const [recup, accionRecuperar, enviando] = useActionState(enviarRecuperacion, undefined);
+
+  const [nueva, setNueva] = useState("");
+  const [confirma, setConfirma] = useState("");
+  const [errorCrear, setErrorCrear] = useState<string | null>(null);
+  const [creando, setCreando] = useState(false);
+
+  // Correo recordado: se escribe en el campo y el cursor queda en la contraseña.
+  useEffect(() => {
+    let guardado = "";
+    try {
+      guardado = window.localStorage.getItem(CLAVE_CORREO) ?? "";
+    } catch {
+      guardado = "";
+    }
+    if (guardado && correoRef.current && !correoRef.current.value) {
+      correoRef.current.value = guardado;
+      claveRef.current?.focus();
+    }
+  }, [modo]);
+
+  async function crear(e: React.FormEvent) {
     e.preventDefault();
-    setEmailError(null);
-    const clean = email.trim();
-    if (!clean) return;
-    startChecking(async () => {
-      const status = await checkEmailStatus(clean);
-      if (!status.found) {
-        setEmailError("Ese correo no está registrado. Pídele acceso al administrador.");
-        return;
-      }
-      if (!status.active) {
-        setEmailError("Esta cuenta está desactivada. Contacta al administrador.");
-        return;
-      }
-      setStep(status.passwordSet ? "password" : "crear");
-    });
+    setErrorCrear(null);
+    if (nueva.length < 8) return setErrorCrear("La contraseña debe tener al menos 8 caracteres.");
+    if (nueva !== confirma) return setErrorCrear("Las contraseñas no coinciden.");
+    setCreando(true);
+    const r = await createPasswordAndSignIn(estado?.email ?? "", nueva);
+    if (r?.error) setErrorCrear(r.error);
+    setCreando(false);
   }
 
-  function handleCreatePassword(e: React.FormEvent) {
-    e.preventDefault();
-    setCreateError(null);
-    if (newPassword.length < 8) {
-      setCreateError("La contraseña debe tener al menos 8 caracteres.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setCreateError("Las contraseñas no coinciden.");
-      return;
-    }
-    startCreating(async () => {
-      const result = await createPasswordAndSignIn(email.trim(), newPassword);
-      if (result?.error) setCreateError(result.error);
-    });
+  // Primera vez con este correo: crear la contraseña.
+  if (estado?.crear && estado.email) {
+    return (
+      <form key="crear" onSubmit={crear} className="rd-paso flex flex-col gap-5">
+        <Encabezado
+          titulo="Crea tu contraseña"
+          texto={`Es tu primera vez con ${estado.email}. Elige una contraseña de 8 caracteres o más.`}
+        />
+        <input
+          type="text"
+          value={estado.email}
+          readOnly
+          autoComplete="username"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+        <Campo id="nueva" etiqueta="Contraseña nueva">
+          <Input
+            id="nueva"
+            type="password"
+            required
+            minLength={8}
+            autoFocus
+            autoComplete="new-password"
+            value={nueva}
+            onChange={(e) => setNueva(e.target.value)}
+            className={CAMPO}
+          />
+        </Campo>
+        <Campo id="confirma" etiqueta="Repítela">
+          <Input
+            id="confirma"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={confirma}
+            onChange={(e) => setConfirma(e.target.value)}
+            className={CAMPO}
+          />
+        </Campo>
+        {errorCrear && <Aviso>{errorCrear}</Aviso>}
+        <Button type="submit" disabled={creando} className="rd-login-boton h-12 text-base">
+          {creando ? "Creando…" : "Crear contraseña y entrar"}
+        </Button>
+      </form>
+    );
   }
 
-  function volver() {
-    setStep("email");
-    setEmailError(null);
-    setCreateError(null);
-    setNewPassword("");
-    setConfirmPassword("");
+  if (modo === "recuperar") {
+    return (
+      <div key="recuperar" className="rd-paso flex flex-col gap-5">
+        <button
+          type="button"
+          onClick={() => setModo("entrar")}
+          className="flex w-fit items-center gap-1.5 text-xs text-white/55 transition-colors hover:text-white"
+        >
+          <ArrowLeft className="size-3.5" />
+          Volver a ingresar
+        </button>
+        {recup?.enviado ? (
+          <div className="flex flex-col gap-4">
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-[#0072ff]/20 text-[#7cc4ff]">
+              <MailCheck className="size-6" />
+            </span>
+            <Encabezado
+              titulo="Revisa tu correo"
+              texto="Si ese correo tiene cuenta en el CRM, te acaba de llegar un enlace para crear una contraseña nueva. Ábrelo en este mismo navegador. Si no lo ves, mira en spam."
+            />
+          </div>
+        ) : (
+          <form action={accionRecuperar} className="flex flex-col gap-5">
+            <Encabezado
+              titulo="Recupera tu contraseña"
+              texto="Escribe tu correo y te enviamos un enlace para crear una nueva."
+            />
+            <Campo id="correo-rec" etiqueta="Correo">
+              <Input
+                id="correo-rec"
+                ref={correoRef}
+                name="email"
+                type="email"
+                required
+                autoFocus
+                autoComplete="username"
+                placeholder="tu@correo.com"
+                className={CAMPO}
+              />
+            </Campo>
+            {recup?.error && <Aviso>{recup.error}</Aviso>}
+            <Button type="submit" disabled={enviando} className="rd-login-boton h-12 text-base">
+              {enviando ? "Enviando…" : "Enviarme el enlace"}
+            </Button>
+          </form>
+        )}
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center p-6">
-      <div className="flex w-full max-w-sm flex-col gap-4">
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center gap-2 py-4 text-center">
-            <p className="text-sm font-medium">¿Vas a usar Reditus CRM desde el celular?</p>
-            <p className="text-xs text-muted-foreground">
-              Instálala como una app antes de iniciar sesión — así te llegan notificaciones y abre más
-              rápido, sin tener que buscarla en el navegador cada vez.
-            </p>
-            <InstallAppButton />
-          </CardContent>
-        </Card>
+    <form
+      key="entrar"
+      action={accionEntrar}
+      onSubmit={() => {
+        const c = correoRef.current?.value.trim().toLowerCase();
+        if (c) recordar(c);
+      }}
+      className="rd-paso flex flex-col gap-5"
+    >
+      <Encabezado titulo="Ingresa" texto="Con tu correo y tu contraseña del equipo." />
+      {aviso === "enlace" && (
+        <Aviso>Ese enlace venció o ya se usó. Pide uno nuevo en «¿Olvidaste tu contraseña?».</Aviso>
+      )}
+      <Campo id="correo" etiqueta="Correo">
+        <Input
+          id="correo"
+          ref={correoRef}
+          name="email"
+          type="email"
+          required
+          autoFocus
+          autoComplete="username"
+          placeholder="tu@correo.com"
+          defaultValue={estado?.email ?? ""}
+          className={CAMPO}
+        />
+      </Campo>
+      <Campo
+        id="clave"
+        etiqueta="Contraseña"
+        lado={
+          <button
+            type="button"
+            onClick={() => setModo("recuperar")}
+            className="text-xs text-[#7cc4ff] transition-colors hover:text-white"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
+        }
+      >
+        <Input
+          id="clave"
+          ref={claveRef}
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          className={CAMPO}
+        />
+      </Campo>
+      {estado?.error && <Aviso>{estado.error}</Aviso>}
+      <Button type="submit" disabled={entrando} className="rd-login-boton h-12 text-base">
+        {entrando ? "Entrando…" : "Entrar"}
+        {!entrando && <ArrowRight className="size-4" />}
+      </Button>
+      <p className="flex items-start gap-2 text-xs leading-relaxed text-white/40">
+        <KeyRound className="mt-0.5 size-3.5 shrink-0 text-[#5cc8ff]" />
+        ¿Primera vez? Escribe tu correo y toca Entrar: te pedimos crear tu contraseña.
+      </p>
+    </form>
+  );
+}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Reditus CRM</CardTitle>
-            <CardDescription>
-              {step === "email" && "Escribe tu correo para empezar."}
-              {step === "password" && "Ingresa tu contraseña."}
-              {step === "crear" && "Es tu primera vez — crea tu contraseña."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {step === "email" && (
-              <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="email">Correo</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    autoFocus
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                {emailError && <p className="text-sm text-destructive">{emailError}</p>}
-                <Button type="submit" disabled={checking} className="mt-2">
-                  {checking ? "Verificando…" : "Continuar"}
-                </Button>
-              </form>
-            )}
-
-            {step === "password" && (
-              <form action={signInAction} className="flex flex-col gap-4">
-                <input type="hidden" name="email" value={email} />
-                <button
-                  type="button"
-                  onClick={volver}
-                  className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <ArrowLeft className="size-3" />
-                  {email}
-                </button>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="password">Contraseña</Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    required
-                    autoFocus
-                    autoComplete="current-password"
-                  />
-                </div>
-                {signInState?.error && <p className="text-sm text-destructive">{signInState.error}</p>}
-                <Button type="submit" disabled={signInPending} className="mt-2">
-                  {signInPending ? "Ingresando…" : "Ingresar"}
-                </Button>
-              </form>
-            )}
-
-            {step === "crear" && (
-              <form onSubmit={handleCreatePassword} className="flex flex-col gap-4">
-                <button
-                  type="button"
-                  onClick={volver}
-                  className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <ArrowLeft className="size-3" />
-                  {email}
-                </button>
-                <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
-                  Es la primera vez que entras con este correo — crea tu contraseña para poder acceder.
-                </p>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="new_password">Nueva contraseña</Label>
-                  <Input
-                    id="new_password"
-                    type="password"
-                    required
-                    minLength={8}
-                    autoFocus
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="confirm_password">Confirmar contraseña</Label>
-                  <Input
-                    id="confirm_password"
-                    type="password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                </div>
-                {createError && <p className="text-sm text-destructive">{createError}</p>}
-                <Button type="submit" disabled={creating} className="mt-2">
-                  {creating ? "Creando…" : "Crear contraseña y entrar"}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+function Encabezado({ titulo, texto }: { titulo: string; texto: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <h2 className="font-heading text-2xl font-semibold tracking-tight">{titulo}</h2>
+      <p className="text-sm leading-relaxed text-white/55">{texto}</p>
     </div>
+  );
+}
+
+function Campo({
+  id,
+  etiqueta,
+  lado,
+  children,
+}: {
+  id: string;
+  etiqueta: string;
+  lado?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor={id} className="text-white/75">
+          {etiqueta}
+        </Label>
+        {lado}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Aviso({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-lg border border-[#ff8a8a]/25 bg-[#ff8a8a]/10 px-3 py-2 text-sm text-[#ffb1b1]">
+      {children}
+    </p>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <LoginMarco>
+      <Suspense fallback={null}>
+        <Formulario />
+      </Suspense>
+    </LoginMarco>
   );
 }
