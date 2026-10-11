@@ -21,3 +21,5 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const INGRESOS_ROLES: UserRole[] = ["ceo", "gerente_comercial", "directora_operativa"];
 export const ADMIN_ROLES: UserRole[] = ["ceo"];
+// Pulso muestra ventas y conversión de los clientes: mismo criterio que Ingresos.
+export const PULSO_ROLES: UserRole[] = INGRESOS_ROLES;

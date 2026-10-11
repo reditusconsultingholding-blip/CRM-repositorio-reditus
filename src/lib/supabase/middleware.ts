@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { INGRESOS_ROLES, ADMIN_ROLES } from "@/lib/roles";
+import { INGRESOS_ROLES, ADMIN_ROLES, PULSO_ROLES } from "@/lib/roles";
 
 // /api/cron: Vercel Cron llama esta ruta sin sesión de usuario — la
 // autenticación real la hace la propia ruta con CRON_SECRET, no el
@@ -58,7 +58,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (path.startsWith("/ingresos") || path.startsWith("/admin"))) {
+  if (user && (path.startsWith("/ingresos") || path.startsWith("/admin") || path.startsWith("/pulso"))) {
     const { data: profile } = await supabase
       .from("users")
       .select("role")
@@ -68,7 +68,9 @@ export async function updateSession(request: NextRequest) {
     const role = profile?.role;
     const allowed = path.startsWith("/admin")
       ? ADMIN_ROLES.includes(role)
-      : INGRESOS_ROLES.includes(role);
+      : path.startsWith("/pulso")
+        ? PULSO_ROLES.includes(role)
+        : INGRESOS_ROLES.includes(role);
 
     if (!allowed) {
       const url = request.nextUrl.clone();

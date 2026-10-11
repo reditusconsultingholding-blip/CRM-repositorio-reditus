@@ -61,7 +61,7 @@ export function Sidebar({
   const links = ALL_LINKS.filter((l) => !l.roles || (l.roles as readonly string[]).includes(role));
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r bg-background">
+    <aside className="sticky top-[var(--app-bar,0px)] flex h-[calc(100vh-var(--app-bar,0px))] w-60 shrink-0 flex-col border-r bg-background">
       <div className="flex h-14 items-center justify-between gap-2 border-b px-4">
         <span className="font-heading text-base font-semibold tracking-tight">Reditus CRM</span>
         <NotificationBell userId={userId} />
