@@ -9,7 +9,13 @@ type ActionResult = { error?: string } | undefined;
 export async function updateProspectoEstado(id: string, estado: ProspectoEstado): Promise<ActionResult> {
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from("prospectos").update({ estado }).eq("id", id);
+    // Los prospectos del embudo de prospección cambian de etapa con
+    // `cambiarEtapa` (prospeccion-actions.ts), que mantiene el jsonb al día.
+    const { error } = await supabase
+      .from("prospectos")
+      .update({ estado })
+      .eq("id", id)
+      .neq("origen", "prospeccion");
     if (error) return { error: error.message };
     revalidatePath("/prospectos");
     return {};

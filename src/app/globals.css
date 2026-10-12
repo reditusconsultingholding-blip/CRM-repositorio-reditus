@@ -49,81 +49,99 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  /* Identidad de marca Reditus: azul #0449ae, blanco, negro. */
-  --primary: #0449ae;
+  /* Identidad Reditus: azul noche, degradado azul→cian (el mismo del login
+     y de Pulso). Los grises llevan un punto de azul para que nada se vea
+     plano. */
+  --background: #f2f5fb;
+  --foreground: #0b1020;
+  --card: #ffffff;
+  --card-foreground: #0b1020;
+  --popover: #ffffff;
+  --popover-foreground: #0b1020;
+  --primary: #0553c9;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: #0449ae;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #0449ae;
+  --secondary: #e8eefb;
+  --secondary-foreground: #14213f;
+  --muted: #eaf0fa;
+  --muted-foreground: #53628a;
+  --accent: #e3ecfd;
+  --accent-foreground: #0b1b44;
+  --destructive: #c62828;
+  --border: #d8e1f2;
+  --input: #c9d5ec;
+  --ring: #0a84ff;
+  --chart-1: #0072ff;
+  --chart-2: #00a8e8;
+  --chart-3: #0b8a5c;
+  --chart-4: #946a00;
+  --chart-5: #5f6f96;
+  --radius: 0.75rem;
+  --sidebar: #060a14;
+  --sidebar-foreground: #eaf0ff;
+  --sidebar-primary: #0072ff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: #0449ae;
+  --sidebar-accent: #101a33;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #00c6ff;
 
-  /* Tono de marca disponible para usos puntuales (ej. fines de semana en
-     el calendario) — un azul más claro derivado del mismo #0449ae. */
   --brand-blue: #0449ae;
   --brand-blue-tint: #e6ecfa;
+
+  /* Piezas de la interfaz «tecnológica» */
+  --rd-azul: #0072ff;
+  --rd-cian: #00a8e8;
+  --rd-noche: #060a14;
+  --rd-grad: linear-gradient(90deg, #0072ff, #00c6ff);
+  --rd-grad-boton: linear-gradient(100deg, #0449ae, #0072ff);
+  --rd-rejilla: rgba(13, 30, 80, 0.045);
+  --rd-brillo: 12%;
+  --rd-sombra: 0 14px 30px -24px rgba(0, 90, 255, 0.55);
+  color-scheme: light;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: #4d7fd9;
+  --background: #050912;
+  --foreground: #eaf0ff;
+  --card: #0a1122;
+  --card-foreground: #eef3ff;
+  --popover: #0d1528;
+  --popover-foreground: #eef3ff;
+  --primary: #4d9bff;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #4d7fd9;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: #4d7fd9;
+  --secondary: #141f3a;
+  --secondary-foreground: #eaf0ff;
+  --muted: #111a31;
+  --muted-foreground: #a3b1d3;
+  --accent: #16233f;
+  --accent-foreground: #ffffff;
+  --destructive: #ff6b81;
+  --border: #1f2c4f;
+  --input: #2a3961;
+  --ring: #22b8ff;
+  --chart-1: #2f8bff;
+  --chart-2: #22d3ee;
+  --chart-3: #34d399;
+  --chart-4: #fbbf24;
+  --chart-5: #93a5cf;
+  --sidebar: #060a14;
+  --sidebar-foreground: #eaf0ff;
+  --sidebar-primary: #2f8bff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: #4d7fd9;
+  --sidebar-accent: #101a33;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #22d3ee;
 
-  --brand-blue: #4d7fd9;
-  --brand-blue-tint: #1c2b47;
+  --brand-blue: #4d9bff;
+  --brand-blue-tint: #12213f;
+
+  --rd-azul: #2f6bff;
+  --rd-cian: #22d3ee;
+  --rd-rejilla: rgba(255, 255, 255, 0.045);
+  --rd-brillo: 17%;
+  --rd-sombra: 0 14px 34px -22px rgba(47, 107, 255, 0.8);
+  color-scheme: dark;
 }
 
 @layer base {
@@ -264,3 +282,240 @@
   .rd-login-punto, .rd-login-escaner, .rd-login-entra { animation: none; }
   .rd-login-escaner { display: none; }
 }
+
+/* ============================================================
+   CRM «tecnológico» (11-oct-2026) · misma identidad que el login
+   y Pulso: barra lateral azul noche, barra superior de cristal,
+   contenido sobre rejilla con brillo y tarjetas tipo placa.
+   Va en @layer components para que cualquier utilidad de Tailwind
+   puesta en una pantalla siga ganando.
+   ============================================================ */
+@layer components {
+  /* Fondo del área de trabajo: brillo arriba a la derecha + rejilla */
+  .rd-cuerpo {
+    background-color: var(--background);
+    background-image:
+      radial-gradient(900px 420px at 88% -6%, color-mix(in srgb, var(--rd-azul) var(--rd-brillo), transparent), transparent 62%),
+      linear-gradient(var(--rd-rejilla) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rd-rejilla) 1px, transparent 1px);
+    background-size: auto, 56px 56px, 56px 56px;
+  }
+
+  /* Barra lateral: siempre de noche, con un brillo azul en la esquina */
+  .rd-lado {
+    background-color: var(--rd-noche);
+    background-image: radial-gradient(120% 40% at 0% 0%, rgba(0, 114, 255, 0.28), transparent 70%);
+    color: #fff;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .rd-lado-titulo {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.42);
+    padding: 0 0.6rem 0.35rem;
+  }
+  .rd-lado-enlace {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    border-radius: 0.65rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.845rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.68);
+    transition: background-color 0.18s var(--rd-suave), color 0.18s var(--rd-suave);
+  }
+  .rd-lado-enlace:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+  .rd-lado-enlace svg { color: rgba(255, 255, 255, 0.5); transition: color 0.18s var(--rd-suave); }
+  .rd-lado-enlace:hover svg { color: #7cc4ff; }
+  .rd-lado-enlace[aria-current="page"] {
+    color: #fff;
+    background: linear-gradient(90deg, rgba(0, 114, 255, 0.3), rgba(0, 198, 255, 0.06));
+    box-shadow: inset 2px 0 0 #00c6ff;
+  }
+  .rd-lado-enlace[aria-current="page"] svg { color: #5cc8ff; }
+
+  /* Barra superior: cristal de noche, igual en el CRM y en Pulso */
+  .rd-barra {
+    background: rgba(6, 10, 20, 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+  .rd-barra::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 198, 255, 0.55), transparent);
+    pointer-events: none;
+  }
+  .rd-etiqueta {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  /* Tarjeta tipo placa: borde fino, brillo del color de la interfaz y una
+     línea de luz arriba */
+  .rd-placa {
+    position: relative;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: var(--rd-sombra);
+    background-image:
+      radial-gradient(130% 90% at 100% 0%, color-mix(in srgb, var(--rd-azul) var(--rd-brillo), transparent), transparent 55%),
+      radial-gradient(90% 70% at 0% 100%, color-mix(in srgb, var(--rd-cian) 6%, transparent), transparent 60%);
+  }
+  .rd-placa::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rd-cian), transparent);
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  /* Botón principal: degradado de marca con resplandor */
+  .rd-boton {
+    background-image: var(--rd-grad-boton);
+    color: #fff;
+    box-shadow: 0 8px 22px -12px rgba(0, 114, 255, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+  .rd-boton:hover:not(:disabled) { filter: brightness(1.12); }
+
+  /* Interruptor claro / oscuro (el mismo gesto que en Pulso) */
+  .rd-tema {
+    position: relative;
+    width: 46px;
+    height: 26px;
+    flex: none;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .rd-tema::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--rd-grad);
+    box-shadow: 0 0 12px #00c6ff;
+    transition: transform 0.2s var(--rd-suave);
+  }
+  :root:not(.dark) .rd-tema::before { transform: translateX(20px); }
+}
+
+/* Título de cada pantalla: una barrita de luz a la izquierda */
+.rd-cuerpo main h1.font-heading {
+  position: relative;
+  padding-left: 0.85rem;
+}
+.rd-cuerpo main h1.font-heading::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  bottom: 0.2em;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #0072ff, #00c6ff);
+  box-shadow: 0 0 12px rgba(0, 198, 255, 0.7);
+}
+
+/* Barras de desplazamiento discretas dentro del CRM */
+.rd-cuerpo, .rd-lado {
+  scrollbar-color: color-mix(in srgb, var(--rd-azul) 45%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+/* Modo oscuro: los avisos con tinte claro escritos a mano en las pantallas
+   (bg-amber-50 + text-amber-900, etc.) se pasan a su versión de noche para
+   que sigan leyéndose sin tocar cada archivo. Las fichas de estado sólidas
+   (bg-green-300 + text-green-950) no se tocan. */
+.dark .bg-amber-50, .dark .bg-amber-100 { background-color: rgba(251, 191, 36, 0.14); }
+.dark .hover\:bg-amber-200:hover { background-color: rgba(251, 191, 36, 0.24); }
+.dark .bg-green-50, .dark .bg-green-100 { background-color: rgba(52, 211, 153, 0.14); }
+.dark .bg-red-100 { background-color: rgba(255, 107, 129, 0.16); }
+.dark .bg-sky-50 { background-color: rgba(56, 189, 248, 0.12); }
+.dark .bg-violet-50 { background-color: rgba(56, 132, 255, 0.14); }
+.dark .bg-emerald-50 { background-color: rgba(52, 211, 153, 0.12); }
+.dark .bg-neutral-50 { background-color: rgba(255, 255, 255, 0.05); }
+.dark .text-amber-900, .dark .text-amber-700 { color: #fcd34d; }
+.dark .text-green-900, .dark .text-green-700 { color: #6ee7b7; }
+.dark .text-emerald-700 { color: #6ee7b7; }
+.dark .text-red-900, .dark .text-red-800, .dark .text-red-700 { color: #fda4af; }
+.dark .text-sky-700 { color: #7dd3fc; }
+.dark .border-amber-300 { border-color: rgba(251, 191, 36, 0.4); }
+.dark .border-green-300 { border-color: rgba(52, 211, 153, 0.4); }
+.dark .border-sky-200 { border-color: rgba(56, 189, 248, 0.35); }
+
+/* ---------- Cargador al cambiar entre CRM y Pulso ---------- */
+.rd-carga {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow: hidden;
+  background: #020818;
+  color: #fff;
+  animation: rd-carga-entra 0.22s ease-out both;
+}
+.rd-carga[data-saliendo="true"] {
+  animation: rd-carga-sale 0.32s ease-in both;
+  pointer-events: none;
+}
+@keyframes rd-carga-entra { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rd-carga-sale { from { opacity: 1; } to { opacity: 0; } }
+.rd-carga-orbita {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 1px solid rgba(125, 180, 255, 0.22);
+  box-shadow: inset 0 0 26px rgba(0, 114, 255, 0.25), 0 0 46px -8px rgba(0, 114, 255, 0.55);
+  animation: rd-gira 1.15s linear infinite;
+}
+/* La «bolita»: va montada sobre el aro y gira con él */
+.rd-carga-orbita::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #5cc8ff 38%, #0072ff 78%);
+  box-shadow: 0 0 18px 3px rgba(0, 198, 255, 0.85);
+}
+/* Estela de la bolita */
+.rd-carga-orbita::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 72%, rgba(0, 198, 255, 0.85) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+}
+@keyframes rd-gira { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-carga, .rd-carga[data-saliendo="true"], .rd-carga-orbita { animation: none; }
+  .rd-carga-orbita::after { display: none; }
+  .rd-tema::before, .rd-lado-enlace, .rd-lado-enlace svg { transition: none; }
+}
+.dark .text-green-600 { color: #34d399; }
+.dark .text-red-600 { color: #ff6b81; }

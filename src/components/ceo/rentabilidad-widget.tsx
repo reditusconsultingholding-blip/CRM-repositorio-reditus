@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
+import { BotonCifras, Cifra, useCifrasOcultas } from "@/components/cifra-privada";
 
 type Data = {
   rentabilidadSemana: number;
@@ -20,6 +21,8 @@ function fmtUsd(n: number) {
 export function RentabilidadWidget() {
   const [data, setData] = useState<Data>(null);
   const [failed, setFailed] = useState(false);
+  // Modo privado: con las cifras ocultas ni siquiera se piden al servidor.
+  const ocultas = useCifrasOcultas();
 
   async function fetchData() {
     try {
@@ -33,38 +36,41 @@ export function RentabilidadWidget() {
   }
 
   useEffect(() => {
+    if (ocultas) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
     const interval = setInterval(fetchData, REFRESH_MS);
     return () => clearInterval(interval);
-  }, []);
+  }, [ocultas]);
+
+  const color = (n: number) => (n >= 0 ? "text-green-600" : "text-red-600");
 
   return (
-    <Link
-      href="/ceo"
-      className="flex flex-col gap-1.5 rounded-md border bg-muted/40 p-2.5 text-xs hover:bg-muted/70"
-    >
-      <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-        <TrendingUp className="size-3" />
-        Rentabilidad
-      </span>
-      {data ? (
+    <div className="flex flex-col gap-1.5 rounded-md border bg-muted/40 p-2.5 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/ceo" className="flex items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground">
+          <TrendingUp className="size-3" />
+          Rentabilidad
+        </Link>
+        <BotonCifras />
+      </div>
+      {ocultas || data ? (
         <>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Semana</span>
-            <span
-              className={`font-mono font-semibold ${data.rentabilidadSemana >= 0 ? "text-green-600" : "text-red-600"}`}
-            >
-              {fmtUsd(data.rentabilidadSemana)}
-            </span>
+            <Cifra
+              valor={ocultas || !data ? null : fmtUsd(data.rentabilidadSemana)}
+              className="font-semibold"
+              claseVisible={data ? color(data.rentabilidadSemana) : undefined}
+            />
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Mes</span>
-            <span
-              className={`font-mono font-semibold ${data.rentabilidadMes >= 0 ? "text-green-600" : "text-red-600"}`}
-            >
-              {fmtUsd(data.rentabilidadMes)}
-            </span>
+            <Cifra
+              valor={ocultas || !data ? null : fmtUsd(data.rentabilidadMes)}
+              className="font-semibold"
+              claseVisible={data ? color(data.rentabilidadMes) : undefined}
+            />
           </div>
         </>
       ) : failed ? (
@@ -72,6 +78,6 @@ export function RentabilidadWidget() {
       ) : (
         <span className="text-muted-foreground">Cargando…</span>
       )}
-    </Link>
+    </div>
   );
 }

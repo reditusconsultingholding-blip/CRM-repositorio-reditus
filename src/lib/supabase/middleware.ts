@@ -18,6 +18,9 @@ const PUBLIC_PATHS = [
   "/encuesta",
   "/api/health",
   "/api/whatsapp/webhook",
+  // Creación de prospectos desde un proceso externo: se autentica con
+  // PROSPECCION_SECRET dentro de la propia ruta.
+  "/api/prospeccion",
   "/icon",
   "/apple-icon",
   "/manifest.webmanifest",

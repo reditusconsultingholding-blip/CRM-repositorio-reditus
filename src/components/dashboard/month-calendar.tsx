@@ -67,7 +67,7 @@ export function MonthCalendar({
       </div>
       <div className="grid grid-cols-7 gap-1">
         {cells.map((c, i) => {
-          if (!c.key) return <div key={i} className="aspect-square" />;
+          if (!c.key) return <div key={i} className="aspect-square sm:aspect-auto sm:h-16" />;
           const d = data[c.key];
           const det = detalle?.[c.key];
           const pendientes = (det?.entregas.length ?? 0) + (det?.recordatorios.filter((r) => !r.enviado).length ?? 0);
@@ -77,7 +77,7 @@ export function MonthCalendar({
               type="button"
               key={c.key}
               onClick={() => setSelected(c.key)}
-              className={`flex aspect-square flex-col items-center justify-center rounded-md border p-1 text-center transition-colors hover:border-primary/50 ${
+              className={`flex aspect-square flex-col items-center justify-center rounded-lg border p-1 sm:aspect-auto sm:h-16 text-center transition-colors hover:border-primary/50 ${
                 isToday ? "border-primary bg-primary/5" : "border-transparent bg-muted/40"
               }`}
               style={!isToday && c.isWeekend ? { background: "var(--brand-blue-tint)" } : undefined}

@@ -8,6 +8,7 @@ import { notifyNewIngreso } from "@/lib/notify-new-ingreso";
 import { notify } from "@/lib/notify";
 import { verifyTotpCode } from "@/lib/totp";
 import { getOrCreateClienteDriveFolders } from "@/lib/google-drive";
+import { buscarClientePorWhatsapp } from "@/lib/clientes-whatsapp";
 
 type ItemInput = {
   servicio: string;
@@ -176,11 +177,7 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
     }
 
     // Find-or-create the client by WhatsApp number (the unique client identifier).
-    const { data: existingClient } = await supabase
-      .from("clients")
-      .select("id, tax_id")
-      .eq("whatsapp_number", whatsappNumber)
-      .maybeSingle();
+    const existingClient = await buscarClientePorWhatsapp(supabase, whatsappNumber);
 
     let clientId = existingClient?.id as string | undefined;
 
@@ -289,6 +286,7 @@ export async function createIngreso(formData: FormData): Promise<ActionResult> {
 
     revalidatePath("/ingresos");
     revalidatePath("/requerimientos");
+    revalidatePath("/clientes");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
@@ -351,6 +349,7 @@ export async function marcarIngresoCerrado(id: string): Promise<ActionResult> {
 
     revalidatePath("/ingresos");
     revalidatePath("/requerimientos");
+    revalidatePath("/clientes");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };

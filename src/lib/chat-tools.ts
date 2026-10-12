@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { guessUnitPriceUsd } from "@/lib/pricing-catalog";
 import { notifyNewIngreso } from "@/lib/notify-new-ingreso";
+import { buscarClientePorWhatsapp } from "@/lib/clientes-whatsapp";
 
 export type CotizacionItemInput = {
   servicio?: string;
@@ -51,11 +52,7 @@ export async function crearCotizacionDesdeChat(input: CrearCotizacionInput) {
 
   // Find-or-create cliente por WhatsApp (mismo identificador único que usa
   // el resto de la app).
-  const { data: existingClient } = await supabase
-    .from("clients")
-    .select("id, tax_id")
-    .eq("whatsapp_number", whatsapp)
-    .maybeSingle();
+  const existingClient = await buscarClientePorWhatsapp(supabase, whatsapp);
 
   let clientId = existingClient?.id as string | undefined;
   const esClienteNuevo = !clientId;

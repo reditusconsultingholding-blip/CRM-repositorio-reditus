@@ -41,7 +41,7 @@ export default async function ChatPage() {
   const textChannels = allChannels.filter((c) => c.slug !== SALA_DE_VOZ_SLUG);
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] flex-col">
+    <div className="flex h-[calc(100dvh-3rem-var(--app-bar,0px))] flex-col">
       <h1 className="font-heading mb-3 text-2xl font-semibold tracking-tight">Chat interno</h1>
       <ChatTabs
         textChannels={textChannels}

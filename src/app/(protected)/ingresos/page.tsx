@@ -5,6 +5,7 @@ import { DeleteIngresoButton } from "@/components/ingresos/delete-ingreso-button
 import { EstadoComercialCell } from "@/components/ingresos/estado-comercial-cell";
 import { EstadoSelect } from "@/components/estado-select";
 import { LiveSync } from "@/components/live-sync";
+import { AsistenteEntrega } from "@/components/asistente-entrega/asistente-entrega";
 import { Bell } from "lucide-react";
 import {
   INGRESO_ESTADOS,
@@ -82,6 +83,7 @@ export default async function IngresosPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Ingresos</h1>
           <LiveSync tables={["ingresos"]} />
+          <AsistenteEntrega />
         </div>
         <IngresoFormDialog responsables={users ?? []} />
       </div>

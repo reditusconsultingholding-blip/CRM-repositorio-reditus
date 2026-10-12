@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { EyeOff } from "lucide-react";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { computeCeoReport } from "@/lib/ceo-report";
@@ -19,6 +21,8 @@ import { PayrollChecklist } from "@/components/ceo/payroll-checklist";
 import { CredentialsVault } from "@/components/ceo/credentials-vault";
 import { SentryTestButton } from "@/components/ceo/sentry-test-button";
 import { LiveSync } from "@/components/live-sync";
+import { BotonCifras, Cifra } from "@/components/cifra-privada";
+import { CIFRAS_VISIBLES, CLAVE_CIFRAS } from "@/lib/modo-privado";
 
 function fmtUsd(n: number) {
   return n.toLocaleString("es-CO", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -27,6 +31,12 @@ function fmtUsd(n: number) {
 export default async function CeoPage() {
   const profile = await requireProfile();
   if (profile.role !== "ceo") redirect("/dashboard");
+
+  // Modo privado (el ojo de la barra lateral): mientras las cifras estén
+  // ocultas no se mandan al navegador — ni en el HTML ni en los datos de la
+  // página. Sin cookie se asume oculto.
+  const ocultas = (await cookies()).get(CLAVE_CIFRAS)?.value !== CIFRAS_VISIBLES;
+  const v = (texto: string) => (ocultas ? null : texto);
 
   const supabase = await createClient();
 
@@ -66,7 +76,10 @@ export default async function CeoPage() {
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Panel CEO</h1>
           <p className="text-sm text-muted-foreground">Visible solo para ti.</p>
         </div>
-        <LiveSync tables={["ingresos", "requerimientos", "user_payroll_rates"]} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <BotonCifras conTexto />
+          <LiveSync tables={["ingresos", "requerimientos", "user_payroll_rates"]} />
+        </div>
       </div>
 
       <Tabs defaultValue="rentabilidad">
@@ -86,20 +99,20 @@ export default async function CeoPage() {
                 <CardTitle className="text-base">Esta semana</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-2 text-sm">
-                <Row label="Ingresos (ventas)" value={fmtUsd(r.ingresosSemanaUsd)} />
-                <Row label="Salarios fijos (semanales)" value={`-${fmtUsd(r.costoFijoSemanal)}`} />
-                <Row label="Costos fijos SaaS (prorrateado)" value={`-${fmtUsd(r.costoFijoProrrateadoSemana)}`} />
+                <Row label="Ingresos (ventas)" value={v(fmtUsd(r.ingresosSemanaUsd))} />
+                <Row label="Salarios fijos (semanales)" value={v(`-${fmtUsd(r.costoFijoSemanal)}`)} />
+                <Row label="Costos fijos SaaS (prorrateado)" value={v(`-${fmtUsd(r.costoFijoProrrateadoSemana)}`)} />
                 <Row
                   label={`Editores de video (${r.videosSemana} entregados)`}
-                  value={`-${fmtUsd(r.costoVideoSemana)}`}
+                  value={v(`-${fmtUsd(r.costoVideoSemana)}`)}
                 />
                 <Row
                   label={`Programadores (${r.landingsSemana} páginas)`}
-                  value={`-${fmtUsd(r.costoProgramadorSemanaUsd)}`}
+                  value={v(`-${fmtUsd(r.costoProgramadorSemanaUsd)}`)}
                 />
                 <Separator className="my-1" />
-                <Row label="Costo total" value={`-${fmtUsd(r.costoTotalSemana)}`} bold />
-                <Row label="Rentabilidad" value={fmtUsd(r.rentabilidadSemana)} bold positive={r.rentabilidadSemana >= 0} />
+                <Row label="Costo total" value={v(`-${fmtUsd(r.costoTotalSemana)}`)} bold />
+                <Row label="Rentabilidad" value={v(fmtUsd(r.rentabilidadSemana))} bold positive={ocultas ? undefined : r.rentabilidadSemana >= 0} />
               </CardContent>
             </Card>
 
@@ -108,23 +121,23 @@ export default async function CeoPage() {
                 <CardTitle className="text-base">Este mes</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-2 text-sm">
-                <Row label="Ingresos (ventas)" value={fmtUsd(r.ingresosMesUsd)} />
+                <Row label="Ingresos (ventas)" value={v(fmtUsd(r.ingresosMesUsd))} />
                 <Row
                   label={`Salarios fijos (${SEMANAS_POR_MES} semanas/mes)`}
-                  value={`-${fmtUsd(r.costoFijoSemanal * SEMANAS_POR_MES)}`}
+                  value={v(`-${fmtUsd(r.costoFijoSemanal * SEMANAS_POR_MES)}`)}
                 />
-                <Row label="Gastos fijos (SaaS y similares)" value={`-${fmtUsd(r.costoFijoMensual)}`} />
+                <Row label="Gastos fijos (SaaS y similares)" value={v(`-${fmtUsd(r.costoFijoMensual)}`)} />
                 <Row
                   label={`Editores de video (${r.videosMes} entregados)`}
-                  value={`-${fmtUsd(r.costoVideoMes)}`}
+                  value={v(`-${fmtUsd(r.costoVideoMes)}`)}
                 />
                 <Row
                   label={`Programadores (${r.landingsMes} páginas)`}
-                  value={`-${fmtUsd(r.costoProgramadorMesUsd)}`}
+                  value={v(`-${fmtUsd(r.costoProgramadorMesUsd)}`)}
                 />
                 <Separator className="my-1" />
-                <Row label="Costo total" value={`-${fmtUsd(r.costoTotalMes)}`} bold />
-                <Row label="Rentabilidad" value={fmtUsd(r.rentabilidadMes)} bold positive={r.rentabilidadMes >= 0} />
+                <Row label="Costo total" value={v(`-${fmtUsd(r.costoTotalMes)}`)} bold />
+                <Row label="Rentabilidad" value={v(fmtUsd(r.rentabilidadMes))} bold positive={ocultas ? undefined : r.rentabilidadMes >= 0} />
               </CardContent>
             </Card>
           </div>
@@ -137,6 +150,10 @@ export default async function CeoPage() {
         </TabsContent>
 
         <TabsContent value="nomina" className="flex flex-col gap-4">
+          {ocultas ? (
+            <CifrasBloqueadas />
+          ) : (
+          <>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Nómina por persona</CardTitle>
@@ -163,9 +180,14 @@ export default async function CeoPage() {
               <GastosFijosTable items={gastosFijos.items} />
             </CardContent>
           </Card>
+          </>
+          )}
         </TabsContent>
 
         <TabsContent value="checklist">
+          {ocultas ? (
+            <CifrasBloqueadas />
+          ) : (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Checklist de pago — semana pasada</CardTitle>
@@ -186,6 +208,7 @@ export default async function CeoPage() {
               )}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="contrasenas">
@@ -235,20 +258,35 @@ function Row({
   positive,
 }: {
   label: string;
-  value: string;
+  /** null = cifra oculta (modo privado): el servidor no la manda. */
+  value: string | null;
   bold?: boolean;
   positive?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <span className={bold ? "font-medium" : "text-muted-foreground"}>{label}</span>
-      <span
-        className={`font-mono ${bold ? "font-semibold" : ""} ${
-          positive === true ? "text-green-600" : positive === false ? "text-red-600" : ""
-        }`}
-      >
-        {value}
+      <Cifra
+        valor={value}
+        className={bold ? "font-semibold" : undefined}
+        claseVisible={positive === true ? "text-green-600" : positive === false ? "text-red-600" : undefined}
+      />
+    </div>
+  );
+}
+
+function CifrasBloqueadas() {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed px-6 py-12 text-center">
+      <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <EyeOff className="size-5" />
       </span>
+      <p className="font-heading text-base font-semibold tracking-tight">Cifras ocultas</p>
+      <p className="max-w-sm text-sm text-muted-foreground">
+        El modo privado está puesto: estas cifras no se muestran ni se cargan en este navegador hasta que las
+        vuelvas a mostrar.
+      </p>
+      <BotonCifras conTexto />
     </div>
   );
 }

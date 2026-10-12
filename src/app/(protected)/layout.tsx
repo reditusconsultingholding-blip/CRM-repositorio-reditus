@@ -1,7 +1,8 @@
 import { requireProfile } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
-import { AppSwitcher } from "@/components/app-switcher";
+import { CrmShell } from "@/components/crm-shell";
 import { PageTransition } from "@/components/page-transition";
+import { TEMA_SCRIPT } from "@/lib/tema-script";
 import { PULSO_ROLES } from "@/lib/roles";
 
 export default async function ProtectedLayout({
@@ -11,22 +12,21 @@ export default async function ProtectedLayout({
 }) {
   const profile = await requireProfile();
 
-  // El selector CRM / Pulso solo aparece para quien puede ver Pulso; con él
-  // arriba, la barra lateral se acorta lo que mide (--app-bar).
+  // El selector CRM / Pulso solo aparece para quien puede ver Pulso; la barra
+  // superior (dónde estás, tema y avisos) la ve todo el equipo.
   const conPulso = PULSO_ROLES.includes(profile.role);
 
   return (
-    <div
-      className="flex min-h-screen w-full flex-col"
-      style={{ "--app-bar": conPulso ? "2.75rem" : "0px" } as React.CSSProperties}
-    >
-      {conPulso && <AppSwitcher />}
-      <div className="flex w-full flex-1">
-        <Sidebar role={profile.role} name={profile.name} userId={profile.id} avatarUrl={profile.avatar_url} />
-        <main className="mx-auto w-full max-w-6xl flex-1 p-6">
-          <PageTransition>{children}</PageTransition>
-        </main>
-      </div>
-    </div>
+    <>
+      {/* Pone el tema claro/oscuro antes de pintar, para que no destelle */}
+      <script dangerouslySetInnerHTML={{ __html: TEMA_SCRIPT }} />
+      <CrmShell
+        conPulso={conPulso}
+        userId={profile.id}
+        sidebar={<Sidebar role={profile.role} name={profile.name} userId={profile.id} avatarUrl={profile.avatar_url} />}
+      >
+        <PageTransition>{children}</PageTransition>
+      </CrmShell>
+    </>
   );
 }

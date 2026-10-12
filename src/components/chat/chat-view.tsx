@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Hash, Send, User, Reply, Copy, Trash2, X, Pencil, Paperclip, FileIcon, Check } from "lucide-react";
+import { Hash, Send, User, Reply, Copy, Trash2, X, Pencil, Paperclip, FileIcon, Check, Users
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   sendChannelMessage,
@@ -103,6 +104,7 @@ export function ChatView({
   canModerate = false,
   canManageChannels = false,
   hideSidebar = false,
+  sidebarExtra,
 }: {
   channels: Channel[];
   people: Person[];
@@ -115,6 +117,8 @@ export function ChatView({
    * `channels` — se usa para la pestaña "Voz", donde el chat de texto es
    * siempre el de la sala de voz, sin necesidad de elegir. */
   hideSidebar?: boolean;
+  /** Bloque extra al final de la columna de canales (el acceso a la sala de voz). Solo presentación. */
+  sidebarExtra?: React.ReactNode;
 }) {
   const [channelPanelOpen, setChannelPanelOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(
@@ -500,11 +504,11 @@ export function ChatView({
   const headerLabel = activeChannel ? activeChannel.name : activePerson ? activePerson.name : "Selecciona un chat";
 
   return (
-    <div className="flex flex-1 overflow-hidden rounded-md border bg-background">
+    <div className="rd-placa flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl md:flex-row">
       {!hideSidebar && (
-        <div className="w-52 shrink-0 overflow-y-auto border-r p-2">
-          <div className="flex items-center justify-between px-2.5 pb-1 pt-2">
-            <p className="text-[11px] font-semibold uppercase text-muted-foreground">Canales</p>
+        <div className="dark rd-lado flex shrink-0 items-center gap-1 overflow-x-auto p-2 md:w-60 md:flex-col md:items-stretch md:gap-0.5 md:overflow-x-hidden md:overflow-y-auto md:p-3">
+          <div className="flex shrink-0 items-center justify-between gap-1 md:pr-1">
+            <p className="rd-lado-titulo hidden md:block">Canales</p>
             {canManageChannels && <CreateChannelButton />}
           </div>
           {channels.map((c) => (
@@ -512,22 +516,23 @@ export function ChatView({
               key={c.id}
               onClick={() => selectChannel(c.id)}
               className={cn(
-                "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
-                selection?.type === "channel" && selection.id === c.id && "bg-muted font-medium text-foreground",
+                "rd-lado-enlace shrink-0 text-left md:w-full",
+                unreadChannels.has(c.id) && "font-semibold text-white",
               )}
+              aria-current={selection?.type === "channel" && selection.id === c.id ? "page" : undefined}
             >
               <Hash className="size-3.5 shrink-0" />
               <span className="truncate">{c.name}</span>
               {unreadChannels.has(c.id) && (
                 <span
-                  className="ml-auto size-2 shrink-0 rounded-full bg-primary"
+                  className="ml-auto size-2 shrink-0 rounded-full bg-[#00c6ff] shadow-[0_0_8px_#00c6ff]"
                   title={`Mensaje nuevo en ${c.name}`}
                 />
               )}
             </button>
           ))}
 
-          <p className="px-2.5 pb-1 pt-3 text-[11px] font-semibold uppercase text-muted-foreground">
+          <p className="rd-lado-titulo hidden md:mt-4 md:block">
             Mensajes directos
           </p>
           {people.map((p) => (
@@ -535,15 +540,16 @@ export function ChatView({
               key={p.id}
               onClick={() => selectDm(p.id)}
               className={cn(
-                "flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
-                selection?.type === "dm" && selection.userId === p.id && "bg-muted font-medium text-foreground",
+                "rd-lado-enlace shrink-0 text-left md:w-full",
+                unreadPeers.has(p.id) && "font-semibold text-white",
               )}
+              aria-current={selection?.type === "dm" && selection.userId === p.id ? "page" : undefined}
             >
               <Avatar name={p.name} url={p.avatar_url} />
               <span className="truncate">{p.name}</span>
               {unreadPeers.has(p.id) && (
                 <span
-                  className="ml-auto size-2 shrink-0 rounded-full bg-primary"
+                  className="ml-auto size-2 shrink-0 rounded-full bg-[#00c6ff] shadow-[0_0_8px_#00c6ff]"
                   title={`Mensaje nuevo de ${p.name}`}
                 />
               )}
@@ -552,21 +558,30 @@ export function ChatView({
           {people.length === 0 && (
             <p className="px-2.5 py-2 text-xs text-muted-foreground">No hay más usuarios activos.</p>
           )}
+          {sidebarExtra}
         </div>
       )}
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <button
           type="button"
           onClick={() => activeChannel && setChannelPanelOpen(true)}
           disabled={!activeChannel}
           className={cn(
-            "flex items-center border-b px-4 py-2 text-left text-sm font-medium",
+            "group/cab flex shrink-0 items-center gap-2.5 border-b px-4 py-2.5 text-left",
             activeChannel && "hover:bg-muted/50",
           )}
         >
-          {activeChannel ? <Hash className="mr-1 inline size-3.5" /> : <User className="mr-1 inline size-3.5" />}
-          {headerLabel}
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {activeChannel ? <Hash className="size-4" /> : <User className="size-4" />}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-heading text-base font-semibold tracking-tight">{headerLabel}</span>
+          {activeChannel && (
+            <span className="hidden shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium text-muted-foreground group-hover/cab:border-ring/60 group-hover/cab:text-foreground sm:flex">
+              <Users className="size-3.5" />
+              Miembros y archivos
+            </span>
+          )}
         </button>
 
         {activeChannel && (
@@ -584,7 +599,7 @@ export function ChatView({
 
         {activeChannel && <BookmarksBar channelId={activeChannel.id} canManage={canManageChannels} />}
 
-        <div className="flex flex-1 flex-col overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3 sm:px-3">
           {messages.map((m) => {
             const isOwn = m.author_id === currentUserId;
             const quoted = findMessage(m.reply_to_id);
@@ -598,11 +613,11 @@ export function ChatView({
             }
 
             return (
-              <div key={m.id} className="flex gap-2 border-b border-border/40 py-2 last:border-b-0">
+              <div key={m.id} className="group/msg relative flex gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/60 focus-within:bg-muted/60">
                 <Avatar name={m.author?.name ?? "?"} url={m.author?.avatar_url} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-medium">{m.author?.name ?? "—"}</span>
+                    <span className="text-sm font-semibold">{m.author?.name ?? "—"}</span>
                     <span className="text-[11px] text-muted-foreground">
                       {new Date(m.created_at).toLocaleTimeString("es-CO", {
                         hour: "2-digit",
@@ -676,12 +691,12 @@ export function ChatView({
                           </a>
                         ))}
 
-                      <div className="mt-1 flex items-center gap-1">
+                      <div className="mt-1.5 flex w-fit items-center gap-0.5 rounded-lg border bg-card p-0.5 shadow-sm [@media(hover:hover)]:absolute [@media(hover:hover)]:-top-3 [@media(hover:hover)]:right-3 [@media(hover:hover)]:z-10 [@media(hover:hover)]:mt-0 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/msg:opacity-100 [@media(hover:hover)]:group-focus-within/msg:opacity-100">
                         {QUICK_EMOJIS.map((emoji) => (
                           <button
                             key={emoji}
                             onClick={() => toggleReaction(m.id, emoji)}
-                            className="rounded px-1 text-xs hover:bg-muted"
+                            className="rounded-md px-1.5 py-1 text-sm leading-none hover:bg-muted"
                             title="Reaccionar"
                           >
                             {emoji}
@@ -689,7 +704,7 @@ export function ChatView({
                         ))}
                         <button
                           onClick={() => setReplyTo(m)}
-                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                           title="Responder"
                         >
                           <Reply className="size-3.5" />
@@ -699,7 +714,7 @@ export function ChatView({
                             navigator.clipboard.writeText(m.body);
                             toast.success("Copiado");
                           }}
-                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                           title="Copiar"
                         >
                           <Copy className="size-3.5" />
@@ -707,7 +722,7 @@ export function ChatView({
                         {isOwn && (
                           <button
                             onClick={() => startEdit(m)}
-                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                             title="Editar"
                           >
                             <Pencil className="size-3.5" />
@@ -720,7 +735,7 @@ export function ChatView({
                               const result = await deleteMessage(m.id);
                               if (result?.error) toast.error(result.error);
                             }}
-                            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             title="Eliminar"
                           >
                             <Trash2 className="size-3.5" />
@@ -737,8 +752,8 @@ export function ChatView({
                           key={emoji}
                           onClick={() => toggleReaction(m.id, emoji)}
                           className={cn(
-                            "rounded-full border px-1.5 py-0.5 text-xs",
-                            mine ? "border-primary bg-primary/10" : "border-border bg-muted/50",
+                            "rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums transition-colors hover:border-primary/60",
+                            mine ? "border-primary bg-primary/10 text-primary" : "border-border bg-muted/50",
                           )}
                         >
                           {emoji} {count}
@@ -751,7 +766,7 @@ export function ChatView({
             );
           })}
           {messages.length === 0 && (
-            <p className="text-sm text-muted-foreground">Sin mensajes todavía.</p>
+            <p className="m-auto rounded-xl border border-dashed px-6 py-8 text-center text-sm text-muted-foreground">Sin mensajes todavía.</p>
           )}
           <div ref={bottomRef} />
         </div>
@@ -810,11 +825,12 @@ export function ChatView({
           </div>
         )}
 
-        <div className="flex gap-2 border-t p-3">
+        <div className="m-3 mt-1 flex shrink-0 items-center gap-1.5 rounded-xl border border-input bg-card p-1.5 transition-shadow focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
           <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFilePick} />
           <Button
             size="icon"
-            variant="outline"
+            variant="ghost"
+            aria-label="Adjuntar archivo"
             onClick={() => fileRef.current?.click()}
             disabled={pending || uploading || !selection}
             title="Adjuntar archivo (máx. 100MB)"
@@ -833,8 +849,9 @@ export function ChatView({
                   : `Mensaje a ${headerLabel}`
             }
             disabled={pending || uploading || !selection}
+            className="border-0 bg-transparent shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
           />
-          <Button size="icon" onClick={send} disabled={pending || uploading || !selection}>
+          <Button size="icon" aria-label="Enviar" title="Enviar (Enter)" onClick={send} disabled={pending || uploading || !selection}>
             <Send className="size-4" />
           </Button>
         </div>

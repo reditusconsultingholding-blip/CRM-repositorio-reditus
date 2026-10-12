@@ -36,7 +36,7 @@ export function ProspectoFormDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>Nuevo prospecto</DialogTrigger>
+      <DialogTrigger render={<Button variant="outline" />}>Agregar otro</DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nuevo prospecto</DialogTitle>

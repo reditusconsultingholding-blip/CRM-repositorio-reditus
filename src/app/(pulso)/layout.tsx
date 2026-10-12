@@ -10,7 +10,7 @@ export default async function PulsoLayout({ children }: { children: React.ReactN
   if (!PULSO_ROLES.includes(profile.role)) redirect("/dashboard");
 
   return (
-    <div className="flex h-screen w-full flex-col">
+    <div className="flex h-dvh w-full flex-col bg-[#060a14]">
       <AppSwitcher />
       <main className="min-h-0 flex-1">{children}</main>
     </div>

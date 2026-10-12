@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { RegisterServiceWorker } from "@/components/push/register-sw";
+import { CargadorApps } from "@/components/cargador-apps";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -39,12 +40,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="es"
+      // La clase del tema (.dark) la pone un script antes de hidratar.
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-muted/30">
+      <body className="min-h-full flex flex-col bg-background">
         <RegisterServiceWorker />
         {children}
         <Toaster richColors position="top-right" />
+        {/* Pantalla de carga al cambiar entre CRM y Pulso */}
+        <CargadorApps />
       </body>
     </html>
   );

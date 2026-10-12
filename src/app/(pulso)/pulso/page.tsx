@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PulsoFrame } from "@/components/pulso-frame";
 
 export const metadata: Metadata = { title: "Pulso · Reditus" };
 
@@ -8,13 +9,5 @@ export const metadata: Metadata = { title: "Pulso · Reditus" };
 const PULSO_URL = process.env.NEXT_PUBLIC_PULSO_URL || "https://pulso-reditus.vercel.app/";
 
 export default function PulsoPage() {
-  return (
-    <iframe
-      src={PULSO_URL}
-      title="Pulso · resultados de las páginas de clientes"
-      className="block h-full w-full border-0"
-      allow="fullscreen; clipboard-write"
-      allowFullScreen
-    />
-  );
+  return <PulsoFrame src={PULSO_URL} />;
 }
