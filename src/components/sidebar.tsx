@@ -16,6 +16,7 @@ import {
   LogOut,
   Flame,
   ListChecks,
+  ClipboardCheck,
   Clapperboard,
   Film,
 } from "lucide-react";
@@ -33,6 +34,9 @@ import { ROLE_LABELS, INGRESOS_ROLES, VIDEOS_ROLES, type UserRole } from "@/lib/
 // Fuera del menú a propósito (11-oct-2026); las rutas siguen funcionando:
 //  · «WhatsApp Business» (/whatsapp) y «Reto 75 Hard» (/reto75) están en
 //    OCULTOS: para volver a mostrarlos, pasa su línea de OCULTOS a ALL_LINKS.
+//  · «Checklist» (/checklist) también está en OCULTOS: sus tablas
+//    (checklist_items / checklist_marcas, migración 0059) nunca se aplicaron
+//    y la página falla. La reemplaza «Seguimiento diario» (/seguimiento).
 //  · «Usuarios» (/admin/usuarios) y «Panel CEO» (/ceo) ahora se abren desde
 //    Configuración (/perfil), solo para el CEO.
 const ALL_LINKS = [
@@ -53,7 +57,7 @@ const ALL_LINKS = [
   { href: "/prospectos", label: "Prospectos", icon: UserPlus, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/clientes", label: "Clientes", icon: Contact, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/flujo", label: "Flujo de trabajo", icon: Workflow, roles: null, grupo: "Equipo" },
-  { href: "/checklist", label: "Checklist", icon: ListChecks, roles: null, grupo: "Equipo" },
+  { href: "/seguimiento", label: "Seguimiento diario", icon: ClipboardCheck, roles: null, grupo: "Equipo" },
   { href: "/ayuda", label: "¿Cómo funciona?", icon: HelpCircle, roles: null, grupo: "Equipo" },
 ] as const;
 
@@ -61,6 +65,7 @@ const ALL_LINKS = [
 const OCULTOS = [
   { href: "/whatsapp", label: "WhatsApp Business", icon: MessageCircle, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/reto75", label: "Reto 75 Hard", icon: Flame, roles: null, grupo: "Equipo" },
+  { href: "/checklist", label: "Checklist", icon: ListChecks, roles: null, grupo: "Equipo" },
 ] as const;
 
 // El mismo orden de siempre, solo separado en bloques con su rótulo.

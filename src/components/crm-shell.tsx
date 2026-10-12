@@ -23,6 +23,7 @@ const SECCIONES: Record<string, string> = {
   admin: "Usuarios",
   flujo: "Flujo de trabajo",
   checklist: "Checklist",
+  seguimiento: "Seguimiento diario",
   reto75: "Reto 75 Hard",
   ayuda: "¿Cómo funciona?",
   ceo: "Panel CEO",

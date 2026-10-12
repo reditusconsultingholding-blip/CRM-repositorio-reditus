@@ -511,9 +511,22 @@
   mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
 }
 @keyframes rd-gira { to { transform: rotate(360deg); } }
+/* Logo de Reditus en el centro del aro: círculo fijo con un pulso suave */
+.rd-carga-logo {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(125, 180, 255, 0.35), 0 0 22px -2px rgba(0, 114, 255, 0.7);
+  animation: rd-carga-late 1.8s ease-in-out infinite;
+}
+@keyframes rd-carga-late { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .rd-carga, .rd-carga[data-saliendo="true"], .rd-carga-orbita { animation: none; }
+  .rd-carga, .rd-carga[data-saliendo="true"], .rd-carga-orbita, .rd-carga-logo { animation: none; }
   .rd-carga-orbita::after { display: none; }
   .rd-tema::before, .rd-lado-enlace, .rd-lado-enlace svg { transition: none; }
 }

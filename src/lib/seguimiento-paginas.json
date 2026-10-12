@@ -1,0 +1,407 @@
+{
+  "origen": "Pulso · qa/contenido/final.json",
+  "sincronizado": "2026-10-12",
+  "imagenes": "https://pulso.crmreditusconsulting.company/presentacion/",
+  "paginas": [
+    {
+      "id": "greendetox",
+      "nombre": "DozzyUp · Green Detox",
+      "antes": "https://www.dozzyup.com.co/producto/green-detox/",
+      "despues": "https://reditusconsulting.tech/products/green-detox",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en dozzyup.com.co, la tienda WooCommerce de las clientas; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "bodyup",
+      "nombre": "DozzyUp · Body Up",
+      "antes": "https://www.dozzyup.com.co/producto/body-up/",
+      "despues": "https://reditusconsulting.tech/products/body-up",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en dozzyup.com.co, la tienda WooCommerce de las clientas; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "matcha",
+      "nombre": "DozzyUp · Matcha Biotics",
+      "antes": "https://www.dozzyup.com.co/producto/matcha-biotics/",
+      "despues": "https://reditusconsulting.tech/products/matcha-biotics",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en dozzyup.com.co, la tienda WooCommerce de las clientas; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "mooncalm",
+      "nombre": "DozzyUp · Moon Calm",
+      "antes": "https://www.dozzyup.com.co/producto/moon-calm/",
+      "despues": "https://reditusconsulting.tech/products/moon-calm",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en dozzyup.com.co, la tienda WooCommerce de las clientas; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "ritual",
+      "nombre": "DozzyUp · Ritual (combo)",
+      "antes": "https://www.dozzyup.com.co/producto/dozzy-up-ritual/",
+      "despues": "https://reditusconsulting.tech/products/dozzy-up-ritual",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "el combo de los cuatro productos («Combo Full Circle») en dozzyup.com.co; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "dozzyhome",
+      "nombre": "DozzyUp · inicio",
+      "antes": "https://www.dozzyup.com.co/",
+      "despues": "https://reditusconsulting.tech/",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "inicio de dozzyup.com.co, la tienda WooCommerce de las clientas; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "breatify",
+      "nombre": "Breatify",
+      "antes": "https://tiendacorrecta.com/products/breatify-refrescante-bucal",
+      "despues": "https://reditusconsulting.tech/products/breatify",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "tiendacorrecta.com/products/breatify-refrescante-bucal, donde se vendía antes; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "colamarin",
+      "nombre": "ByPluss · Cola Marin",
+      "antes": "",
+      "despues": "https://reditusconsulting.tech/products/cola-marin",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "captura guardada el 5 oct 2026 de bypluss.co/products/colageno-marino, antes de reemplazarla (hoy esa dirección ya muestra la página nueva).",
+      "rotacion": true
+    },
+    {
+      "id": "bypluss",
+      "nombre": "ByPluss · inicio",
+      "antes": "https://bypluss.co/products/alumcare-adultos",
+      "despues": "https://reditusconsulting.tech/pages/bypluss",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Alumcare Adultos», otro producto de bypluss.co que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "eunoia",
+      "nombre": "Dinora · Eunoia",
+      "antes": "https://dinoracosmetics.com/products/perfume-corporal-dinora",
+      "despues": "https://reditusconsulting.tech/products/perfume-eunoia",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "dinoracosmetics.com/products/perfume-corporal-dinora, la tienda de la clienta; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "ginseng",
+      "nombre": "Té de ginseng · Punto Online",
+      "antes": "https://puntoonline1.myfunnelish.com/Teaginseng/GINSENG-1780097702806075",
+      "despues": "https://bienestarecuador.shop/products/te-ginseng-cinco-tesoros",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "el embudo anterior del cliente en Funnelish (puntoonline1.myfunnelish.com); capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "yass",
+      "nombre": "Yass Moda · Lipo Jean",
+      "antes": "https://yassmoda.com/products/98-lipo-campana",
+      "despues": "https://yassmoda.com/products/lipo-jean-1",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Lipo Campana», otro producto de yassmoda.com que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "blusa",
+      "nombre": "Yass Moda · Blusa Corset",
+      "antes": "https://yassmoda.com/products/254-blusa-clarisa",
+      "despues": "https://yassmoda.com/products/200-blusa-eloise",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Blusa Clarisa», otro producto de yassmoda.com que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "fragattel",
+      "nombre": "Fragattel · O66Y",
+      "antes": "https://www.fragattel.com/products/rich-vagos",
+      "despues": "https://www.fragattel.com/products/o66y",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Rich Vagos», otro producto de fragattel.com que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "fragattelhome",
+      "nombre": "Fragattel · inicio",
+      "antes": "https://www.fragattel.com/?view=antes-reditus",
+      "despues": "https://www.fragattel.com/",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "el inicio anterior de fragattel.com, que sigue guardado en la tienda (plantilla index.antes-reditus); capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "epais",
+      "nombre": "ÉPAIS",
+      "antes": "https://www.vikingsupplements.online/products/serum-epais-crecimiento-de-las-pestanas-copia",
+      "despues": "https://www.vikingsupplements.online/products/epais-eyelash-essential-serum",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "la página anterior del mismo sérum, que sigue publicada en la tienda (/products/serum-epais-crecimiento-de-las-pestanas-copia); capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "thera",
+      "nombre": "Fitnology · THERA",
+      "antes": "https://fitnology.co/products/fitnology?view=antes",
+      "despues": "https://fitnology.co/products/fitnology",
+      "tipo": "b",
+      "rotulo": "Antes · plantilla estándar del tema, sin el trabajo de Reditus",
+      "nota": "el mismo producto abierto con ?view=antes: Shopify pinta la plantilla estándar del tema; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "nawhi",
+      "nombre": "NAWHI · inicio",
+      "antes": "https://nawhi.com/",
+      "despues": "https://reditusconsulting.tech/pages/nawhi",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "inicio de nawhi.com, la tienda original de la marca; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "nawhibiotina",
+      "nombre": "NAWHI · Biotina + Colágeno",
+      "antes": "https://nawhi.com/products/nawhi-biotina-10-000-mcg-colageno-hidrolizado-60-capsulas",
+      "despues": "https://reditusconsulting.tech/products/nawhi-biotina-colageno",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en nawhi.com, la tienda original de la marca; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "nawhimagnesio",
+      "nombre": "NAWHI · Ultra Magnesio + B6",
+      "antes": "https://nawhi.com/products/nawhi-ultra-magnesio-vitamina-b6-60-capsulas",
+      "despues": "https://reditusconsulting.tech/products/nawhi-ultra-magnesio-b6",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en nawhi.com, la tienda original de la marca; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "nawhimelena",
+      "nombre": "NAWHI · Melena de León",
+      "antes": "https://nawhi.com/products/nawhi-melena-de-leon-hericium-erinaceus-90-capsulas",
+      "despues": "https://reditusconsulting.tech/products/nawhi-melena-de-leon",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en nawhi.com, la tienda original de la marca; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "nawhiresveratrol",
+      "nombre": "NAWHI · Resveratrol + Nicotinamida",
+      "antes": "https://nawhi.com/products/nawhi-resveratrol-nicotinamida-60-capsulas",
+      "despues": "https://reditusconsulting.tech/products/nawhi-resveratrol-nicotinamida",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en nawhi.com, la tienda original de la marca; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "nawhiashwagandha",
+      "nombre": "NAWHI · Ashwagandha",
+      "antes": "https://nawhi.com/products/nawhi-ashwagandha-600-mg-60-capsulas",
+      "despues": "https://reditusconsulting.tech/products/nawhi-ashwagandha",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "página del mismo producto en nawhi.com, la tienda original de la marca; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "bururan",
+      "nombre": "Bururán",
+      "antes": "https://suplementoslatam.myshopify.com/products/flexacil-ultra",
+      "despues": "https://suplementoslatam.myshopify.com/products/bururan",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Flexacil Ultra», otro producto de suplementoslatam.myshopify.com que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "zonuve",
+      "nombre": "Zonuve · Shilajit",
+      "antes": "https://zonuve.com/products/gafas",
+      "despues": "https://zonuve.com/products/shilahit",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Gafas», otro producto de zonuve.com que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "beltrox",
+      "nombre": "BELTROX (Holden Belt) · Importadora Bella",
+      "antes": "https://bellacorp.store/products/aplique-tipo-lampara-modelo-2",
+      "despues": "https://bellacorp.store/products/beltrox",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Aplique tipo lámpara», otro producto de bellacorp.store que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "jecanori",
+      "nombre": "Jecanori · Importadora Bella",
+      "antes": "https://bellacorp.store/products/cera-de-cabello-tela-de-arana",
+      "despues": "https://bellacorp.store/products/jecanori-pulsera-magnetica-de-cobre",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Cera de cabello», otro producto de bellacorp.store que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "cristiana",
+      "nombre": "Pulsera Cristiana · Importadora Bella",
+      "antes": "https://bellacorp.store/products/desodorante-roll-on-natura-care",
+      "despues": "https://bellacorp.store/products/pulsera-cristiana",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Desodorante Natura Care», otro producto de bellacorp.store que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "kitpareja",
+      "nombre": "Kit pareja · Importadora Bella",
+      "antes": "https://bellacorp.store/products/combo-kormesic-5",
+      "despues": "https://bellacorp.store/products/kit-pareja-pulseras",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Combo Kormesic», otro producto de bellacorp.store que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "drenajegotas",
+      "nombre": "Drenaje linfático · Shopify A",
+      "antes": "https://bellacorp.store/products/gotero-melena-de-leon",
+      "despues": "https://bellacorp.store/products/gotas-drenaje-linfatico",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Gotero Melena de León», otro producto de bellacorp.store que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "drenajeoferta",
+      "nombre": "Drenaje linfático · Shopify oferta",
+      "antes": "https://bellacorp.store/products/capsulas-de-canela-de-ceylan",
+      "despues": "https://bellacorp.store/products/drenaje-linfatico-oferta",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Cápsulas de canela de Ceylán», otro producto de bellacorp.store que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "drenaje",
+      "nombre": "Drenaje linfático · Mayaverra (Funnelish)",
+      "antes": "",
+      "despues": "https://bellanaturalec.com/mayaberra-drenaje-linfatico-oficial",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "captura guardada el 19 sep 2026 del embudo original del cliente en Funnelish (carpeta del proyecto, drenaje/cliente), antes de reemplazarlo.",
+      "rotacion": true
+    },
+    {
+      "id": "highmoon",
+      "nombre": "HighMoon Wellness",
+      "antes": "https://highmoonwellness.co/products/highmoon-wellness?view=antes",
+      "despues": "https://highmoonwellness.co/products/highmoon-wellness",
+      "tipo": "b",
+      "rotulo": "Antes · plantilla estándar del tema, sin el trabajo de Reditus",
+      "nota": "el mismo producto abierto con ?view=antes: Shopify pinta la plantilla estándar del tema; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "espejos",
+      "nombre": "Espejos a medida · Eléctricos Criss",
+      "antes": "https://electricoscriss.com/products/kit-7-hexagonos-lineal",
+      "despues": "https://electricoscriss.com/pages/espejos-a-medida",
+      "tipo": "o",
+      "rotulo": "Así se ven las otras páginas de esta tienda (sin Reditus)",
+      "nota": "«Kit de 7 hexágonos», otro producto de electricoscriss.com que sigue con el diseño original de la tienda; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "granizeben",
+      "nombre": "GraniZeben · combos",
+      "antes": "https://granizeben.com/",
+      "despues": "https://granizeben.com/combos/",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "el sitio anterior del cliente, que sigue en la raíz de granizeben.com; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "zayra",
+      "nombre": "Zayra · página de producto",
+      "antes": "https://zayramodafemenina.com/products/corset-diora?preview_theme_id=191852347709",
+      "despues": "https://zayramodafemenina.com/products/corset-diora",
+      "tipo": "a",
+      "rotulo": "Antes · página anterior del cliente",
+      "nota": "el mismo producto con el tema de respaldo «antes de ajustes» que quedó guardado en la tienda (vista previa del tema 191852347709); capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "oaksiprd",
+      "nombre": "OAKSIP · República Dominicana",
+      "antes": "",
+      "despues": "https://lAlVOohkghWs.myfunnelish.com/oaksip-rd",
+      "tipo": "m",
+      "rotulo": "Referencia de mercado · así vende este producto otra tienda (no es del cliente)",
+      "nota": "el cliente no tenía página de este producto; es la página de otra tienda que vende vasos de madera para whisky, con cabecera y marca quitadas; capturada el 11 oct 2026.",
+      "rotacion": false
+    },
+    {
+      "id": "oaksipco",
+      "nombre": "OAKSIP · Colombia",
+      "antes": "",
+      "despues": "https://lAlVOohkghWs.myfunnelish.com/oaksip-colombia",
+      "tipo": "m",
+      "rotulo": "Referencia de mercado · así vende este producto otra tienda (no es del cliente)",
+      "nota": "el cliente no tenía página de este producto; es la página de otra tienda que vende vasos de madera para whisky, con cabecera y marca quitadas; capturada el 11 oct 2026.",
+      "rotacion": false
+    },
+    {
+      "id": "aplicar",
+      "nombre": "Reditus · /aplicar",
+      "antes": "https://reditusconsulting.org/agendamiento",
+      "despues": "https://reditusconsulting.org/aplicar",
+      "tipo": "p",
+      "rotulo": "Antes · página anterior de Reditus",
+      "nota": "reditusconsulting.org/agendamiento, la página a la que Reditus mandaba la pauta antes de /aplicar; capturada el 11 oct 2026.",
+      "rotacion": true
+    },
+    {
+      "id": "spark",
+      "nombre": "Spark Marketing Agency",
+      "antes": "https://reditusconsulting.tech/products/spark-marketing-agency-landing?view=antes",
+      "despues": "https://reditusconsulting.tech/products/spark-marketing-agency-landing",
+      "tipo": "b",
+      "rotulo": "Antes · plantilla estándar del tema, sin el trabajo de Reditus",
+      "nota": "el mismo producto abierto con ?view=antes: Shopify pinta la plantilla estándar del tema; capturada el 11 oct 2026.",
+      "rotacion": true
+    }
+  ]
+}

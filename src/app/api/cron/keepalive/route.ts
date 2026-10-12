@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { notify } from "@/lib/notify";
 import { syncCalendlyBookings } from "@/lib/calendly";
 import { sendWeeklyCeoInsight } from "@/lib/ceo-insight";
+import { tareasDeCronSeguimiento } from "@/lib/seguimiento-server";
 
 export const runtime = "nodejs";
 
@@ -146,6 +147,16 @@ export async function GET(request: NextRequest) {
     if (synced) tasks.push(`calendly_sync:${synced.synced}`);
   } catch (e) {
     tasks.push(`calendly_sync_error:${e instanceof Error ? e.message.slice(0, 80) : "?"}`);
+  }
+
+  // Seguimiento diario: como este cron corre a las 7:00 a. m. de Bogotá, de
+  // martes a domingo recuerda lo que quedó sin entregar AYER y el lunes le
+  // manda al CEO el resumen de la semana cerrada. El aviso de las 5 p. m. y
+  // el resumen del sábado se disparan con /api/cron/seguimiento.
+  try {
+    tasks.push(...(await tareasDeCronSeguimiento(supabase)));
+  } catch (e) {
+    tasks.push(`seguimiento_error:${e instanceof Error ? e.message.slice(0, 80) : "?"}`);
   }
 
   return NextResponse.json({ ok: true, pingedAt: now.toISOString(), tasks });

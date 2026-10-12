@@ -44,7 +44,12 @@ export function CargadorApps() {
       <div className="rd-login-fondo" aria-hidden="true" />
       <div className="rd-login-luz" aria-hidden="true" />
       <div className="relative flex flex-col items-center gap-8 text-center">
-        <div className="rd-carga-orbita" aria-hidden="true" />
+        {/* El aro y la bolita giran; el logo de Reditus queda quieto en el centro */}
+        <div className="relative size-[84px]" aria-hidden="true">
+          <div className="rd-carga-orbita" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/apple-icon" alt="" width={52} height={52} className="rd-carga-logo" />
+        </div>
         <div className="flex flex-col items-center gap-3">
           <p className="rd-etiqueta text-[#5cc8ff]">Abriendo {NOMBRES[cambio.destino]}</p>
           <p className="max-w-xs font-heading text-xl font-semibold leading-snug tracking-tight text-white sm:max-w-none sm:text-2xl">
