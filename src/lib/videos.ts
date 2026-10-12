@@ -166,9 +166,20 @@ export type VersionGuion = {
   autorId: string;
   autorNombre: string;
   fecha: string;
-  /** Video generado con ESTA versión (lo llena `generarVideo()` cuando exista). */
+  /** Video generado con ESTA versión (lo liga el servidor de videos al entregarlo). */
   videoUrl: string | null;
+  /** Último trabajo de la cola de videos pedido para esta versión (`lib/trabajos-video.ts`). */
+  videoTrabajoId: string | null;
+  /** Quién aprobó el video. Sin esto está «Por aprobar» y no puede salir hacia el cliente. */
+  videoAprobado: AprobacionVideo | null;
 };
+
+export type AprobacionVideo = { porId: string; por: string; fecha: string };
+
+/** El video de una versión ya tiene el sí de alguien del equipo comercial. */
+export function videoAprobado(v: Pick<VersionGuion, "videoUrl" | "videoAprobado">): boolean {
+  return !!v.videoUrl && !!v.videoAprobado;
+}
 
 /** El archivo que se guarda en Storage. */
 export type GuionGuardado = DatosVideo & {
@@ -197,6 +208,13 @@ const txt = (v: unknown, max: number) => (typeof v === "string" ? v : "").slice(
 const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const origenDe = (v: unknown): OrigenGuion => (v === "ia" || v === "plantilla" ? v : "manual");
 
+function leerAprobacion(raw: unknown): AprobacionVideo | null {
+  const a = obj(raw);
+  const porId = txt(a.porId, 40);
+  const fecha = txt(a.fecha, 40);
+  return porId && fecha ? { porId, por: txt(a.por, 160), fecha } : null;
+}
+
 function leerVersiones(raw: unknown): VersionGuion[] {
   if (!Array.isArray(raw)) return [];
   return raw.slice(-MAX_VERSIONES).map((r, i) => {
@@ -217,6 +235,8 @@ function leerVersiones(raw: unknown): VersionGuion[] {
       autorNombre: txt(x.autorNombre, 160),
       fecha: txt(x.fecha, 40),
       videoUrl: txt(x.videoUrl, 600) || null,
+      videoTrabajoId: txt(x.videoTrabajoId, 40) || null,
+      videoAprobado: leerAprobacion(x.videoAprobado),
     };
   });
 }
@@ -328,6 +348,8 @@ export function leerGuionGuardado(raw: unknown): GuionGuardado | null {
         autorNombre,
         fecha: actualizadoAt || creadoAt,
         videoUrl: null,
+        videoTrabajoId: null,
+        videoAprobado: null,
       },
     ];
   }

@@ -16,6 +16,7 @@ import {
   MAX_CORRECCION,
   ORIGEN_LABELS,
   diffLineas,
+  videoAprobado,
   versionVigente,
   type DatosVideo,
   type EstadoGuion,
@@ -57,13 +58,15 @@ type Props = {
   prospectoId: string | null;
   sinGuardar: boolean;
   bloqueado: boolean;
+  /** Hay servidor de videos conectado: regenerar con corrección también encola el video. */
+  videoActivo: boolean;
   /** `cargar`: el editor debe mostrar el guion vigente que devolvió el servidor. */
   onGuardado: (g: GuionGuardado, cargar: boolean) => void;
 };
 
 type Accion = "pendiente" | "ia" | "estado" | `ia:${string}` | `mano:${string}` | `restaurar:${number}` | null;
 
-export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId, sinGuardar, bloqueado, onGuardado }: Props) {
+export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId, sinGuardar, bloqueado, videoActivo, onGuardado }: Props) {
   const [texto, setTexto] = useState("");
   const [accion, setAccion] = useState<Accion>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -106,7 +109,7 @@ export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId,
     const hayVersionNueva = versionVigente(r.guardado)?.n !== vigente?.n;
     onGuardado(r.guardado, cargar && hayVersionNueva);
     setAviso(r.aviso ?? null);
-    if (r.aviso) toast.warning("La corrección quedó pendiente", { duration: 7000 });
+    if (r.aviso) toast.warning(/quedó corregido/.test(r.aviso) ? "Guion corregido, pero su video no se encoló" : "La corrección quedó pendiente", { duration: 7000 });
     else toast.success(ok);
     return true;
   }
@@ -191,8 +194,9 @@ export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId,
               <Save /> Guardar como pendiente
             </Button>
             <span className="text-xs text-muted-foreground">
-              Hoy se regeneran el guion y los prompts por escena; el video se regenerará igual cuando se conecte el
-              modelo.
+              {videoActivo
+                ? "Se regeneran el guion y los prompts por escena. Si la versión actual ya tiene video, el de la versión nueva entra solo a la cola (paso 07) y queda por aprobar."
+                : "Hoy se regeneran el guion y los prompts por escena; el video se regenerará igual cuando se conecte el servidor de videos."}
             </span>
           </div>
           {aviso && (
@@ -283,7 +287,10 @@ export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId,
                     <Chip>{ORIGEN_LABELS[v.origen]}</Chip>
                     {v.restauradaDe && <Chip>Restaurada de v{v.restauradaDe}</Chip>}
                     {v.videoUrl && (
-                      <a href={v.videoUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                      <Chip tono={videoAprobado(v) ? "verde" : "ambar"}>{videoAprobado(v) ? "Video aprobado" : "Video por aprobar"}</Chip>
+                    )}
+                    {v.videoUrl && (
+                      <a href="#generar-video" className="text-xs text-primary hover:underline">
                         Ver video de esta versión
                       </a>
                     )}

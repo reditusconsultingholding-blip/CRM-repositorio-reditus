@@ -15,12 +15,11 @@ import {
   type GuionGuardado,
   type OrigenGuion,
   type Referencia,
-  type VersionGuion,
 } from "@/lib/videos";
 
-// Lógica de servidor de «Crear video»: investigación de mercado, guion y los
-// dos puntos de extensión que todavía no están conectados (búsqueda
-// automática de anuncios y generación del video).
+// Lógica de servidor de «Crear video»: investigación de mercado, guion y
+// guardado. La búsqueda automática de anuncios sigue siendo un punto de
+// extensión; el video lo genera un servidor externo (ver más abajo).
 
 // ------------------------------------------------- investigación ----
 
@@ -286,52 +285,18 @@ export async function corregirGuionVideo(
 }
 
 // --------------------------------------------- generación de video ----
-
-export type PeticionVideo = {
-  /** Id del guion guardado (archivo `videos/<id>.json`). */
-  guionId: string;
-  /**
-   * La versión VIGENTE del guion: su texto ya revisado por una persona y sus
-   * prompts por escena (`version.escenas`), ya rellenados con producto, país y
-   * oferta. El video queda ligado a `version.n`.
-   */
-  version: VersionGuion;
-  formato: string;
-  relacionAspecto: string;
-  /** Fotos reales del producto (URLs). El formato las exige: nunca se inventa el envase. */
-  fotosProducto?: string[];
-};
-
-/**
- * PUNTO DE EXTENSIÓN — generación del video (todavía no existe).
- *
- * Hoy el paso «Generar video» de la pantalla está deshabilitado: el equipo
- * copia los prompts por escena y genera a mano. Cuando se conecte un modelo
- * de video se implementa AQUÍ:
- *
- *  1. Recibe la versión vigente del guion (`peticion.version`).
- *  2. Genera la imagen base y luego cada escena desde esa imagen, una por
- *     cada elemento de `version.escenas`.
- *  3. Une los clips, sube el resultado y devuelve su URL en `videoUrl`.
- *
- * La acción `solicitarVideo` de `videos/actions.ts` ya hace el resto: lee el
- * guion, llama aquí con la versión vigente y guarda `videoUrl` EN ESA VERSIÓN
- * del JSON. Por eso «regenerar con corrección» no necesita nada más: la
- * corrección crea una versión nueva del guion (`registrarCorreccion`) y, con
- * `VIDEO_IA_ACTIVO` encendido, esa misma acción llama aquí con ella; las
- * versiones anteriores conservan su propio `videoUrl`.
- *
- * Para encender el botón de la pantalla y la regeneración automática,
- * `VIDEO_IA_ACTIVO` pasa a `true`.
- */
-export const VIDEO_IA_ACTIVO = false;
-
-export async function generarVideo(
-  peticion: PeticionVideo,
-): Promise<{ listo: false; motivo: string } | { listo: true; videoUrl: string; clips?: string[] }> {
-  void peticion;
-  return { listo: false, motivo: "La generación de video se activa al conectar un modelo de video." };
-}
+//
+// El video NO se genera dentro del CRM. La acción `solicitarVideo` de
+// `videos/actions.ts` deja un trabajo en la cola (`lib/trabajos-video-server.ts`,
+// bucket privado `trabajos`) con la versión vigente del guion; un servidor
+// externo lo toma por `/api/servidor/trabajos/**`, genera cada escena con el
+// proveedor de video, monta, sube el MP4 y reporta. Al recibir el resultado
+// el CRM guarda `videoUrl` EN ESA VERSIÓN del guion, sin aprobar.
+//
+// El paso «Generar video» de la pantalla se enciende solo cuando existe la
+// variable de entorno `SERVIDOR_SECRET` (ver `servidorVideoActivo()`).
+// «Regenerar con corrección» crea una versión nueva del guion y, si la
+// versión anterior ya tenía video, encola el de la nueva.
 
 // ----------------------------------------------------- guardado ----
 //
@@ -354,7 +319,10 @@ export async function leerGuionArchivo(admin: Almacen, id: string): Promise<Guio
   const clave = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!base || !clave) return null;
   try {
-    const res = await fetch(`${base}/storage/v1/object/${BUCKET_GUIONES}/${rutaGuion(id)}`, {
+    // La dirección lleva un sello único: aun con `no-store`, el `fetch` de Next
+    // puede repetir la respuesta de un GET idéntico hecho instantes antes.
+    const sello = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+    const res = await fetch(`${base}/storage/v1/object/${BUCKET_GUIONES}/${rutaGuion(id)}?sinCache=${sello}`, {
       headers: { Authorization: `Bearer ${clave}`, apikey: clave },
       cache: "no-store",
     });

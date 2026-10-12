@@ -21,6 +21,9 @@ const PUBLIC_PATHS = [
   // Creación de prospectos desde un proceso externo: se autentica con
   // PROSPECCION_SECRET dentro de la propia ruta.
   "/api/prospeccion",
+  // Servidor externo de videos: se autentica con SERVIDOR_SECRET dentro de
+  // cada ruta (ver `src/lib/servidor-api.ts`), no con sesión.
+  "/api/servidor",
   "/icon",
   "/apple-icon",
   "/manifest.webmanifest",

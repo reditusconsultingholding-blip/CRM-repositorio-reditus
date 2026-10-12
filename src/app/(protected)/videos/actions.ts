@@ -3,7 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
-import { requireProfile, type Profile } from "@/lib/auth";
+import { requireProfile, INGRESOS_ROLES, type Profile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FORMATOS_VERSION, buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
 import {
@@ -13,6 +13,7 @@ import {
   MAX_VERSIONES,
   VIDEOS_ROLES,
   leerDatosVideo,
+  videoAprobado,
   rellenar,
   versionVigente,
   type Correccion,
@@ -24,14 +25,25 @@ import {
 } from "@/lib/videos";
 import {
   ID_VALIDO,
-  VIDEO_IA_ACTIVO,
   corregirGuionVideo,
   escribirGuionArchivo,
   generarGuionVideo,
-  generarVideo,
   investigarMercado,
   leerGuionArchivo,
 } from "@/lib/videos-server";
+import { ORIGEN_PROSPECCION, leerProspeccion } from "@/lib/prospeccion";
+import { guardarProspeccion, leerFila } from "@/lib/prospeccion-server";
+import { ID_TRABAJO, trabajoActivo, vistaTrabajo, type TrabajoVista } from "@/lib/trabajos-video";
+import {
+  buscarTrabajo,
+  cancelarTrabajo,
+  crearTrabajoVideo,
+  listarTrabajos,
+  servidorVideoActivo,
+  topeDeHoy,
+  type PedidoVideo,
+  type TopeDiario,
+} from "@/lib/trabajos-video-server";
 
 // Acciones de «Crear video». Todas validan primero quién llama (roles de
 // Ingresos o editor de video) y recién entonces usan el cliente de servicio.
@@ -110,6 +122,8 @@ function agregarVersion(
     autorNombre: profile.name,
     fecha: ahora,
     videoUrl: null,
+    videoTrabajoId: null,
+    videoAprobado: null,
   };
   g.versiones = [...g.versiones, nueva];
   g.guion = nueva.guion;
@@ -236,7 +250,9 @@ export async function guardarGuionVideo(entrada: {
     if (correccion && !cambio) {
       return { error: "El guion no cambió: edítalo con lo que pidió el cliente y vuelve a marcarla como aplicada." };
     }
+    let aviso: string | undefined;
     if (cambio) {
+      const anterior = versionVigente(previo);
       const v = agregarVersion(
         g,
         {
@@ -251,37 +267,52 @@ export async function guardarGuionVideo(entrada: {
         ahora,
       );
       if ("error" in v) return v;
-      if (correccion) resolverCorreccion(g, correccion.id, v.n);
+      if (correccion) {
+        resolverCorreccion(g, correccion.id, v.n);
+        // Corrección del cliente aplicada a mano: su video se encola igual que con IA.
+        aviso = await encolarVideoDeCorreccion(admin, g, anterior, v, a.profile);
+      }
     }
-    return guardar(admin, g);
+    return guardar(admin, g, aviso);
   });
 }
 
 // ----------------------------------------- correcciones del cliente ----
 
 /**
- * Con el modelo de video conectado, «regenerar con corrección» termina aquí:
- * la versión nueva del guion se manda a `generarVideo()` y su `videoUrl` se
- * guarda en esa versión. Hoy `VIDEO_IA_ACTIVO` es false y no hace nada.
+ * «Regenerar con corrección» termina aquí: si la versión anterior ya tenía
+ * video (o uno en proceso), se encola el de la versión nueva con las mismas
+ * fotos y opciones. Si nunca se pidió video para este guion no se encola
+ * nada: el video se pide a mano en el paso 07.
  */
-async function regenerarVideoSiActivo(g: GuionGuardado, formato: FormatoVideo): Promise<string | undefined> {
-  if (!VIDEO_IA_ACTIVO) return undefined;
-  const version = versionVigente(g);
-  if (!version) return undefined;
-  const r = await generarVideo({ guionId: g.id, version, formato: formato.slug, relacionAspecto: formato.relacion_aspecto });
-  if (!r.listo) return `El guion quedó corregido, pero el video no se regeneró: ${r.motivo}`;
-  g.versiones = g.versiones.map((v) => (v.n === version.n ? { ...v, videoUrl: r.videoUrl } : v));
+async function encolarVideoDeCorreccion(
+  admin: Almacen,
+  g: GuionGuardado,
+  anterior: VersionGuion | null,
+  nueva: VersionGuion,
+  profile: Profile,
+): Promise<string | undefined> {
+  if (!servidorVideoActivo() || !anterior || (!anterior.videoUrl && !anterior.videoTrabajoId)) return undefined;
+  const previo = anterior.videoTrabajoId ? await buscarTrabajo(anterior.videoTrabajoId) : null;
+  const pedido: PedidoVideo | undefined = previo
+    ? { imagenesProducto: previo.trabajo.imagenesProducto, ...previo.trabajo.opciones }
+    : undefined;
+  const r = await crearTrabajoVideo(admin, g, nueva, { id: profile.id, nombre: profile.name }, pedido, "correccion");
+  if ("error" in r) return `El guion quedó corregido (v${nueva.n}), pero su video no se encoló: ${r.error}`;
+  g.versiones = g.versiones.map((v) => (v.n === nueva.n ? { ...v, videoTrabajoId: r.trabajo.id } : v));
   return undefined;
 }
 
 /** Pide a la IA el guion corregido. Si falla, la corrección queda pendiente y devuelve el motivo. */
 async function aplicarConIA(
+  admin: Almacen,
   g: GuionGuardado,
   formato: FormatoVideo,
   correccion: Correccion,
   profile: Profile,
 ): Promise<string | undefined> {
   const datos = leerDatosVideo(g);
+  const anterior = versionVigente(g);
   const r = await corregirGuionVideo(datos, formato, g.guion, correccion.texto);
   if ("error" in r) {
     return `${r.error} La corrección quedó guardada como pendiente: edita el guion a mano y márcala como aplicada.`;
@@ -301,7 +332,7 @@ async function aplicarConIA(
   );
   if ("error" in v) return `${v.error} La corrección quedó pendiente.`;
   resolverCorreccion(g, correccion.id, v.n);
-  return regenerarVideoSiActivo(g, formato);
+  return encolarVideoDeCorreccion(admin, g, anterior, v, profile);
 }
 
 /**
@@ -330,7 +361,7 @@ export async function registrarCorreccion(id: string, texto: string, regenerar: 
     x.g.correcciones = [...x.g.correcciones, correccion];
     x.g.estado = "correccion_pendiente";
     x.g.actualizadoAt = ahora;
-    const aviso = regenerar ? await aplicarConIA(x.g, x.formato, correccion, x.profile) : undefined;
+    const aviso = regenerar ? await aplicarConIA(x.admin, x.g, x.formato, correccion, x.profile) : undefined;
     return guardar(x.admin, x.g, aviso);
   });
 }
@@ -343,7 +374,7 @@ export async function regenerarConCorreccion(id: string, correccionId: string): 
     const correccion = x.g.correcciones.find((c) => c.id === correccionId && c.estado === "pendiente");
     if (!correccion) return { error: "Esa corrección ya no está pendiente." };
     const antes = x.g.versiones.length;
-    const aviso = await aplicarConIA(x.g, x.formato, correccion, x.profile);
+    const aviso = await aplicarConIA(x.admin, x.g, x.formato, correccion, x.profile);
     // Si la IA falló no cambió nada: no hace falta reescribir el archivo.
     if (x.g.versiones.length === antes) return { guardado: x.g, aviso };
     return guardar(x.admin, x.g, aviso);
@@ -389,27 +420,122 @@ export async function restaurarVersion(id: string, n: number): Promise<ConGuion>
 }
 
 // -------------------------------------------------- generar video ----
+//
+// El video lo genera un servidor externo: aquí solo se deja el trabajo en la
+// cola y se consulta cómo va. Regla del dueño: nada generado sale sin un sí
+// explícito. Por eso el video entra «Por aprobar» y solo después de
+// `aprobarVideo` se puede copiar su enlace o pasarlo al prospecto (se valida
+// aquí, en el servidor, no solo en la pantalla).
 
-/**
- * Genera el video de la versión VIGENTE de un guion guardado y guarda su URL
- * en esa versión. Hoy siempre responde que no está conectado: ver
- * `generarVideo()` en lib/videos-server.ts.
- */
-export async function solicitarVideo(id: string): Promise<ConGuion> {
+/** Quién puede dar el sí a un video generado: el equipo comercial (no quien edita). */
+const APROBAR_VIDEO_ROLES = INGRESOS_ROLES;
+
+export type EstadoVideos = { guardado: GuionGuardado; trabajos: TrabajoVista[]; tope: TopeDiario };
+
+/** El último trabajo de cada versión que tenga uno. */
+async function trabajosDe(g: GuionGuardado): Promise<TrabajoVista[]> {
+  const ids = [...new Set(g.versiones.map((v) => v.videoTrabajoId).filter((x): x is string => !!x && ID_TRABAJO.test(x)))].slice(-8);
+  const leidos = await Promise.all(ids.map((id) => buscarTrabajo(id)));
+  return leidos.filter((x): x is NonNullable<typeof x> => !!x).map((x) => vistaTrabajo(x.trabajo));
+}
+
+/** Encola el video de la versión VIGENTE del guion guardado. */
+export async function solicitarVideo(id: string, pedido?: PedidoVideo): Promise<EstadoVideos | { error: string }> {
   return seguro(async () => {
     const x = await abrir(id);
     if ("error" in x) return x;
     const version = versionVigente(x.g);
     if (!version) return { error: "Este guion no tiene versiones." };
-    const r = await generarVideo({
-      guionId: x.g.id,
-      version,
-      formato: x.formato.slug,
-      relacionAspecto: x.formato.relacion_aspecto,
-    });
-    if (!r.listo) return { error: r.motivo };
-    x.g.versiones = x.g.versiones.map((v) => (v.n === version.n ? { ...v, videoUrl: r.videoUrl } : v));
+    const r = await crearTrabajoVideo(x.admin, x.g, version, { id: x.profile.id, nombre: x.profile.name }, pedido, "manual");
+    if ("error" in r) return r;
+    // Regenerar: el video anterior de esta versión deja de contar hasta que llegue el nuevo.
+    x.g.versiones = x.g.versiones.map((v) =>
+      v.n === version.n ? { ...v, videoTrabajoId: r.trabajo.id, videoUrl: null, videoAprobado: null } : v,
+    );
     x.g.actualizadoAt = new Date().toISOString();
+    const w = await guardar(x.admin, x.g);
+    if ("error" in w) return w;
+    return { guardado: x.g, trabajos: await trabajosDe(x.g), tope: await topeDeHoy(x.admin) };
+  });
+}
+
+/** Cómo van los videos de un guion. La pantalla la llama cada pocos segundos mientras haya uno en proceso. */
+export async function consultarVideos(id: string): Promise<EstadoVideos | { error: string }> {
+  return seguro(async () => {
+    const x = await abrir(id);
+    if ("error" in x) return x;
+    return { guardado: x.g, trabajos: await trabajosDe(x.g), tope: await topeDeHoy(x.admin) };
+  });
+}
+
+export async function cancelarVideo(id: string, trabajoId: string): Promise<EstadoVideos | { error: string }> {
+  return seguro(async () => {
+    const x = await abrir(id);
+    if ("error" in x) return x;
+    if (!x.g.versiones.some((v) => v.videoTrabajoId === trabajoId)) return { error: "Ese video no es de este guion." };
+    const r = await cancelarTrabajo(x.admin, trabajoId, x.profile.name);
+    if ("error" in r) return r;
+    return { guardado: x.g, trabajos: await trabajosDe(x.g), tope: await topeDeHoy(x.admin) };
+  });
+}
+
+/** El sí explícito: sin esto el video no sale del CRM. */
+export async function aprobarVideo(id: string, n: number): Promise<ConGuion> {
+  return seguro(async () => {
+    const x = await abrir(id);
+    if ("error" in x) return x;
+    if (!APROBAR_VIDEO_ROLES.includes(x.profile.role)) {
+      return { error: "Solo el equipo comercial (CEO, gerente comercial o directora operativa) puede aprobar un video." };
+    }
+    const v = x.g.versiones.find((y) => y.n === n);
+    if (!v?.videoUrl) return { error: "Esa versión todavía no tiene video." };
+    if (v.videoTrabajoId) {
+      const t = await buscarTrabajo(v.videoTrabajoId);
+      if (t && trabajoActivo(t.trabajo.estado)) return { error: "Se está generando un video nuevo para esa versión: espera a que termine." };
+    }
+    if (v.videoAprobado) return { guardado: x.g };
+    const ahora = new Date().toISOString();
+    x.g.versiones = x.g.versiones.map((y) =>
+      y.n === n ? { ...y, videoAprobado: { porId: x.profile.id, por: x.profile.name, fecha: ahora } } : y,
+    );
+    x.g.actualizadoAt = ahora;
     return guardar(x.admin, x.g);
+  });
+}
+
+/** Pasa el video YA APROBADO de una versión a la ficha del prospecto del guion. */
+export async function usarVideoEnProspecto(id: string, n: number): Promise<{ ok: true } | { error: string }> {
+  return seguro(async () => {
+    const x = await abrir(id);
+    if ("error" in x) return x;
+    if (!INGRESOS_ROLES.includes(x.profile.role)) return { error: "Solo el equipo comercial puede pasar un video al prospecto." };
+    const v = x.g.versiones.find((y) => y.n === n);
+    if (!v?.videoUrl) return { error: "Esa versión no tiene video." };
+    if (!videoAprobado(v)) return { error: "Ese video está por aprobar: apruébalo antes de usarlo en el prospecto." };
+    if (!x.g.prospectoId) return { error: "Este guion no está ligado a ningún prospecto." };
+    const fila = await leerFila(x.admin, x.g.prospectoId);
+    const pros = fila ? leerProspeccion(fila.respuestas_calificacion) : null;
+    if (!fila || !pros || fila.origen !== ORIGEN_PROSPECCION) return { error: "No se encontró el prospecto de este guion." };
+    const r = await guardarProspeccion(
+      x.admin,
+      x.g.prospectoId,
+      { video_url: v.videoUrl, video_nombre: `Video generado · v${v.n}`, video_path: null, video_terminado_at: null },
+      { evento: { quien: x.profile.name, accion: `Usó el video generado (v${v.n}), aprobado por ${v.videoAprobado?.por ?? "—"}` } },
+    );
+    if (r.error) return { error: r.error };
+    revalidatePath("/prospectos");
+    revalidatePath(`/prospectos/${x.g.prospectoId}`);
+    return { ok: true as const };
+  });
+}
+
+/** «Cola de videos»: todos los trabajos recientes, solo para el CEO. */
+export async function colaVideos(): Promise<{ trabajos: TrabajoVista[]; tope: TopeDiario; aviso?: string } | { error: string }> {
+  return seguro(async () => {
+    const profile = await requireProfile();
+    if (profile.role !== "ceo") return { error: "No tienes permiso para ver la cola de videos." };
+    const admin = createAdminClient();
+    const r = await listarTrabajos(admin);
+    return { trabajos: r.trabajos.map(vistaTrabajo), tope: await topeDeHoy(admin), aviso: r.error };
   });
 }

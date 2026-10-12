@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -10,7 +10,6 @@ import {
   ExternalLink,
   FileText,
   FolderOpen,
-  Lock,
   Plus,
   RefreshCw,
   Save,
@@ -19,7 +18,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { escribirGuion, guardarGuionVideo, resumirMercado, solicitarVideo } from "@/app/(protected)/videos/actions";
+import { escribirGuion, guardarGuionVideo, resumirMercado } from "@/app/(protected)/videos/actions";
 import { guardarGuion as guardarGuionProspecto } from "@/app/(protected)/prospectos/prospeccion-actions";
 import type { FormatoTarjeta } from "@/lib/video-formatos";
 import {
@@ -53,6 +52,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Chip, ETIQUETA } from "@/components/prospectos/piezas";
 import { CorreccionesCliente, TONO_ESTADO } from "./correcciones";
+import { GenerarVideo } from "./generar-video";
 
 export type ProspectoOrigen = { id: string; nombre: string };
 
@@ -64,7 +64,14 @@ type Props = {
   prospecto: ProspectoOrigen | null;
   prospectoNoEncontrado: boolean;
   puedeUsarEnProspecto: boolean;
+  /** Hay servidor de videos conectado (existe SERVIDOR_SECRET en el entorno). */
   videoActivo: boolean;
+  /** Puede dar el sí a un video generado (equipo comercial). */
+  puedeAprobarVideo: boolean;
+  /** Guion que se abre al entrar (`/videos?guion=<id>`, el enlace de los avisos). */
+  abrirGuionId: string | null;
+  /** Lo que va debajo de «Guiones guardados» (la cola de videos del CEO). */
+  children?: React.ReactNode;
 };
 
 const VACIO: DatosVideo = {
@@ -80,6 +87,23 @@ const VACIO: DatosVideo = {
   referencias: [{ ...REFERENCIA_VACIA }],
   resumenMercado: "",
 };
+
+/** Los campos del formulario tal como quedaron en un guion guardado. */
+function datosDe(g: GuionGuardado): DatosVideo {
+  return {
+    formato: g.formato,
+    producto: g.producto,
+    pais: g.pais,
+    cliente: g.cliente,
+    enlace: g.enlace,
+    oferta: g.oferta,
+    valores: g.valores,
+    paisBusqueda: g.paisBusqueda,
+    palabraClave: g.palabraClave,
+    referencias: g.referencias.length ? g.referencias : [{ ...REFERENCIA_VACIA }],
+    resumenMercado: g.resumenMercado,
+  };
+}
 
 const ITEMS_PAIS = Object.fromEntries(PAISES.map((p) => [p.codigo, p.nombre]));
 
@@ -141,16 +165,19 @@ function EnlaceBoton({ href, children }: { href: string | null; children: React.
 
 export function CrearVideo(props: Props) {
   const { formatos, prospecto } = props;
-  const [datos, setDatos] = useState<DatosVideo>({ ...VACIO, ...props.inicial });
-  const [guion, setGuion] = useState("");
-  const [origen, setOrigen] = useState<OrigenGuion>("manual");
-  const [idGuardado, setIdGuardado] = useState<string | null>(null);
-  const [guardadoTexto, setGuardadoTexto] = useState<string | null>(null);
-  const [prospectoId, setProspectoId] = useState<string | null>(prospecto?.id ?? null);
+  // Llegada desde un aviso («tu video está listo», `/videos?guion=<id>`): la
+  // pantalla arranca con ese guion ya abierto.
+  const [deEnlace] = useState(() => (props.abrirGuionId ? (props.guiones.find((x) => x.id === props.abrirGuionId) ?? null) : null));
+  const [datos, setDatos] = useState<DatosVideo>(deEnlace ? datosDe(deEnlace) : { ...VACIO, ...props.inicial });
+  const [guion, setGuion] = useState(deEnlace?.guion ?? "");
+  const [origen, setOrigen] = useState<OrigenGuion>(deEnlace?.origen ?? "manual");
+  const [idGuardado, setIdGuardado] = useState<string | null>(deEnlace?.id ?? null);
+  const [guardadoTexto, setGuardadoTexto] = useState<string | null>(deEnlace?.guion ?? null);
+  const [prospectoId, setProspectoId] = useState<string | null>(deEnlace ? deEnlace.prospectoId : (prospecto?.id ?? null));
   const [indicacion, setIndicacion] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const [avisoMercado, setAvisoMercado] = useState<string | null>(null);
-  const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | "video" | null>(null);
+  const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | null>(null);
   const [guiones, setGuiones] = useState(props.guiones);
   const arriba = useRef<HTMLDivElement>(null);
 
@@ -173,16 +200,6 @@ export function CrearVideo(props: Props) {
       setOrigen(g.origen);
       setAviso(null);
     }
-  }
-
-  async function pedirVideo() {
-    if (!actual) return void toast.error("Guarda el guion antes de generar el video.");
-    setOcupado("video");
-    const r = await solicitarVideo(actual.id);
-    setOcupado(null);
-    if ("error" in r) return void toast.error(r.error, { duration: 9000 });
-    alGuardar(r.guardado, false);
-    toast.success("Video generado con la versión vigente");
   }
 
   function set<K extends keyof DatosVideo>(k: K, v: DatosVideo[K]) {
@@ -254,19 +271,7 @@ export function CrearVideo(props: Props) {
 
   function abrir(g: GuionGuardado, duplicar: boolean) {
     if (sinGuardar && !window.confirm("Tienes un guion sin guardar. ¿Descartarlo y abrir este?")) return;
-    setDatos({
-      formato: g.formato,
-      producto: g.producto,
-      pais: g.pais,
-      cliente: g.cliente,
-      enlace: g.enlace,
-      oferta: g.oferta,
-      valores: g.valores,
-      paisBusqueda: g.paisBusqueda,
-      palabraClave: g.palabraClave,
-      referencias: g.referencias.length ? g.referencias : [{ ...REFERENCIA_VACIA }],
-      resumenMercado: g.resumenMercado,
-    });
+    setDatos(datosDe(g));
     setGuion(g.guion);
     setOrigen(g.origen);
     setIdGuardado(duplicar ? null : g.id);
@@ -278,6 +283,11 @@ export function CrearVideo(props: Props) {
     arriba.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     toast.success(duplicar ? "Copia lista: cambia lo que necesites y guárdala" : "Guion abierto");
   }
+
+  // Quien llega desde un aviso viene a ver el video: se le lleva a ese paso.
+  useEffect(() => {
+    if (deEnlace) document.getElementById("generar-video")?.scrollIntoView({ block: "start" });
+  }, [deEnlace]);
 
   return (
     <div ref={arriba} className="flex scroll-mt-20 flex-col gap-4">
@@ -780,31 +790,38 @@ export function CrearVideo(props: Props) {
         prospectoId={prospectoId}
         sinGuardar={sinGuardar}
         bloqueado={!!ocupado}
+        videoActivo={props.videoActivo}
         onGuardado={alGuardar}
       />
 
       {/* ----------------------------------------- 07 generar video */}
-      <Card>
+      <Card id="generar-video" className="scroll-mt-20">
         <CardHeader>
           <CardTitle>
             <Paso n="07">Generar video</Paso>
           </CardTitle>
           <CardDescription>
-            Se activa al conectar un modelo de video: generará el video de la versión vigente del guion y lo dejará
-            ligado a esa versión. Mientras tanto, aquí están los prompts por escena del formato, con tus datos, para
-            generarlos a mano.
+            {props.videoActivo
+              ? "El servidor de videos genera cada escena de la versión vigente del guion, las monta con voz y subtítulos y deja el video ligado a esa versión, por aprobar. Tarda varios minutos; puedes cerrar la página y volver."
+              : "El video se genera en un servidor aparte, que todavía no está conectado."}
           </CardDescription>
-          <CardAction>
-            <Button
-              disabled={!props.videoActivo || !actual || !!ocupado}
-              onClick={pedirVideo}
-              title={props.videoActivo ? "Genera el video de la versión vigente" : "Se activa al conectar un modelo de video"}
-            >
-              <Lock /> Generar video
-            </Button>
-          </CardAction>
+          {actual && (
+            <CardAction>
+              <Chip tono="azul">Versión vigente: v{versionVigente(actual)?.n ?? 1}</Chip>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
+          <GenerarVideo
+            activo={props.videoActivo}
+            guardado={actual}
+            sinGuardar={sinGuardar}
+            bloqueado={!!ocupado}
+            puedeAprobar={props.puedeAprobarVideo}
+            puedeUsarEnProspecto={props.puedeUsarEnProspecto}
+            onGuardado={alGuardar}
+          />
+          {formato && <span className={ETIQUETA}>Prompts por escena del formato (para generar a mano)</span>}
           {!formato && <p className="text-sm text-muted-foreground">Elige un formato para ver sus prompts por escena.</p>}
           {formato?.prompts.map((p) => {
             const texto = rellenar(p.prompt, datos);
@@ -883,6 +900,8 @@ export function CrearVideo(props: Props) {
           )}
         </CardContent>
       </Card>
+
+      {props.children}
     </div>
   );
 }

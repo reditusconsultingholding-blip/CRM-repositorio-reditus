@@ -4,8 +4,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ORIGEN_PROSPECCION, leerProspeccion } from "@/lib/prospeccion";
 import { tarjetas } from "@/lib/video-formatos";
 import { VIDEOS_ROLES, codigoDePais, type DatosVideo } from "@/lib/videos";
-import { ID_VALIDO, VIDEO_IA_ACTIVO, listarGuiones } from "@/lib/videos-server";
+import { ID_VALIDO, listarGuiones } from "@/lib/videos-server";
+import { vistaTrabajo } from "@/lib/trabajos-video";
+import { listarTrabajos, servidorVideoActivo, topeDeHoy } from "@/lib/trabajos-video-server";
 import { CrearVideo, type ProspectoOrigen } from "@/components/videos/crear-video";
+import { ColaVideos } from "@/components/videos/cola-videos";
 
 // «Crear video»: formato → datos del producto → investigación de mercado →
 // guion → guardar. La ven los roles de Ingresos y quien edita video. Los
@@ -14,14 +17,15 @@ import { CrearVideo, type ProspectoOrigen } from "@/components/videos/crear-vide
 export default async function VideosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ prospecto?: string | string[] }>;
+  searchParams: Promise<{ prospecto?: string | string[]; guion?: string | string[] }>;
 }) {
   const profile = await requireProfile();
   if (!VIDEOS_ROLES.includes(profile.role)) redirect("/requerimientos");
   const esIngresos = INGRESOS_ROLES.includes(profile.role);
 
   const admin = createAdminClient();
-  const { prospecto: crudo } = await searchParams;
+  const { prospecto: crudo, guion: guionCrudo } = await searchParams;
+  const abrirGuionId = typeof guionCrudo === "string" && ID_VALIDO.test(guionCrudo) ? guionCrudo : null;
   const prospectoId = typeof crudo === "string" && ID_VALIDO.test(crudo) ? crudo : null;
 
   // Si llega ?prospecto=<id>, se prellena desde su ficha. Quien no es de
@@ -61,6 +65,18 @@ export default async function VideosPage({
 
   const { guiones, error } = await listarGuiones(admin);
 
+  // El paso «Generar video» existe solo si el servidor externo está conectado
+  // (variable SERVIDOR_SECRET). La cola completa la ve únicamente el CEO.
+  const videoActivo = servidorVideoActivo();
+  const cola =
+    videoActivo && profile.role === "ceo"
+      ? await Promise.all([listarTrabajos(admin), topeDeHoy(admin)]).then(([l, tope]) => ({
+          trabajos: l.trabajos.map(vistaTrabajo),
+          tope,
+          aviso: l.error ?? null,
+        }))
+      : null;
+
   return (
     <CrearVideo
       formatos={tarjetas()}
@@ -70,7 +86,11 @@ export default async function VideosPage({
       prospecto={prospecto}
       prospectoNoEncontrado={!!prospectoId && !prospecto}
       puedeUsarEnProspecto={esIngresos}
-      videoActivo={VIDEO_IA_ACTIVO}
-    />
+      videoActivo={videoActivo}
+      puedeAprobarVideo={esIngresos}
+      abrirGuionId={abrirGuionId}
+    >
+      {cola && <ColaVideos trabajos={cola.trabajos} tope={cola.tope} aviso={cola.aviso} />}
+    </CrearVideo>
   );
 }
