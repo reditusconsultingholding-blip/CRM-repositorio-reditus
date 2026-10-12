@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireProfile } from "@/lib/auth";
+import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { maybeGenerarEncuestaCalidad } from "@/lib/encuesta";
 import type { RequerimientoEstado, Pipeline, PruebaSocialEstado, RequerimientoPagadoEstado } from "@/lib/statuses";
@@ -11,7 +11,11 @@ type ActionResult = { error?: string } | undefined;
 
 export async function deleteRequerimiento(id: string): Promise<ActionResult> {
   try {
-    await requireProfile();
+    const profile = await requireProfile();
+    // Borrar es irreversible: solo CEO, gerente comercial y directora operativa.
+    if (!(INGRESOS_ROLES as string[]).includes(profile.role)) {
+      return { error: "Solo el CEO, la gerente comercial o la directora operativa pueden borrar un requerimiento." };
+    }
     const supabase = await createClient();
     const { error } = await supabase.from("requerimientos").delete().eq("id", id);
     if (error) return { error: error.message };
@@ -63,8 +67,8 @@ export async function actualizarUnidadCampo(
 export async function updatePruebaSocial(id: string, estado: PruebaSocialEstado): Promise<ActionResult> {
   try {
     const profile = await requireProfile();
-    if (!["ceo", "gerente_comercial"].includes(profile.role)) {
-      return { error: "Solo Gerente Comercial o el CEO pueden marcar prueba social." };
+    if (!(INGRESOS_ROLES as string[]).includes(profile.role)) {
+      return { error: "Solo el CEO, la gerente comercial o la directora operativa pueden marcar prueba social." };
     }
     const supabase = await createClient();
     const { error } = await supabase.from("requerimientos").update({ prueba_social: estado }).eq("id", id);
@@ -79,7 +83,7 @@ export async function updatePruebaSocial(id: string, estado: PruebaSocialEstado)
 export async function updateRequerimientoPagado(id: string, pagado: RequerimientoPagadoEstado): Promise<ActionResult> {
   try {
     const profile = await requireProfile();
-    if (!["ceo", "gerente_comercial"].includes(profile.role)) {
+    if (!(INGRESOS_ROLES as string[]).includes(profile.role)) {
       return { error: "Solo Gerente Comercial o el CEO pueden marcar el pago." };
     }
     const supabase = await createClient();

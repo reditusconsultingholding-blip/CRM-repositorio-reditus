@@ -139,7 +139,9 @@ export default async function RequerimientosPage() {
         <Link href={`/requerimientos/${row.id}`} className="text-sm font-medium text-primary hover:underline">
           Ver
         </Link>
-        <DeleteRequerimientoButton requerimientoId={row.id} nombre={row.nombre_producto ?? "este requerimiento"} />
+        {canManageDinero && (
+          <DeleteRequerimientoButton requerimientoId={row.id} nombre={row.nombre_producto ?? "este requerimiento"} />
+        )}
       </div>
     );
   }
