@@ -1,6 +1,6 @@
 {
-  "version": "809692d00f",
-  "reglas_comunes": "# Columna vertebral · reglas que valen para TODOS los formatos\n\nSíntesis de la base de Reditus. No reemplaza a la fuente: la resume para que cada formato la herede.\n\nCómo leer las citas:\n- `[base §N]` = `supernova/conocimiento/videos-ia/BASE_CONOCIMIENTO.md`, sección N.\n- `[método §N]` = `supernova/conocimiento/videos-ia/antonio/METODO_ANTONIO.md`, sección N (ahí está el minuto exacto de cada clase).\n- `[clase N hh:mm:ss]` = cita directa de una clase de Antonio.\n- `[propuesta]` = aporte de este repositorio, sin fuente. Se valida probando.\n\n## 1. Estructura del guion: la montaña rusa\n\nEs «la estructura de Antonio» [método §3.2]. Todo formato la cumple, cambie lo que cambie por fuera:\n\n1. IMPACTO (hook, 0–3 s): situación real e identificable, o pregunta «al cuello». Nunca una promesa.\n2. BAJADA: la consecuencia, agrandada y dicha de forma indirecta.\n3. REFUERZO: otro dolor, o la solución que ya probó y le falló.\n4. SUBIDA: el producto como solución, con su mecanismo en una frase.\n5. CTA: la oferta local del país, según la etapa del embudo.\n\nEquivale al HOOK → DESARROLLO → CTA de los briefs reales [base §1, §4]. El único tiempo con fuente es «gancho 0–3 s, desarrollo 3–25 s, CTA al final» [base §3]; los demás segundos de cada formato son [propuesta].\n\n## 2. Reglas del guion\n\n- El hook es lo más importante: se le dedica la mayor parte del tiempo y se reescribe hasta lograr el «efecto wow» [método §1, §3].\n- Situaciones de la vida real al principio [método §3.2].\n- Tono según el país: Colombia más agresivo y directo; España más pasivo; jerga local [método §3].\n- Etapa del embudo coherente con duración y cierre: TOFU largo, tipo historia y con CTA suave; MOFU medio, educa y valida; BOFU corto, con oferta, urgencia y prueba social [método §3.1].\n- Cada bloque hablado tiene unas 20–24 palabras (unas 2 líneas), que es un clip de 8 s [método §3.3, §5.3].\n- El CTA lleva la oferta local (por ejemplo, envío gratis y pago contra entrega) y se dice mirando a cámara [base §1][método §9.1].\n- Cada video de un lote necesita un hook distinto; las variaciones cambian el inicio y conservan el cuerpo [base §1].\n- Sin claims médicos, credenciales inventadas («soy el doctor…») ni promesas con cifra y plazo. En nichos sensibles el hook va como pregunta [base §1][método §8].\n- No se copian identidad, textos ni marcas de las referencias: solo formato, encuadre y ritmo [base §1].\n- Precios, cifras, testimonios y resultados nunca se inventan: si el cliente no los dio, van entre [corchetes] para completar [propuesta, coherente con base §1].\n\n## 3. Reglas visuales y de generación\n\n- Vertical 9:16, MP4 [base §1].\n- Lo natural vende más que lo producido; que no se perciba como IA [método §1].\n- La imagen es el insumo del video: primero una imagen aprobada, luego se anima [método §4].\n- Cada imagen sale de la original aprobada, nunca de una derivada [método §5.4].\n- Prompt autónomo por escena: nunca «la misma mujer» ni «como en la escena anterior» [base §3.2].\n- Personas realistas: piel con microporos y microvellos, sin suavizado; nunca pedir «hiperrealista» [método §4.1].\n- Producto y etiqueta idénticos al real; tamaño proporcional y coherente [base §7][método §4.2].\n- Acento con gentilicio y ciudad; misma voz en todos los clips [método §5.2, §5.4].\n- Diálogo del prompt sin dos puntos y con comas en lugar de puntos; quien calla lleva \"[no habla, solo escucha]\" [método §5.4].\n- Animado: escenas de unos 2 s y movimientos «fluidos, no lentos» [método §5.4].\n\n## 4. Edición\n\n- B-roll cada 3 s como máximo, atado a la palabra exacta que se dice [método §7].\n- Zoom-in lento en los clips [método §7].\n- Música por tramo: triste en el problema, alegre en la solución; voz 70 %, música 30 % [método §7].\n- Subtítulos limpios, en una línea, junto a la cara; hechos con Captions [método §8].\n- Para Colombia, un género musical local en vez de un trend genérico [base §1].\n\n## 5. Investigación de mercado\n\n- Sale de las referencias que manda el cliente y de TikTok / Meta Ads Library [base §1].\n- De la investigación deben salir: dolor funcional y emocional, cliente ideal, objeciones, creencias, mecanismo, ángulos y oferta [método §2].\n- Se buscan patrones que se repiten y se hace más de eso [método §1].\n- La base no trae métricas de rendimiento (CTR, ROAS, retención): ningún formato de este repositorio afirma cifras [base, aviso inicial].",
+  "version": "5c62506cc9",
+  "reglas_comunes": "# Columna vertebral · reglas que valen para TODOS los formatos\n\nSíntesis de la base de Reditus. No reemplaza a la fuente: la resume para que cada formato la herede.\n\nCómo leer las citas:\n- `[base §N]` = `supernova/conocimiento/videos-ia/BASE_CONOCIMIENTO.md`, sección N.\n- `[método §N]` = `supernova/conocimiento/videos-ia/antonio/METODO_ANTONIO.md`, sección N (ahí está el minuto exacto de cada clase).\n- `[clase N hh:mm:ss]` = cita directa de una clase de Antonio.\n- `[propuesta]` = aporte de este repositorio, sin fuente. Se valida probando.\n\n## 1. Estructura del guion: la montaña rusa\n\nEs «la estructura de Antonio» [método §3.2]. Todo formato la cumple, cambie lo que cambie por fuera:\n\n1. PASO 1 · IMPACTO (hook, 0–3 s): situación real e identificable, o pregunta «al cuello». Nunca una promesa.\n2. PASO 2 · BAJADA: la consecuencia, agrandada y dicha de forma indirecta.\n3. PASO 3 · REFUERZO: otro dolor, o la solución que ya probó y le falló.\n4. PASO 4 · SUBIDA: el producto como solución, con su mecanismo en una frase.\n5. PASO 5 · CTA: la oferta local del país, según la etapa del embudo.\n\nEn todo guion cada bloque va rotulado con su paso («PASO 1 · IMPACTO (0–3 s)»), para que se vea que la estructura se está aplicando [propuesta de formato].\n\nEl producto real se ve en pantalla en el paso 4, en mano o en demostración de uso, y sigue visible en el paso 5 [base §3.1: «producto en mano: uso y beneficio»][método §4.2: prompt de producto en mano]. En TOFU puede no aparecer antes [método §3.1]. En los formatos animados entra además una toma real del producto, porque la base admite mezclar IA con tomas reales [base §1]; el punto exacto del corte es [propuesta].\n\nEquivale al HOOK → DESARROLLO → CTA de los briefs reales [base §1, §4]. El único tiempo con fuente es «gancho 0–3 s, desarrollo 3–25 s, CTA al final» [base §3]; los demás segundos de cada formato son [propuesta].\n\n## 2. Reglas del guion\n\n- El hook es lo más importante: se le dedica la mayor parte del tiempo y se reescribe hasta lograr el «efecto wow» [método §1, §3].\n- Situaciones de la vida real al principio [método §3.2].\n- Tono según el país: Colombia más agresivo y directo; España más pasivo; jerga local [método §3].\n- Etapa del embudo coherente con duración y cierre: TOFU largo, tipo historia y con CTA suave; MOFU medio, educa y valida; BOFU corto, con oferta, urgencia y prueba social [método §3.1].\n- Cada bloque hablado tiene unas 20–24 palabras (unas 2 líneas), que es un clip de 8 s [método §3.3, §5.3].\n- El CTA lleva la oferta local (por ejemplo, envío gratis y pago contra entrega) y se dice mirando a cámara [base §1][método §9.1].\n- Cada video de un lote necesita un hook distinto; las variaciones cambian el inicio y conservan el cuerpo [base §1].\n- Sin claims médicos, credenciales inventadas («soy el doctor…») ni promesas con cifra y plazo. En nichos sensibles el hook va como pregunta [base §1][método §8].\n- No se copian identidad, textos ni marcas de las referencias: solo formato, encuadre y ritmo [base §1].\n- Precios, cifras, testimonios y resultados nunca se inventan: si el cliente no los dio, van entre [corchetes] para completar [propuesta, coherente con base §1].\n\n## 3. Reglas visuales y de generación\n\n- Vertical 9:16, MP4 [base §1].\n- Lo natural vende más que lo producido; que no se perciba como IA [método §1].\n- La imagen es el insumo del video: primero una imagen aprobada, luego se anima [método §4].\n- Cada imagen sale de la original aprobada, nunca de una derivada [método §5.4].\n- Prompt autónomo por escena: nunca «la misma mujer» ni «como en la escena anterior» [base §3.2].\n- Personas realistas: piel con microporos y microvellos, sin suavizado; nunca pedir «hiperrealista» [método §4.1].\n- Producto y etiqueta idénticos al real; tamaño proporcional y coherente [base §7][método §4.2].\n- Acento con gentilicio y ciudad; misma voz en todos los clips [método §5.2, §5.4].\n- Diálogo del prompt sin dos puntos y con comas en lugar de puntos; quien calla lleva \"[no habla, solo escucha]\" [método §5.4].\n- Animado: escenas de unos 2 s y movimientos «fluidos, no lentos» [método §5.4].\n\n## 4. Edición\n\n- B-roll cada 3 s como máximo, atado a la palabra exacta que se dice [método §7].\n- Zoom-in lento en los clips [método §7].\n- Música por tramo: triste en el problema, alegre en la solución; voz 70 %, música 30 % [método §7].\n- Subtítulos limpios, en una línea, junto a la cara; hechos con Captions [método §8].\n- Para Colombia, un género musical local en vez de un trend genérico [base §1].\n\n## 5. Investigación de mercado\n\n- Sale de las referencias que manda el cliente y de TikTok / Meta Ads Library [base §1].\n- De la investigación deben salir: dolor funcional y emocional, cliente ideal, objeciones, creencias, mecanismo, ángulos y oferta [método §2].\n- Se buscan patrones que se repiten y se hace más de eso [método §1].\n- La base no trae métricas de rendimiento (CTR, ROAS, retención): ningún formato de este repositorio afirma cifras [base, aviso inicial].",
   "formatos": [
     {
       "slug": "claymation",
@@ -17,6 +17,7 @@
         "imagen del personaje en estilo claymation",
         "12 a 16 escenas cortas"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: el personaje sostiene el producto real y entra una toma real del producto en mano; primer plano en el paso 5",
       "riesgos": [
         "movimientos lentos",
         "personaje que cambia entre escenas",
@@ -41,30 +42,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–2 s",
           "escena": "Impacto",
           "que_pasa": "Pregunta al cuello dicha por el personaje; mientras se oye, en pantalla se lee otra cosa",
           "fuente": "[clase 3 02:03:42]"
         },
         {
+          "paso": 2,
           "tiempo": "2–10 s",
           "escena": "Bajada",
           "que_pasa": "4 escenas de 2 s: el día a día del problema",
           "fuente": "[método §5.4]"
         },
         {
+          "paso": 3,
           "tiempo": "10–16 s",
           "escena": "Refuerzo",
           "que_pasa": "3 escenas: lo que deja pasar o lo que ya probó",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "16–26 s",
           "escena": "Subida",
-          "que_pasa": "El personaje con el producto; escenas de cambio",
+          "que_pasa": "El personaje con el producto; escenas de cambio. Toma real del producto en mano o en uso",
           "fuente": "[clase 3 02:07:42]"
         },
         {
+          "paso": 5,
           "tiempo": "26–32 s",
           "escena": "CTA",
           "que_pasa": "Producto en primer plano y oferta local dicha por el personaje",
@@ -77,9 +83,10 @@
         "«Movimientos fluidos, no lentos»; 2 generaciones por escena para elegir [método §5.4].",
         "El hook se rehace hasta que sea «representativo del día a día» [clase 3 02:01:42].",
         "Al personaje se le agrega el producto real donde corresponde, con la etiqueta intacta [clase 3 02:07:42][base §3.7].",
-        "Efectos de sonido atados a la frase (un reloj en «mientras deja pasar el tiempo») [clase 3 02:11:44]."
+        "Efectos de sonido atados a la frase (un reloj en «mientras deja pasar el tiempo») [clase 3 02:11:44].",
+        "En la subida (paso 4) entra una toma real del producto en mano o en uso, aunque el resto sea animado: la base pide producto en mano y demostración [base §3.1][método §4.2] y admite mezclar IA con tomas reales [base §1]; el punto exacto del corte es [propuesta]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Claymation 9:16 | DURACIÓN: 32 s | CLIENTE: {{cliente}}\n\nIMPACTO (0–2 s) · PERSONAJE: \"¿Sientes que {{dolor}}?\"   TEXTO EN PANTALLA: [frase distinta que refuerza, máximo 5 palabras]\nBAJADA (2–10 s): \"[Escena 1 del día a día]. [Escena 2]. [Escena 3]. [Escena 4].\"\nREFUERZO (10–16 s): \"Y mientras deja pasar el tiempo, [consecuencia]. [Lo que probó] no le sirvió.\"\nSUBIDA (16–26 s): \"Por eso existe {{producto}}, [mecanismo en una frase]. {{beneficio}}.\"\nCTA (26–32 s): \"Pida hoy {{producto}}, {{oferta}}.\"\n\nMÚSICA: triste al inicio, alegre desde la subida\nSFX: [sonido atado a una frase concreta]\nESCENAS: una cada 2 s",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Claymation 9:16 | DURACIÓN: 32 s | CLIENTE: {{cliente}}\n\nPASO 1 · IMPACTO (0–2 s) · PERSONAJE: \"¿Sientes que {{dolor}}?\"   TEXTO EN PANTALLA: [frase distinta que refuerza, máximo 5 palabras]\nPASO 2 · BAJADA (2–10 s): \"[Escena 1 del día a día]. [Escena 2]. [Escena 3]. [Escena 4].\"\nPASO 3 · REFUERZO (10–16 s): \"Y mientras deja pasar el tiempo, [consecuencia]. [Lo que probó] no le sirvió.\"\nPASO 4 · SUBIDA (16–26 s): \"Por eso existe {{producto}}, [mecanismo en una frase]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (26–32 s): \"Pida hoy {{producto}}, {{oferta}}.\"\n\nMÚSICA: triste al inicio, alegre desde la subida\nSFX: [sonido atado a una frase concreta]\nESCENAS: una cada 2 s",
       "prompts": [
         {
           "escena": "Imagen del personaje",
@@ -104,6 +111,10 @@
         {
           "escena": "Escena de CTA",
           "prompt": "IMAGEN: {{producto}} (foto real) en primer plano sobre el escenario en miniatura, el personaje detrás.\nGUION: \"[CTA con {{oferta}}]\"\nMOVIMIENTO: zoom in al producto.\nFORMATO: 9:16"
+        },
+        {
+          "escena": "Toma real · producto en mano (paso 4)",
+          "prompt": "IMAGEN: una mano real de [mujer/hombre] con rasgos de {{pais}} sostiene {{producto}} (foto real, etiqueta sin alterar, tamaño proporcional y coherente) en [contexto de uso cotidiano], luz natural, grabado con celular.\nMOVIMIENTO: la mano gira un poco el producto y [lo abre / lo aplica / lo sirve]; se corta antes de terminar la acción.\nSIN DIÁLOGO. Sirve de B-roll sobre la frase de la subida.\nFORMATO: 9:16, 3 s"
         }
       ]
     },
@@ -122,6 +133,7 @@
         "dos rostros (avatares generados)",
         "calle reconocible de la ciudad"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: la entrevistada saca el producto real del bolso y lo muestra; sigue en mano en el paso 5",
       "riesgos": [
         "habla el personaje equivocado",
         "quien escucha mueve la boca",
@@ -146,30 +158,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "El entrevistador, de perfil o de espalda, lanza la pregunta con el micrófono",
           "fuente": "[método §6]"
         },
         {
+          "paso": 2,
           "tiempo": "3–11 s",
           "escena": "Bajada",
           "que_pasa": "La persona responde con su problema del día a día",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "11–19 s",
           "escena": "Refuerzo",
           "que_pasa": "Repregunta corta y respuesta: lo que probó y no sirvió",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "19–27 s",
           "escena": "Subida",
           "que_pasa": "Saca el producto del bolso y cuenta cómo lo usa",
           "fuente": "[método §3.2, §6]"
         },
         {
+          "paso": 5,
           "tiempo": "27–33 s",
           "escena": "CTA",
           "que_pasa": "La persona mira a cámara y dice la oferta. Producto en pantalla solo al final",
@@ -184,7 +201,7 @@
         "Sin B-roll durante la entrevista; música neutra continua [método §6, §7].",
         "Generar por fotogramas, no por ingredientes: con dos personas es crítico [método §5.4]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Entrevista en la calle 9:16 | DURACIÓN: 33 s | CLIENTE: {{cliente}}\n\nIMPACTO (0–3 s) · ENTREVISTADOR: \"Disculpa, una pregunta rápida, ¿qué haces cuando {{dolor}}?\"\nBAJADA (3–11 s) · ENTREVISTADA: \"Uy, eso me pasaba todos los días, [consecuencia].\"\nREFUERZO (11–19 s) · ENTREVISTADOR: \"¿Y qué habías probado?\" · ENTREVISTADA: \"[Solución que falló], pero nada.\"\nSUBIDA (19–27 s) · ENTREVISTADA, saca el producto: \"Ahora uso {{producto}}, mira, [cómo se usa]. {{beneficio}}.\"\nCTA (27–33 s) · ENTREVISTADA a cámara: \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [la pregunta del entrevistador, máximo 6 palabras]\nMÚSICA: neutra y continua\nB-ROLL: ninguno durante la entrevista; producto al final",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Entrevista en la calle 9:16 | DURACIÓN: 33 s | CLIENTE: {{cliente}}\n\nPASO 1 · IMPACTO (0–3 s) · ENTREVISTADOR: \"Disculpa, una pregunta rápida, ¿qué haces cuando {{dolor}}?\"\nPASO 2 · BAJADA (3–11 s) · ENTREVISTADA: \"Uy, eso me pasaba todos los días, [consecuencia].\"\nPASO 3 · REFUERZO (11–19 s) · ENTREVISTADOR: \"¿Y qué habías probado?\" · ENTREVISTADA: \"[Solución que falló], pero nada.\"\nPASO 4 · SUBIDA (19–27 s) · ENTREVISTADA, saca el producto: \"Ahora uso {{producto}}, mira, [cómo se usa]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (27–33 s) · ENTREVISTADA a cámara: \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [la pregunta del entrevistador, máximo 6 palabras]\nMÚSICA: neutra y continua\nB-ROLL: ninguno durante la entrevista; producto al final",
       "prompts": [
         {
           "escena": "Imagen base",
@@ -227,6 +244,7 @@
         "personaje consistente (imagen ancla)",
         "6 a 8 escenas"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: el personaje recibe el producto real y lo usa por primera vez; producto solo en el paso 5",
       "riesgos": [
         "personaje que cambia de cara entre escenas",
         "historia larga sin estímulo cada 3 s",
@@ -252,30 +270,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "La situación real, en una imagen y una frase",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 2,
           "tiempo": "3–12 s",
           "escena": "Bajada",
           "que_pasa": "Cómo eso le fue quitando cosas: 3 escenas cortas",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "12–20 s",
           "escena": "Refuerzo",
           "que_pasa": "Lo que intentó y falló; el punto más bajo («no puedo seguir así»)",
           "fuente": "[método §3.1, §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "20–34 s",
           "escena": "Subida",
           "que_pasa": "Alguien cercano que ya lo resolvió le muestra el producto; primer uso",
           "fuente": "[método §3.1]"
         },
         {
+          "paso": 5,
           "tiempo": "34–42 s",
           "escena": "CTA",
           "que_pasa": "Cierre suave con la oferta local",
@@ -289,7 +312,7 @@
         "Música triste hasta el punto más bajo y alegre desde la subida, con transición [método §7].",
         "B-roll incompleto: cortar antes de que termine la acción para generar curiosidad [método §7]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Historia narrada 9:16 | DURACIÓN: 42 s | CLIENTE: {{cliente}}\n\nIMPACTO (0–3 s) · NARRADOR: \"[Nombre ficticio] llevaba [tiempo] con {{dolor}}.\"\nBAJADA (3–12 s): \"Primero fue [pérdida 1]. Después [pérdida 2]. Y un día [pérdida 3].\"\nREFUERZO (12–20 s): \"Probó [solución que falló]. Nada. Hasta que dijo: no puedo seguir así.\"\nSUBIDA (20–34 s): \"[Persona cercana] le habló de {{producto}}. [Cómo lo usó]. {{beneficio}}.\"\nCTA (34–42 s): \"Si te pasa lo mismo, {{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 6 palabras]\nMÚSICA: triste al inicio, alegre desde la subida\nESCENAS: una por frase, de 2 a 4 s cada una",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Historia narrada 9:16 | DURACIÓN: 42 s | CLIENTE: {{cliente}}\n\nPASO 1 · IMPACTO (0–3 s) · NARRADOR: \"[Nombre ficticio] llevaba [tiempo] con {{dolor}}.\"\nPASO 2 · BAJADA (3–12 s): \"Primero fue [pérdida 1]. Después [pérdida 2]. Y un día [pérdida 3].\"\nPASO 3 · REFUERZO (12–20 s): \"Probó [solución que falló]. Nada. Hasta que dijo: no puedo seguir así.\"\nPASO 4 · SUBIDA (20–34 s): \"[Persona cercana] le habló de {{producto}}. [Cómo lo usó]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (34–42 s): \"Si te pasa lo mismo, {{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 6 palabras]\nMÚSICA: triste al inicio, alegre desde la subida\nESCENAS: una por frase, de 2 a 4 s cada una",
       "prompts": [
         {
           "escena": "Imagen ancla del personaje",
@@ -335,6 +358,7 @@
         "voz con carácter y acento del país",
         "definición del personaje (qué objeto habla)"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: entra el producto con su envase real y una toma real del producto en mano; primer plano en el paso 5",
       "riesgos": [
         "etiqueta del producto animado distinta a la real",
         "tono infantil que no encaja con la marca",
@@ -359,30 +383,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "El objeto se presenta o acusa: «Soy tu [órgano] y estoy…»",
           "fuente": "[método §3.1, §3.2]"
         },
         {
+          "paso": 2,
           "tiempo": "3–9 s",
           "escena": "Bajada",
           "que_pasa": "Cuenta qué le pasa por dentro cada día",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "9–14 s",
           "escena": "Refuerzo",
           "que_pasa": "Lo que la persona hace y lo empeora",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "14–22 s",
           "escena": "Subida",
-          "que_pasa": "Entra el producto (él mismo o un segundo personaje) y explica cómo ayuda",
+          "que_pasa": "Entra el producto (él mismo o un segundo personaje) y explica cómo ayuda. Toma real del producto en mano o en uso",
           "fuente": "[método §6]"
         },
         {
+          "paso": 5,
           "tiempo": "22–28 s",
           "escena": "CTA",
           "que_pasa": "El producto dice la oferta local",
@@ -394,9 +423,10 @@
         "El envase conserva forma, colores y etiqueta del producto real [base §3.7].",
         "Un solo estilo en todo el video (3D tipo animación de cine, claymation o realista con cara) [propuesta].",
         "Animado: escenas cortas y movimientos fluidos [método §5.4].",
-        "Si va recortado sobre una escena, el fondo se quita en edición y la posición puede cambiar [método §6]."
+        "Si va recortado sobre una escena, el fondo se quita en edición y la posición puede cambiar [método §6].",
+        "En la subida (paso 4) entra una toma real del producto en mano o en uso, aunque el resto sea animado: la base pide producto en mano y demostración [base §3.1][método §4.2] y admite mezclar IA con tomas reales [base §1]; el punto exacto del corte es [propuesta]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Objeto parlante 9:16 | DURACIÓN: 28 s | CLIENTE: {{cliente}}\nPERSONAJE QUE HABLA: [el producto / el órgano / el objeto culpable]\n\nIMPACTO (0–3 s): \"Soy tu [objeto], y sí, por mí {{dolor}}.\"\nBAJADA (3–9 s): \"Cada [momento del día] me pasa esto: [qué le ocurre por dentro].\"\nREFUERZO (9–14 s): \"Y tú me das [lo que hace y lo empeora].\"\nSUBIDA (14–22 s) · entra el producto: \"Yo soy {{producto}}. [Mecanismo en una frase]. {{beneficio}}.\"\nCTA (22–28 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [nombre del personaje, máximo 4 palabras]\nMÚSICA: juguetona; cambia al entrar el producto",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Objeto parlante 9:16 | DURACIÓN: 28 s | CLIENTE: {{cliente}}\nPERSONAJE QUE HABLA: [el producto / el órgano / el objeto culpable]\n\nPASO 1 · IMPACTO (0–3 s): \"Soy tu [objeto], y sí, por mí {{dolor}}.\"\nPASO 2 · BAJADA (3–9 s): \"Cada [momento del día] me pasa esto: [qué le ocurre por dentro].\"\nPASO 3 · REFUERZO (9–14 s): \"Y tú me das [lo que hace y lo empeora].\"\nPASO 4 · SUBIDA (14–22 s) · entra el producto: \"Yo soy {{producto}}. [Mecanismo en una frase]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (22–28 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [nombre del personaje, máximo 4 palabras]\nMÚSICA: juguetona; cambia al entrar el producto",
       "prompts": [
         {
           "escena": "Imagen del personaje",
@@ -417,6 +447,10 @@
         {
           "escena": "Escena 4 · CTA",
           "prompt": "IMAGEN: {{producto}} como personaje, primer plano.\nGUION: \"[CTA con {{oferta}}]\"\nACCIÓN DURANTE: señala hacia abajo.\nFORMATO: 9:16, 8 s"
+        },
+        {
+          "escena": "Toma real · producto en mano (paso 4)",
+          "prompt": "IMAGEN: una mano real de [mujer/hombre] con rasgos de {{pais}} sostiene {{producto}} (foto real, etiqueta sin alterar, tamaño proporcional y coherente) en [contexto de uso cotidiano], luz natural, grabado con celular.\nMOVIMIENTO: la mano gira un poco el producto y [lo abre / lo aplica / lo sirve]; se corta antes de terminar la acción.\nSIN DIÁLOGO. Sirve de B-roll sobre la frase de la subida.\nFORMATO: 9:16, 3 s"
         }
       ]
     },
@@ -435,6 +469,7 @@
         "rostro (avatar generado)",
         "micrófono de podcast en la escena"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: toma el producto real de la mesa y lo muestra; B-roll del producto en uso",
       "riesgos": [
         "credenciales inventadas que Meta bloquea",
         "set demasiado producido",
@@ -458,30 +493,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "Frase polémica o pregunta, ya a mitad de conversación",
           "fuente": "[base §3.5]"
         },
         {
+          "paso": 2,
           "tiempo": "3–11 s",
           "escena": "Bajada",
           "que_pasa": "Explica por qué pasa, con una anécdota de alguien que atendió",
           "fuente": "[base §3.5][método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "11–19 s",
           "escena": "Refuerzo",
           "que_pasa": "Lo que la gente hace mal o la solución que falla",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "19–29 s",
           "escena": "Subida",
-          "que_pasa": "Menciona el producto y su mecanismo en una frase. B-roll del producto",
+          "que_pasa": "Toma el producto de la mesa, lo muestra en la mano y dice su mecanismo en una frase. B-roll del producto en uso",
           "fuente": "[base §3.5][método §7]"
         },
         {
+          "paso": 5,
           "tiempo": "29–35 s",
           "escena": "CTA",
           "que_pasa": "Mira a cámara y dice la oferta",
@@ -496,7 +536,7 @@
         "Segundo personaje, si hace falta: giro horizontal de la misma escena [método §4.2, §6].",
         "Subtítulos en una línea, junto a la cara [método §8]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Podcast 9:16 | DURACIÓN: 35 s | CLIENTE: {{cliente}}\n\nIMPACTO (0–3 s): \"¿Sabes por qué {{dolor}}? Casi nadie lo dice.\"\nBAJADA (3–11 s): \"Me pasa con muchas personas, llegan [situación], y lo que hay detrás es [causa].\"\nREFUERZO (11–19 s): \"Y lo primero que hacen es [solución que falla], que solo [por qué no sirve].\"\nSUBIDA (19–29 s): \"Por eso recomiendo {{producto}}, porque [mecanismo en una frase]. {{beneficio}}.\"\nCTA (29–35 s) · a cámara: \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 6 palabras]\nMÚSICA: suave, cambia en la subida\nB-ROLL: [causa del problema] · producto en contexto · producto en uso",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Podcast 9:16 | DURACIÓN: 35 s | CLIENTE: {{cliente}}\n\nPASO 1 · IMPACTO (0–3 s): \"¿Sabes por qué {{dolor}}? Casi nadie lo dice.\"\nPASO 2 · BAJADA (3–11 s): \"Me pasa con muchas personas, llegan [situación], y lo que hay detrás es [causa].\"\nPASO 3 · REFUERZO (11–19 s): \"Y lo primero que hacen es [solución que falla], que solo [por qué no sirve].\"\nPASO 4 · SUBIDA (19–29 s): \"Por eso recomiendo {{producto}}, porque [mecanismo en una frase]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (29–35 s) · a cámara: \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 6 palabras]\nMÚSICA: suave, cambia en la subida\nB-ROLL: [causa del problema] · producto en contexto · producto en uso",
       "prompts": [
         {
           "escena": "Imagen base",
@@ -516,7 +556,7 @@
         },
         {
           "escena": "Escena 4 · Subida",
-          "prompt": "IMAGEN: la imagen base con {{producto}} (foto real) sobre la mesa, tamaño proporcional, etiqueta sin alterar.\nACCIÓN ANTES: mira al lado en todo momento y señala el producto.\nGUION: \"[subida, 20–24 palabras]\"\nFORMATO: 9:16, 8 s"
+          "prompt": "IMAGEN: la imagen base con {{producto}} (foto real) sobre la mesa, tamaño proporcional, etiqueta sin alterar.\nACCIÓN ANTES: mira al lado en todo momento, toma el producto de la mesa y lo muestra en la mano.\nGUION: \"[subida, 20–24 palabras]\"\nFORMATO: 9:16, 8 s"
         },
         {
           "escena": "Escena 5 · CTA",
@@ -539,6 +579,7 @@
         "rostro (avatar generado)",
         "oferta local"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: producto real en mano y en uso; sigue en mano en el paso 5",
       "riesgos": [
         "look de estudio en vez de celular",
         "piel de plástico",
@@ -565,30 +606,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "Hook a cámara: situación real o pregunta de dolor. Gesto antes de hablar (se acomoda el pelo o se acerca como contando un secreto)",
           "fuente": "[base §3.1][método §3.2]"
         },
         {
+          "paso": 2,
           "tiempo": "3–8 s",
           "escena": "Bajada",
           "que_pasa": "La consecuencia del problema en su día a día",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "8–14 s",
           "escena": "Refuerzo",
           "que_pasa": "Lo que ya probó y no le sirvió",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "14–24 s",
           "escena": "Subida",
           "que_pasa": "Producto en mano: cómo se usa y qué lo hace distinto. B-roll del producto en contexto",
           "fuente": "[base §3.1][método §5.4]"
         },
         {
+          "paso": 5,
           "tiempo": "24–30 s",
           "escena": "CTA",
           "que_pasa": "Oferta local mirando a cámara",
@@ -603,7 +649,7 @@
         "Mirada al frente, nunca «como leyendo» [método §9.1].",
         "B-roll cada 3 s y zoom-in lento [método §7]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: UGC 9:16 | DURACIÓN: 30 s | CLIENTE: {{cliente}}\n\nIMPACTO (0–3 s) · a cámara: \"¿A ti también te pasa que {{dolor}}?\"\nBAJADA (3–8 s): \"Yo llevaba [tiempo] así, y lo peor era [consecuencia en el día a día].\"\nREFUERZO (8–14 s): \"Probé [solución que falló] y nada.\"\nSUBIDA (14–24 s) · producto en mano: \"Hasta que conocí {{producto}}. [Cómo se usa]. Lo que me gustó es que {{beneficio}}.\"\nCTA (24–30 s) · a cámara: \"{{oferta}}. Pídelo en el enlace.\"\n\nTEXTO EN PANTALLA: [rótulo del hook, máximo 6 palabras]\nMÚSICA: triste en el problema, alegre desde la subida\nB-ROLL: producto en la mano · producto en uso · detalle de la etiqueta · [resultado visible]",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: UGC 9:16 | DURACIÓN: 30 s | CLIENTE: {{cliente}}\n\nPASO 1 · IMPACTO (0–3 s) · a cámara: \"¿A ti también te pasa que {{dolor}}?\"\nPASO 2 · BAJADA (3–8 s): \"Yo llevaba [tiempo] así, y lo peor era [consecuencia en el día a día].\"\nPASO 3 · REFUERZO (8–14 s): \"Probé [solución que falló] y nada.\"\nPASO 4 · SUBIDA (14–24 s) · producto en mano: \"Hasta que conocí {{producto}}. [Cómo se usa]. Lo que me gustó es que {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (24–30 s) · a cámara: \"{{oferta}}. Pídelo en el enlace.\"\n\nTEXTO EN PANTALLA: [rótulo del hook, máximo 6 palabras]\nMÚSICA: triste en el problema, alegre desde la subida\nB-ROLL: producto en la mano · producto en uso · detalle de la etiqueta · [resultado visible]",
       "prompts": [
         {
           "escena": "Imagen base",
@@ -646,6 +692,7 @@
         "imagen del personaje tejido",
         "10 a 14 escenas cortas"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: el producto real entra al mundo tejido y se corta a una toma real del producto en mano; al centro en el paso 5",
       "riesgos": [
         "la interpretación puede no ser la del colega",
         "el producto tejido deja de parecerse al real",
@@ -668,30 +715,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–2 s",
           "escena": "Impacto",
           "que_pasa": "El personaje tejido en la situación del problema; pregunta al cuello",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 2,
           "tiempo": "2–8 s",
           "escena": "Bajada",
           "que_pasa": "3 escenas de 2 s del día a día",
           "fuente": "[método §5.4]"
         },
         {
+          "paso": 3,
           "tiempo": "8–12 s",
           "escena": "Refuerzo",
           "que_pasa": "2 escenas: lo que probó y falló",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "12–20 s",
           "escena": "Subida",
-          "que_pasa": "Entra el producto real y el mundo cambia de color",
+          "que_pasa": "Entra el producto real y el mundo cambia de color. Toma real del producto en mano o en uso",
           "fuente": "[propuesta]"
         },
         {
+          "paso": 5,
           "tiempo": "20–26 s",
           "escena": "CTA",
           "que_pasa": "Producto real en primer plano y oferta local",
@@ -702,9 +754,10 @@
         "Dar la imagen del personaje y nombrar el estilo en cada prompt [método §6; clase 3 02:00:21].",
         "Escenas de unos 2 s; movimientos fluidos, no lentos [método §5.4].",
         "El producto se muestra con la foto real dentro del mundo tejido; no se teje la etiqueta [base §3.7].",
-        "Paleta apagada en el problema y viva en la solución [propuesta sobre método §7, música por tramo]."
+        "Paleta apagada en el problema y viva en la solución [propuesta sobre método §7, música por tramo].",
+        "En la subida (paso 4) entra una toma real del producto en mano o en uso, aunque el resto sea animado: la base pide producto en mano y demostración [base §3.1][método §4.2] y admite mezclar IA con tomas reales [base §1]; el punto exacto del corte es [propuesta]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Crochet 9:16 | DURACIÓN: 26 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nIMPACTO (0–2 s) · VOZ: \"¿Te pasa que {{dolor}}?\"\nBAJADA (2–8 s): \"[Escena 1]. [Escena 2]. [Escena 3].\"\nREFUERZO (8–12 s): \"Probaste [solución que falló] y nada.\"\nSUBIDA (12–20 s): \"Por eso existe {{producto}}, [mecanismo en una frase]. {{beneficio}}.\"\nCTA (20–26 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 5 palabras]\nMÚSICA: tierna; sube en la solución",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Crochet 9:16 | DURACIÓN: 26 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nPASO 1 · IMPACTO (0–2 s) · VOZ: \"¿Te pasa que {{dolor}}?\"\nPASO 2 · BAJADA (2–8 s): \"[Escena 1]. [Escena 2]. [Escena 3].\"\nPASO 3 · REFUERZO (8–12 s): \"Probaste [solución que falló] y nada.\"\nPASO 4 · SUBIDA (12–20 s): \"Por eso existe {{producto}}, [mecanismo en una frase]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (20–26 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 5 palabras]\nMÚSICA: tierna; sube en la solución",
       "prompts": [
         {
           "escena": "Imagen del personaje",
@@ -725,6 +778,10 @@
         {
           "escena": "Escena de CTA",
           "prompt": "IMAGEN: {{producto}} (foto real) al centro del escenario tejido.\nMOVIMIENTO: zoom in lento. Espacio libre abajo para el rótulo de la oferta.\nFORMATO: 9:16, 4 s"
+        },
+        {
+          "escena": "Toma real · producto en mano (paso 4)",
+          "prompt": "IMAGEN: una mano real de [mujer/hombre] con rasgos de {{pais}} sostiene {{producto}} (foto real, etiqueta sin alterar, tamaño proporcional y coherente) en [contexto de uso cotidiano], luz natural, grabado con celular.\nMOVIMIENTO: la mano gira un poco el producto y [lo abre / lo aplica / lo sirve]; se corta antes de terminar la acción.\nSIN DIÁLOGO. Sirve de B-roll sobre la frase de la subida.\nFORMATO: 9:16, 3 s"
         }
       ]
     },
@@ -743,6 +800,7 @@
         "imagen del esqueleto o cuerpo translúcido",
         "datos del mecanismo dados por el cliente"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: producto real junto a la zona y toma real del producto en mano; el esqueleto lo sostiene en el paso 5",
       "riesgos": [
         "la interpretación puede no ser la del colega",
         "claims médicos inventados",
@@ -769,30 +827,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "El esqueleto en una situación cotidiana; pregunta «¿sabes qué pasa por dentro cuando…?»",
           "fuente": "[método §3.2, §8]"
         },
         {
+          "paso": 2,
           "tiempo": "3–10 s",
           "escena": "Bajada",
           "que_pasa": "La zona afectada se enciende; se ve la consecuencia",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "10–15 s",
           "escena": "Refuerzo",
           "que_pasa": "Lo que la gente hace y no llega a la causa",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "15–25 s",
           "escena": "Subida",
-          "que_pasa": "Entra el producto real; la zona cambia de color según el mecanismo que dio el cliente",
+          "que_pasa": "Entra el producto real; la zona cambia de color según el mecanismo que dio el cliente. Toma real del producto en mano o en uso",
           "fuente": "[propuesta]"
         },
         {
+          "paso": 5,
           "tiempo": "25–31 s",
           "escena": "CTA",
           "que_pasa": "Producto real y oferta local",
@@ -804,9 +867,10 @@
         "Escenas cortas y movimientos fluidos [método §5.4].",
         "El producto es siempre la foto real, con su etiqueta [base §3.7].",
         "En nichos sensibles, enmarcar la escena como ilustración educativa; si el generador no la da, cambiar el enfoque [método §5.4].",
-        "Ningún texto en pantalla afirma cifras ni resultados [base §1]."
+        "Ningún texto en pantalla afirma cifras ni resultados [base §1].",
+        "En la subida (paso 4) entra una toma real del producto en mano o en uso, aunque el resto sea animado: la base pide producto en mano y demostración [base §3.1][método §4.2] y admite mezclar IA con tomas reales [base §1]; el punto exacto del corte es [propuesta]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Esqueleto (por dentro) 9:16 | DURACIÓN: 31 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nIMPACTO (0–3 s) · VOZ: \"¿Sabes qué pasa por dentro cuando {{dolor}}?\"\nBAJADA (3–10 s): \"[Qué ocurre en la zona, según el mecanismo que dio el cliente]. Por eso sientes [síntoma cotidiano].\"\nREFUERZO (10–15 s): \"Y [lo que la gente hace] no llega a la causa.\"\nSUBIDA (15–25 s): \"{{producto}} [mecanismo dado por el cliente, en una frase]. {{beneficio}}.\"\nCTA (25–31 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [nombre de la zona u órgano, máximo 4 palabras]\nMÚSICA: tensa al inicio, clara en la solución",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Esqueleto (por dentro) 9:16 | DURACIÓN: 31 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nPASO 1 · IMPACTO (0–3 s) · VOZ: \"¿Sabes qué pasa por dentro cuando {{dolor}}?\"\nPASO 2 · BAJADA (3–10 s): \"[Qué ocurre en la zona, según el mecanismo que dio el cliente]. Por eso sientes [síntoma cotidiano].\"\nPASO 3 · REFUERZO (10–15 s): \"Y [lo que la gente hace] no llega a la causa.\"\nPASO 4 · SUBIDA (15–25 s): \"{{producto}} [mecanismo dado por el cliente, en una frase]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (25–31 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [nombre de la zona u órgano, máximo 4 palabras]\nMÚSICA: tensa al inicio, clara en la solución",
       "prompts": [
         {
           "escena": "Imagen base",
@@ -831,6 +895,10 @@
         {
           "escena": "Escena 5 · CTA",
           "prompt": "IMAGEN: el esqueleto erguido sostiene {{producto}} (foto real, tamaño proporcional).\nMOVIMIENTO: levanta el pulgar. Espacio libre abajo para el rótulo de la oferta.\nFORMATO: 9:16, 4 s"
+        },
+        {
+          "escena": "Toma real · producto en mano (paso 4)",
+          "prompt": "IMAGEN: una mano real de [mujer/hombre] con rasgos de {{pais}} sostiene {{producto}} (foto real, etiqueta sin alterar, tamaño proporcional y coherente) en [contexto de uso cotidiano], luz natural, grabado con celular.\nMOVIMIENTO: la mano gira un poco el producto y [lo abre / lo aplica / lo sirve]; se corta antes de terminar la acción.\nSIN DIÁLOGO. Sirve de B-roll sobre la frase de la subida.\nFORMATO: 9:16, 3 s"
         }
       ]
     },
@@ -849,6 +917,7 @@
         "generador de música o cantante",
         "género musical del país"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida (coro): la persona levanta el producto real en la mano; primer plano en el paso 5",
       "riesgos": [
         "la interpretación puede no ser la del colega",
         "letra que promete resultados",
@@ -872,30 +941,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "Primer verso: la situación real, cantada",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 2,
           "tiempo": "3–9 s",
           "escena": "Bajada",
           "que_pasa": "Segundo verso: la consecuencia",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "9–13 s",
           "escena": "Refuerzo",
           "que_pasa": "Puente: lo que probó y no sirvió; la música baja",
           "fuente": "[método §3.2, §7]"
         },
         {
+          "paso": 4,
           "tiempo": "13–22 s",
           "escena": "Subida",
           "que_pasa": "Coro con el nombre del producto; la música sube",
           "fuente": "[método §7]"
         },
         {
+          "paso": 5,
           "tiempo": "22–28 s",
           "escena": "CTA",
           "que_pasa": "Remate hablado o cantado con la oferta local",
@@ -908,7 +982,7 @@
         "El nombre del producto aparece escrito cuando se canta [propuesta].",
         "Cambio de ánimo musical en el giro, con transición [método §7]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Música (jingle) 9:16 | DURACIÓN: 28 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\nGÉNERO: [género popular en {{pais}}]\n\nVERSO 1 · IMPACTO (0–3 s): \"[Situación de {{dolor}}, en una línea que rime]\"\nVERSO 2 · BAJADA (3–9 s): \"[Consecuencia, dos líneas]\"\nPUENTE · REFUERZO (9–13 s): \"[Lo que probó y no sirvió, una línea]\"\nCORO · SUBIDA (13–22 s): \"[{{producto}} + {{beneficio}}, dos líneas fáciles de repetir]\"\nREMATE · CTA (22–28 s): \"{{oferta}}.\"\n\nIMÁGENES: una por línea de la letra",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Música (jingle) 9:16 | DURACIÓN: 28 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\nGÉNERO: [género popular en {{pais}}]\n\nPASO 1 · IMPACTO · VERSO 1 (0–3 s): \"[Situación de {{dolor}}, en una línea que rime]\"\nPASO 2 · BAJADA · VERSO 2 (3–9 s): \"[Consecuencia, dos líneas]\"\nPASO 3 · REFUERZO · PUENTE (9–13 s): \"[Lo que probó y no sirvió, una línea]\"\nPASO 4 · SUBIDA · CORO (13–22 s): \"[{{producto}} + {{beneficio}}, dos líneas fáciles de repetir]\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA · REMATE (22–28 s): \"{{oferta}}.\"\n\nIMÁGENES: una por línea de la letra",
       "prompts": [
         {
           "escena": "Canción (generador de música)",
@@ -947,6 +1021,7 @@
         "rostro (avatar generado)",
         "comida a cuadro"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: deja la porción y toma el producto real en la mano; sigue en mano en el paso 5",
       "riesgos": [
         "la interpretación puede no ser la del colega",
         "masticar y hablar generan bocas deformes en IA",
@@ -969,30 +1044,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "Levanta una porción, estira el queso y suelta la frase del hook",
           "fuente": "[propuesta] sobre [método §3.2]"
         },
         {
+          "paso": 2,
           "tiempo": "3–10 s",
           "escena": "Bajada",
           "que_pasa": "Entre bocados cuenta la consecuencia del problema",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "10–16 s",
           "escena": "Refuerzo",
           "que_pasa": "Lo que probó y no sirvió",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "16–25 s",
           "escena": "Subida",
           "que_pasa": "Deja la porción, toma el producto y cuenta cómo lo usa",
           "fuente": "[base §3.1]"
         },
         {
+          "paso": 5,
           "tiempo": "25–31 s",
           "escena": "CTA",
           "que_pasa": "Oferta local mirando a cámara",
@@ -1005,7 +1085,7 @@
         "B-roll incompleto: cortar antes del mordisco para dejar la curiosidad [método §7].",
         "El producto no comparte plano con la comida de forma que se confundan [propuesta]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Pizza (charla comiendo) 9:16 | DURACIÓN: 31 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nIMPACTO (0–3 s) · levanta la porción: \"Les cuento algo mientras como, porque {{dolor}}.\"\nBAJADA (3–10 s): \"Yo estaba [situación], y cada [momento] era lo mismo, [consecuencia].\"\nREFUERZO (10–16 s): \"Probé [solución que falló] y nada.\"\nSUBIDA (16–25 s) · deja la porción y toma el producto: \"Hasta que probé {{producto}}. [Cómo se usa]. {{beneficio}}.\"\nCTA (25–31 s) · a cámara: \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 6 palabras]\nMÚSICA: ligera, de fondo",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Pizza (charla comiendo) 9:16 | DURACIÓN: 31 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nPASO 1 · IMPACTO (0–3 s) · levanta la porción: \"Les cuento algo mientras como, porque {{dolor}}.\"\nPASO 2 · BAJADA (3–10 s): \"Yo estaba [situación], y cada [momento] era lo mismo, [consecuencia].\"\nPASO 3 · REFUERZO (10–16 s): \"Probé [solución que falló] y nada.\"\nPASO 4 · SUBIDA (16–25 s) · deja la porción y toma el producto: \"Hasta que probé {{producto}}. [Cómo se usa]. {{beneficio}}.\"\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (25–31 s) · a cámara: \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: [frase del hook, máximo 6 palabras]\nMÚSICA: ligera, de fondo",
       "prompts": [
         {
           "escena": "Imagen base",
@@ -1043,6 +1123,7 @@
         "voz narradora o solo texto en pantalla",
         "definición de 4 a 6 figuras por moldear"
       ],
+      "producto_en_pantalla": "Paso 4 · Subida: una mano real coloca el producto real en el plano y muestra cómo se usa; al centro en el paso 5",
       "riesgos": [
         "la interpretación puede no ser la del colega",
         "manos y dedos deformes en IA",
@@ -1065,30 +1146,35 @@
       ],
       "estructura": [
         {
+          "paso": 1,
           "tiempo": "0–3 s",
           "escena": "Impacto",
           "que_pasa": "Las manos aplastan o rompen una figura que representa el problema",
           "fuente": "[propuesta] sobre [método §3.2]"
         },
         {
+          "paso": 2,
           "tiempo": "3–9 s",
           "escena": "Bajada",
           "que_pasa": "Moldean la consecuencia: la figura se deforma más",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 3,
           "tiempo": "9–14 s",
           "escena": "Refuerzo",
           "que_pasa": "Intentan arreglarla con algo que no sirve",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 4,
           "tiempo": "14–22 s",
           "escena": "Subida",
-          "que_pasa": "Aparece el producto real en el plano; la figura se recompone",
+          "que_pasa": "Aparece el producto real en el plano; la figura se recompone. Toma real del producto en mano o en uso",
           "fuente": "[método §3.2]"
         },
         {
+          "paso": 5,
           "tiempo": "22–28 s",
           "escena": "CTA",
           "que_pasa": "Producto real al centro y rótulo con la oferta",
@@ -1100,9 +1186,10 @@
         "Escenas cortas y movimientos fluidos, no lentos [método §5.4].",
         "El producto que cierra es la foto real, no una versión moldeada, para no alterar la etiqueta [base §3.7].",
         "Fotograma inicial y final con el mismo fondo para controlar cada transformación [método §5.4].",
-        "Sonido: el de la plastilina; la voz va encima al 70 % [método §7]."
+        "Sonido: el de la plastilina; la voz va encima al 70 % [método §7].",
+        "En la subida (paso 4) entra una toma real del producto en mano o en uso, aunque el resto sea animado: la base pide producto en mano y demostración [base §3.1][método §4.2] y admite mezclar IA con tomas reales [base §1]; el punto exacto del corte es [propuesta]."
       ],
-      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Plastilina (manos que moldean) 9:16 | DURACIÓN: 28 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nIMPACTO (0–3 s) · VOZ: \"Esto es lo que pasa cuando {{dolor}}.\"   FIGURA: [qué se aplasta o rompe]\nBAJADA (3–9 s): \"Con el tiempo, [consecuencia].\"   FIGURA: [cómo se deforma]\nREFUERZO (9–14 s): \"Y [solución que falla] solo [por qué no sirve].\"   FIGURA: [parche que se cae]\nSUBIDA (14–22 s): \"{{producto}} [mecanismo en una frase]. {{beneficio}}.\"   FIGURA: [se recompone]\nCTA (22–28 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: una frase por tramo, máximo 6 palabras",
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Plastilina (manos que moldean) 9:16 | DURACIÓN: 28 s | CLIENTE: {{cliente}}\nESTADO DEL FORMATO: por confirmar\n\nPASO 1 · IMPACTO (0–3 s) · VOZ: \"Esto es lo que pasa cuando {{dolor}}.\"   FIGURA: [qué se aplasta o rompe]\nPASO 2 · BAJADA (3–9 s): \"Con el tiempo, [consecuencia].\"   FIGURA: [cómo se deforma]\nPASO 3 · REFUERZO (9–14 s): \"Y [solución que falla] solo [por qué no sirve].\"   FIGURA: [parche que se cae]\nPASO 4 · SUBIDA (14–22 s): \"{{producto}} [mecanismo en una frase]. {{beneficio}}.\"   FIGURA: [se recompone]\n   PRODUCTO EN PANTALLA: {{producto}} real, [en mano / demostración de uso], durante este paso\nPASO 5 · CTA (22–28 s): \"{{oferta}}.\"\n\nTEXTO EN PANTALLA: una frase por tramo, máximo 6 palabras",
       "prompts": [
         {
           "escena": "Imagen base",
@@ -1123,6 +1210,10 @@
         {
           "escena": "Escena 4 · CTA",
           "prompt": "IMAGEN: {{producto}} (foto real) al centro de la mesa, la figura recompuesta al lado.\nMOVIMIENTO: zoom in lento al producto. Espacio libre abajo para el rótulo.\nFORMATO: 9:16, 4 s"
+        },
+        {
+          "escena": "Toma real · producto en mano (paso 4)",
+          "prompt": "IMAGEN: una mano real de [mujer/hombre] con rasgos de {{pais}} sostiene {{producto}} (foto real, etiqueta sin alterar, tamaño proporcional y coherente) en [contexto de uso cotidiano], luz natural, grabado con celular.\nMOVIMIENTO: la mano gira un poco el producto y [lo abre / lo aplica / lo sirve]; se corta antes de terminar la acción.\nSIN DIÁLOGO. Sirve de B-roll sobre la frase de la subida.\nFORMATO: 9:16, 3 s"
         }
       ]
     }

@@ -19,10 +19,11 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { escribirGuion, guardarGuionVideo, resumirMercado } from "@/app/(protected)/videos/actions";
+import { escribirGuion, guardarGuionVideo, resumirMercado, solicitarVideo } from "@/app/(protected)/videos/actions";
 import { guardarGuion as guardarGuionProspecto } from "@/app/(protected)/prospectos/prospeccion-actions";
 import type { FormatoTarjeta } from "@/lib/video-formatos";
 import {
+  ESTADO_GUION_LABELS,
   MAX_GUION,
   MAX_REFERENCIAS,
   ORIGEN_LABELS,
@@ -36,6 +37,7 @@ import {
   urlAdsLibrary,
   urlTikTokBusqueda,
   urlTikTokCreativeCenter,
+  versionVigente,
   type DatosVideo,
   type GuionGuardado,
   type OrigenGuion,
@@ -50,6 +52,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Chip, ETIQUETA } from "@/components/prospectos/piezas";
+import { CorreccionesCliente, TONO_ESTADO } from "./correcciones";
 
 export type ProspectoOrigen = { id: string; nombre: string };
 
@@ -147,7 +150,7 @@ export function CrearVideo(props: Props) {
   const [indicacion, setIndicacion] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const [avisoMercado, setAvisoMercado] = useState<string | null>(null);
-  const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | null>(null);
+  const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | "video" | null>(null);
   const [guiones, setGuiones] = useState(props.guiones);
   const arriba = useRef<HTMLDivElement>(null);
 
@@ -156,6 +159,31 @@ export function CrearVideo(props: Props) {
   const palabra = (datos.palabraClave || datos.producto).trim();
   const listoParaEscribir = !!formato && !!datos.producto.trim();
   const sinGuardar = !!guion.trim() && guion !== guardadoTexto;
+  const actual = useMemo(() => guiones.find((g) => g.id === idGuardado) ?? null, [guiones, idGuardado]);
+  // Qué pasos de la estructura están rotulados en el guion que hay en el editor.
+  const pasosRotulados = useMemo(() => [1, 2, 3, 4, 5].filter((n) => new RegExp(`^\\s*PASO ${n}\\b`, "mi").test(guion)), [guion]);
+
+  /** Una acción del servidor devolvió el guion guardado (corrección, estado, restaurar…). */
+  function alGuardar(g: GuionGuardado, cargar: boolean) {
+    setGuiones((lista) => [g, ...lista.filter((x) => x.id !== g.id)]);
+    setIdGuardado(g.id);
+    setGuardadoTexto(g.guion);
+    if (cargar) {
+      setGuion(g.guion);
+      setOrigen(g.origen);
+      setAviso(null);
+    }
+  }
+
+  async function pedirVideo() {
+    if (!actual) return void toast.error("Guarda el guion antes de generar el video.");
+    setOcupado("video");
+    const r = await solicitarVideo(actual.id);
+    setOcupado(null);
+    if ("error" in r) return void toast.error(r.error, { duration: 9000 });
+    alGuardar(r.guardado, false);
+    toast.success("Video generado con la versión vigente");
+  }
 
   function set<K extends keyof DatosVideo>(k: K, v: DatosVideo[K]) {
     setDatos((d) => ({ ...d, [k]: v }));
@@ -270,6 +298,11 @@ export function CrearVideo(props: Props) {
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {prospecto && <Chip tono="azul">Viene del prospecto: {prospecto.nombre}</Chip>}
           {idGuardado && <Chip tono={sinGuardar ? "ambar" : "verde"}>{sinGuardar ? "Cambios sin guardar" : "Guardado"}</Chip>}
+          {actual && (
+            <Chip tono={TONO_ESTADO[actual.estado]}>
+              {ESTADO_GUION_LABELS[actual.estado]} · v{versionVigente(actual)?.n ?? 1}
+            </Chip>
+          )}
         </div>
         {props.prospectoNoEncontrado && (
           <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
@@ -345,7 +378,7 @@ export function CrearVideo(props: Props) {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Tiempo</TableHead>
-                        <TableHead>Escena</TableHead>
+                        <TableHead>Paso</TableHead>
                         <TableHead>Qué pasa</TableHead>
                         <TableHead>De dónde sale</TableHead>
                       </TableRow>
@@ -354,7 +387,9 @@ export function CrearVideo(props: Props) {
                       {formato.estructura.map((e) => (
                         <TableRow key={e.tiempo + e.escena}>
                           <TableCell className="font-mono text-xs whitespace-nowrap">{e.tiempo}</TableCell>
-                          <TableCell className="font-medium">{e.escena}</TableCell>
+                          <TableCell className="font-medium whitespace-nowrap">
+                            Paso {e.paso} · {e.escena}
+                          </TableCell>
                           <TableCell className="min-w-64 whitespace-normal">{e.que_pasa}</TableCell>
                           <TableCell className="text-xs whitespace-normal text-muted-foreground">{e.fuente}</TableCell>
                         </TableRow>
@@ -629,6 +664,47 @@ export function CrearVideo(props: Props) {
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {formato && (
+            <details open className="rounded-xl border border-border bg-muted/30">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                Estructura que se está aplicando · {formato.nombre}
+              </summary>
+              <div className="flex flex-col gap-3 border-t border-border p-3">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  La «montaña rusa» de Antonio, paso a paso. Cada bloque del guion lleva el rótulo de su paso; a la derecha
+                  ves si ya está en el guion.
+                </p>
+                <ol className="flex flex-col gap-1.5">
+                  {formato.estructura.map((e) => {
+                    const rotulado = pasosRotulados.includes(e.paso);
+                    return (
+                      <li
+                        key={e.paso}
+                        className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-3 py-2 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+                      >
+                        <span className="flex size-6 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-semibold text-primary">
+                          {e.paso}
+                        </span>
+                        <span className="min-w-0 text-sm">
+                          <strong className="font-medium">{e.escena === "CTA" ? "Llamado a la acción" : e.escena}</strong>
+                          <span className="ml-2 font-mono text-xs text-muted-foreground">{e.tiempo}</span>
+                          <span className="block text-xs leading-relaxed text-muted-foreground">{e.que_pasa}</span>
+                        </span>
+                        {guion.trim() && (
+                          <Chip tono={rotulado ? "verde" : "ambar"} className="col-start-2 md:col-start-3">
+                            {rotulado ? "En el guion" : "Falta su rótulo"}
+                          </Chip>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+                <p className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs leading-relaxed">
+                  <strong className="font-medium">Producto real en pantalla.</strong> {formato.producto_en_pantalla}
+                </p>
+              </div>
+            </details>
+          )}
           {aviso && <Aviso>{aviso}</Aviso>}
           <Textarea
             value={guion}
@@ -695,18 +771,35 @@ export function CrearVideo(props: Props) {
         </CardContent>
       </Card>
 
-      {/* ----------------------------------------- 06 generar video */}
+      {/* ------------------------------- 06 correcciones y versiones */}
+      <CorreccionesCliente
+        key={idGuardado ?? "nuevo"}
+        guardado={actual}
+        guionActual={guion}
+        datos={datos}
+        prospectoId={prospectoId}
+        sinGuardar={sinGuardar}
+        bloqueado={!!ocupado}
+        onGuardado={alGuardar}
+      />
+
+      {/* ----------------------------------------- 07 generar video */}
       <Card>
         <CardHeader>
           <CardTitle>
-            <Paso n="06">Generar video</Paso>
+            <Paso n="07">Generar video</Paso>
           </CardTitle>
           <CardDescription>
-            Se activa al conectar un modelo de video. Mientras tanto, aquí están los prompts por escena del formato, con
-            tus datos, para generarlos a mano.
+            Se activa al conectar un modelo de video: generará el video de la versión vigente del guion y lo dejará
+            ligado a esa versión. Mientras tanto, aquí están los prompts por escena del formato, con tus datos, para
+            generarlos a mano.
           </CardDescription>
           <CardAction>
-            <Button disabled={!props.videoActivo} title="Se activa al conectar un modelo de video">
+            <Button
+              disabled={!props.videoActivo || !actual || !!ocupado}
+              onClick={pedirVideo}
+              title={props.videoActivo ? "Genera el video de la versión vigente" : "Se activa al conectar un modelo de video"}
+            >
               <Lock /> Generar video
             </Button>
           </CardAction>
@@ -751,6 +844,7 @@ export function CrearVideo(props: Props) {
                     <TableHead>Formato</TableHead>
                     <TableHead>Producto</TableHead>
                     <TableHead>Cliente</TableHead>
+                    <TableHead>Estado</TableHead>
                     <TableHead>Autor</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -764,6 +858,12 @@ export function CrearVideo(props: Props) {
                       <TableCell>{g.formatoNombre || g.formato}</TableCell>
                       <TableCell className="max-w-56 truncate font-medium">{g.producto}</TableCell>
                       <TableCell className="max-w-40 truncate">{g.cliente || "—"}</TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1.5">
+                          <Chip tono={TONO_ESTADO[g.estado]}>{ESTADO_GUION_LABELS[g.estado]}</Chip>
+                          <span className="font-mono text-xs text-muted-foreground">v{versionVigente(g)?.n ?? 1}</span>
+                        </span>
+                      </TableCell>
                       <TableCell className="max-w-40 truncate text-muted-foreground">{g.autorNombre || "—"}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">

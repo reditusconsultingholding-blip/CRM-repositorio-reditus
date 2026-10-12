@@ -15,7 +15,8 @@ import datos from "./formatos.json";
 
 export type EstadoFormato = "confirmado" | "por confirmar";
 
-export type EscenaFormato = { tiempo: string; escena: string; que_pasa: string; fuente: string };
+/** Un paso de la estructura (1 Impacto … 5 CTA). */
+export type EscenaFormato = { paso: number; tiempo: string; escena: string; que_pasa: string; fuente: string };
 export type PromptEscena = { escena: string; prompt: string };
 
 export type FormatoVideo = {
@@ -28,6 +29,8 @@ export type FormatoVideo = {
   relacion_aspecto: string;
   etapa_embudo: string;
   necesita: string[];
+  /** En qué paso se ve el producto real (en mano o demostración). */
+  producto_en_pantalla: string;
   riesgos: string[];
   fuentes: string[];
   que_es: string;
@@ -51,6 +54,7 @@ export type FormatoTarjeta = Pick<
   | "relacion_aspecto"
   | "etapa_embudo"
   | "necesita"
+  | "producto_en_pantalla"
   | "riesgos"
   | "cuando_si"
   | "cuando_no"
@@ -78,6 +82,7 @@ export function tarjetas(): FormatoTarjeta[] {
     relacion_aspecto: f.relacion_aspecto,
     etapa_embudo: f.etapa_embudo,
     necesita: f.necesita,
+    producto_en_pantalla: f.producto_en_pantalla,
     riesgos: f.riesgos,
     cuando_si: f.cuando_si,
     cuando_no: f.cuando_no,

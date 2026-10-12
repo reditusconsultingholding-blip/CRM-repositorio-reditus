@@ -1,7 +1,7 @@
 import "server-only";
 import { llamarClaude } from "@/lib/ia-claude";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { REGLAS_COMUNES, type FormatoVideo, type PromptEscena } from "@/lib/video-formatos";
+import { REGLAS_COMUNES, type FormatoVideo } from "@/lib/video-formatos";
 import {
   BUCKET_GUIONES,
   CARPETA_GUIONES,
@@ -15,6 +15,7 @@ import {
   type GuionGuardado,
   type OrigenGuion,
   type Referencia,
+  type VersionGuion,
 } from "@/lib/videos";
 
 // Lógica de servidor de «Crear video»: investigación de mercado, guion y los
@@ -131,7 +132,9 @@ function fichaFormato(f: FormatoVideo): string {
     f.que_es,
     "",
     "ESTRUCTURA ESCENA POR ESCENA:",
-    ...f.estructura.map((e) => `- ${e.tiempo} · ${e.escena}: ${e.que_pasa}`),
+    ...f.estructura.map((e) => `- Paso ${e.paso} · ${e.escena} (${e.tiempo}): ${e.que_pasa}`),
+    "",
+    `CUÁNDO SE VE EL PRODUCTO REAL: ${f.producto_en_pantalla}`,
     "",
     "REGLAS VISUALES:",
     ...f.reglas_visuales.map((r) => `- ${r}`),
@@ -148,7 +151,7 @@ function fichaFormato(f: FormatoVideo): string {
 
 const SISTEMA_GUION = `Eres el guionista de Reditus Consulting, agencia que produce videos creativos de anuncios para tiendas e-commerce de Latinoamérica y España. Escribes el guion de UN video en el formato que te indican.
 
-Usa la plantilla del formato: mismos bloques, mismos títulos y mismo orden, con los tiempos de la estructura. Reemplaza cada variable y cada indicación por el texto final. Después de la plantilla agrega, en este orden:
+Usa la plantilla del formato: mismos bloques, mismos títulos y mismo orden, con los tiempos de la estructura. Cada bloque conserva su rótulo de paso tal cual («PASO 1 · IMPACTO (…)», «PASO 2 · BAJADA (…)», «PASO 3 · REFUERZO (…)», «PASO 4 · SUBIDA (…)», «PASO 5 · CTA (…)»), y la línea «PRODUCTO EN PANTALLA» del paso 4, donde dices cómo se ve el producto real: en mano o en demostración de uso. Reemplaza cada variable y cada indicación por el texto final. Después de la plantilla agrega, en este orden:
 
 3 HOOKS ALTERNATIVOS: tres inicios distintos para el mismo cuerpo (situación real, pregunta directa, y uno visual: qué se ve el primer segundo).
 B-ROLL O ESCENAS DE APOYO: de 4 a 6, cada una atada a la frase exacta que ilustra; indica si el producto está ausente, parcial o es protagonista.
@@ -209,18 +212,92 @@ export async function generarGuionVideo(
   }
   // La línea de mercado la pone el código, no la IA: así siempre es cierta.
   const cuerpo = r.texto.replace(/^MERCADO:.*\n+/i, "");
-  return { texto: `${lineaMercado(d.referencias)}\n\n${cuerpo}`, origen: "ia" };
+  const faltan = pasosSinRotular(cuerpo);
+  return {
+    texto: `${lineaMercado(d.referencias)}\n\n${cuerpo}`,
+    origen: "ia",
+    aviso: faltan.length
+      ? `Revisa el guion: la IA no rotuló ${faltan.length === 1 ? "el paso" : "los pasos"} ${faltan.join(", ")} de la estructura.`
+      : undefined,
+  };
+}
+
+// ------------------------------------------------- correcciones ----
+
+/** Pasos de la estructura que NO están rotulados en un guion (vacío = todo bien). */
+export function pasosSinRotular(guion: string): number[] {
+  return [1, 2, 3, 4, 5].filter((n) => !new RegExp(`^\\s*PASO ${n}\\b`, "mi").test(guion));
+}
+
+const SISTEMA_CORRECCION = `Eres el guionista de Reditus Consulting. Un cliente revisó el guion de su video y mandó una corrección. Aplícala.
+
+Devuelve EXACTAMENTE este formato, en texto plano:
+
+QUÉ CAMBIÓ: de 1 a 3 líneas, concretas (qué bloque, qué se cambió y por qué lo pidió el cliente). Si algo de la corrección no se pudo aplicar, dilo aquí.
+===GUION===
+el guion completo ya corregido
+
+Reglas que no se rompen:
+- Cambia SOLO lo que la corrección pide, y lo que deba cambiar por coherencia con eso (por ejemplo, el texto en pantalla o los hooks alternativos que repetían la frase corregida). Todo lo demás queda idéntico, palabra por palabra.
+- Conserva la estructura y los rótulos: «PASO 1 · IMPACTO», «PASO 2 · BAJADA», «PASO 3 · REFUERZO», «PASO 4 · SUBIDA», «PASO 5 · CTA», la línea «PRODUCTO EN PANTALLA» y la primera línea «MERCADO: …».
+- PROHIBIDO inventar precios, descuentos, cifras, plazos, testimonios, certificaciones o resultados. Si la corrección trae un dato nuevo (un precio, una oferta), úsalo tal cual lo escribió el cliente. Si pide algo para lo que falta un dato, déjalo entre [corchetes] para completar.
+- Si la corrección pide una promesa de salud, una credencial inventada o un resultado garantizado, no la escribas: deja el bloque como estaba y explícalo en QUÉ CAMBIÓ.
+- No afirmes haber visto la tienda, el producto ni anuncios.
+- Sin markdown ni asteriscos.`;
+
+export type GuionCorregido = { texto: string; queCambio: string } | { error: string };
+
+/**
+ * Regenera el guion con una corrección del cliente: recibe el guion vigente,
+ * la corrección tal cual y los datos originales. Si la IA no está activa o
+ * falla devuelve `{ error }`: quien llama deja la corrección como pendiente.
+ */
+export async function corregirGuionVideo(
+  d: DatosVideo,
+  formato: FormatoVideo,
+  guionVigente: string,
+  correccion: string,
+): Promise<GuionCorregido> {
+  const sistema = `${SISTEMA_CORRECCION}\n\n--- BASE DE CONOCIMIENTO DE REDITUS ---\n${REGLAS_COMUNES}\n\n--- FORMATO ---\n${fichaFormato(formato)}`;
+  const usuario = [
+    fichaDatos(d, d.resumenMercado),
+    "",
+    "--- GUION VIGENTE ---",
+    guionVigente,
+    "",
+    "--- CORRECCIÓN DEL CLIENTE (texto tal cual) ---",
+    correccion,
+  ].join("\n");
+  const r = await llamarClaude(sistema, usuario, 2800);
+  if ("error" in r) return r;
+  const corte = r.texto.indexOf("===GUION===");
+  if (corte < 0) return { error: "La IA respondió en un formato inesperado. Intenta de nuevo o aplica la corrección a mano." };
+  const queCambio = r.texto
+    .slice(0, corte)
+    .replace(/^\s*QUÉ CAMBIÓ:\s*/i, "")
+    .trim()
+    .slice(0, 1200);
+  const cuerpo = r.texto
+    .slice(corte + "===GUION===".length)
+    .trim()
+    .replace(/^MERCADO:.*\n+/i, "");
+  if (!cuerpo) return { error: "La IA devolvió el guion vacío. Intenta de nuevo o aplica la corrección a mano." };
+  return { texto: `${lineaMercado(d.referencias)}\n\n${cuerpo}`, queCambio };
 }
 
 // --------------------------------------------- generación de video ----
 
 export type PeticionVideo = {
-  /** El guion final, ya revisado por una persona. */
-  guion: string;
+  /** Id del guion guardado (archivo `videos/<id>.json`). */
+  guionId: string;
+  /**
+   * La versión VIGENTE del guion: su texto ya revisado por una persona y sus
+   * prompts por escena (`version.escenas`), ya rellenados con producto, país y
+   * oferta. El video queda ligado a `version.n`.
+   */
+  version: VersionGuion;
   formato: string;
   relacionAspecto: string;
-  /** Prompts por escena del formato, ya rellenados con producto, país y oferta. */
-  escenas: PromptEscena[];
   /** Fotos reales del producto (URLs). El formato las exige: nunca se inventa el envase. */
   fotosProducto?: string[];
 };
@@ -230,17 +307,28 @@ export type PeticionVideo = {
  *
  * Hoy el paso «Generar video» de la pantalla está deshabilitado: el equipo
  * copia los prompts por escena y genera a mano. Cuando se conecte un modelo
- * de video, se implementa AQUÍ: recibe el guion y los prompts por escena del
- * formato (`escenas`, uno por clip), genera primero la imagen base y luego
- * cada escena desde esa imagen, y devuelve las URLs de los clips. La acción
- * `solicitarVideo` de `videos/actions.ts` es quien debe llamarla; la pantalla
- * solo necesita que `VIDEO_IA_ACTIVO` pase a `true`.
+ * de video se implementa AQUÍ:
+ *
+ *  1. Recibe la versión vigente del guion (`peticion.version`).
+ *  2. Genera la imagen base y luego cada escena desde esa imagen, una por
+ *     cada elemento de `version.escenas`.
+ *  3. Une los clips, sube el resultado y devuelve su URL en `videoUrl`.
+ *
+ * La acción `solicitarVideo` de `videos/actions.ts` ya hace el resto: lee el
+ * guion, llama aquí con la versión vigente y guarda `videoUrl` EN ESA VERSIÓN
+ * del JSON. Por eso «regenerar con corrección» no necesita nada más: la
+ * corrección crea una versión nueva del guion (`registrarCorreccion`) y, con
+ * `VIDEO_IA_ACTIVO` encendido, esa misma acción llama aquí con ella; las
+ * versiones anteriores conservan su propio `videoUrl`.
+ *
+ * Para encender el botón de la pantalla y la regeneración automática,
+ * `VIDEO_IA_ACTIVO` pasa a `true`.
  */
 export const VIDEO_IA_ACTIVO = false;
 
 export async function generarVideo(
   peticion: PeticionVideo,
-): Promise<{ listo: false; motivo: string } | { listo: true; clips: string[] }> {
+): Promise<{ listo: false; motivo: string } | { listo: true; videoUrl: string; clips?: string[] }> {
   void peticion;
   return { listo: false, motivo: "La generación de video se activa al conectar un modelo de video." };
 }
@@ -256,11 +344,22 @@ const rutaGuion = (id: string) => `${CARPETA_GUIONES}/${id}.json`;
 export const ID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function leerGuionArchivo(admin: Almacen, id: string): Promise<GuionGuardado | null> {
+  void admin;
   if (!ID_VALIDO.test(id)) return null;
-  const { data, error } = await admin.storage.from(BUCKET_GUIONES).download(rutaGuion(id));
-  if (error || !data) return null;
+  // Lectura directa y SIN caché. Con `storage.download()` Next puede devolver
+  // una respuesta guardada del mismo GET, y aquí eso es grave: cada acción lee
+  // el archivo, le agrega una versión o una corrección y lo vuelve a escribir;
+  // partir de una copia vieja borraría lo último que se guardó.
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const clave = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!base || !clave) return null;
   try {
-    return leerGuionGuardado(JSON.parse(await data.text()));
+    const res = await fetch(`${base}/storage/v1/object/${BUCKET_GUIONES}/${rutaGuion(id)}`, {
+      headers: { Authorization: `Bearer ${clave}`, apikey: clave },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return leerGuionGuardado(await res.json());
   } catch {
     return null;
   }
