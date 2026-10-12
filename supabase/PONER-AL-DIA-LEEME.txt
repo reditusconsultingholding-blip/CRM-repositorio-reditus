@@ -1,0 +1,18 @@
+PONER AL DÍA LA BASE DEL CRM — instrucciones
+
+1. Abre el archivo PONER-AL-DIA-produccion.sql, selecciona todo (Ctrl+A) y cópialo (Ctrl+C).
+2. Entra a Supabase → proyecto del CRM → SQL Editor → New query → pega todo (Ctrl+V) → botón Run.
+3. Debe salir una fila que dice "LISTO: la base del CRM quedó al día". Tarda pocos segundos.
+4. Si sale un error en rojo, no pasó nada: el archivo es todo o nada y la base queda como estaba. Copia el mensaje y envíalo.
+5. Se puede volver a correr las veces que quieras: no duplica nada ni pisa lo que el equipo ya haya editado.
+
+Qué cambia a la vista:
+- Valeria (Directora Operativa) verá Ingresos, Clientes y Prospectos, que hoy le salen vacíos.
+- Las encuestas públicas de calidad dejan de decir "link no válido" y avisan cuando un cliente responde.
+- El chat muestra los canales, los no leídos por canal y los marcadores fijados; aparece la Sala de voz.
+- El Asistente CEO guarda el historial. Rentabilidad usa los gastos fijos (ElevenLabs, Google Storage y Magnific, editables).
+- Funcionan el checklist diario, el Reto 75, el estado "POR SUBIR" de landing pages y el servicio "Imágenes Ads".
+
+Qué NO hace: no borra ni modifica ningún ingreso, cliente, requerimiento ni mensaje; no reinicia la numeración
+(#, COT- y cuentas de cobro siguen donde van); no cambia contraseñas ni usuarios; no toca el código de la app.
+Único cambio de comportamiento a futuro: al borrar un ingreso desde la app se borran también sus requerimientos.

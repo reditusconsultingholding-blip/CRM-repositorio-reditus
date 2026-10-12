@@ -12,6 +12,24 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // se usaran) deben quedar FUERA de cualquier try/catch para no romperse.
 type ActionResult = { error?: string } | undefined;
 
+/** Agrega a la persona a todos los canales del chat. El chat lista los canales
+ * por membresía, así que sin esto un usuario nuevo no vería ninguno. Es «mejor
+ * esfuerzo»: si la tabla aún no existe o algo falla, no bloquea el alta. */
+async function unirACanales(admin: ReturnType<typeof createAdminClient>, userId: string) {
+  try {
+    const { data: canales } = await admin.from("chat_channels").select("id");
+    if (!canales?.length) return;
+    await admin
+      .from("chat_channel_members")
+      .upsert(
+        canales.map((c) => ({ channel_id: c.id, user_id: userId })),
+        { onConflict: "channel_id,user_id", ignoreDuplicates: true },
+      );
+  } catch {
+    // sin canales no se rompe el alta
+  }
+}
+
 export async function createUser(formData: FormData): Promise<ActionResult> {
   const profile = await requireProfile();
   try {
@@ -45,6 +63,7 @@ export async function createUser(formData: FormData): Promise<ActionResult> {
       return { error: profileError.message };
     }
 
+    await unirACanales(admin, data.user.id);
     revalidatePath("/admin/usuarios");
     return {};
   } catch (err) {
@@ -142,6 +161,7 @@ export async function aprobarSolicitud(id: string, role: UserRole): Promise<Acti
     const { error } = await admin.from("users").update({ active: true, role }).eq("id", id);
     if (error) return { error: error.message };
     await admin.auth.admin.updateUserById(id, { app_metadata: { solicitud: "aprobada" } });
+    await unirACanales(admin, id);
     revalidatePath("/admin/usuarios");
     return {};
   } catch (err) {
