@@ -89,7 +89,8 @@ export function AsistenteEntregaPanel({ className }: { className?: string }) {
     iniciarRedaccion(async () => {
       const res = await redactarMensajeEntrega({
         cliente: r.pedido.cliente,
-        items: r.pedido.items,
+        // El mensaje solo habla de lo que sí tiene fecha calculada.
+        items: r.pedido.items.filter((_, i) => r.entregas[i]?.fecha),
         fecha: f,
         precioCop: incluirPrecio ? r.totalCop : null,
         variante: v,
@@ -403,7 +404,7 @@ export function AsistenteEntregaPanel({ className }: { className?: string }) {
                   )}
                 </>
               ) : (
-                <p className="mt-1 text-sm">Este servicio no tiene regla de capacidad: define la fecha a mano.</p>
+                <p className="mt-1 text-sm">Para este pedido no se calcula fecha aquí.</p>
               )}
               <div className="mt-3 grid gap-3">
                 {r.entregas.map((e, i) => (

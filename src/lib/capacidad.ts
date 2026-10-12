@@ -34,13 +34,31 @@ export type ReglaTipo = {
   peso: number;
   /** false = no es una regla dada por el dueño, es un estimado por confirmar. */
   confirmada: boolean;
+  /** Interruptor: false = el asistente NO calcula fecha ni cola de este servicio. */
+  activo: boolean;
+  /** Qué se le dice al usuario cuando está apagado. */
+  motivoInactivo?: string;
+  /** Si se pone, la capacidad usa este número de personas y NO cuenta
+   * cuántos usuarios activos hay con ese rol. */
+  personasFijas?: number;
 };
 
 export const CAPACIDAD = {
   /** 1 = lunes … 5 = viernes. El sábado (medio día) no cuenta. */
   diasHabiles: [1, 2, 3, 4, 5],
-  /** Festivos que no se trabajan, en formato "AAAA-MM-DD". Vacío = no se descuentan. */
+  /** Días que NO se trabajan ("AAAA-MM-DD") y sí corren la fecha. Vacío a
+   * propósito: los festivos de Colombia se trabajan (los clientes son de fuera). */
   festivos: [] as string[],
+  /** Festivos de Colombia (resto de 2026 y 2027). SOLO recordatorio: si la
+   * entrega o un día del tramo cae aquí se muestra una nota, pero la fecha
+   * NO cambia. */
+  recordatoriosFestivos: [
+    "2026-10-12", "2026-11-02", "2026-11-16", "2026-12-08", "2026-12-25",
+    "2027-01-01", "2027-01-11", "2027-03-22", "2027-03-25", "2027-03-26",
+    "2027-05-01", "2027-05-10", "2027-05-31", "2027-06-07", "2027-07-05",
+    "2027-07-20", "2027-08-07", "2027-08-16", "2027-10-18", "2027-11-01",
+    "2027-11-15", "2027-12-08", "2027-12-25",
+  ] as string[],
   /** false = un pedido que entra hoy se empieza el siguiente día hábil. */
   empiezaHoy: false,
   /** Estados de un requerimiento que todavía ocupan producción. */
@@ -48,21 +66,28 @@ export const CAPACIDAD = {
   /** Estados abiertos que NO ocupan producción (esperan al cliente). */
   estadosEnEspera: ["ESPERA INFO"],
   tipos: {
-    // Diseñador: 1 landing por día hábil; una landing ≈ 3 días de entrega
+    // Las landings las hace el dueño (programador): 1 por día hábil, FIJO
+    // (no se multiplica por usuarios). Una landing ≈ 3 días de entrega
     // (1 de producción + 2 de revisión y subida).
     landing: {
       cola: "landing",
-      rol: "disenador_landing",
-      rolLabel: { uno: "diseñador", varios: "diseñadores" },
+      rol: "programador",
+      rolLabel: { uno: "programador", varios: "programadores" },
+      personasFijas: 1,
+      activo: true,
       primerDia: 1,
       diasSiguientes: 1,
       margenDias: 2,
       peso: 1,
       confirmada: true,
     },
-    // Editor: 7 videos por día hábil. Hasta 7 videos = 2 días; cada bloque
-    // adicional de 6 videos suma 1 día.
+    // APAGADO (activo: false): los videos pasan a producción automática y
+    // el asistente no les calcula fecha ni cola. Para reactivarlo, activo: true.
+    // Regla guardada: 7 videos por editor por día hábil; hasta 7 = 2 días;
+    // cada bloque adicional de 6 suma 1 día.
     video: {
+      activo: false,
+      motivoInactivo: "Los videos van por producción automática; no se calcula fecha aquí.",
       cola: "video",
       rol: "editor_video",
       rolLabel: { uno: "editor", varios: "editores" },
@@ -74,6 +99,7 @@ export const CAPACIDAD = {
     },
     // ── Estimados por confirmar con el dueño (no hay regla dada) ──
     imagenes: {
+      activo: true,
       cola: "imagenes",
       rol: "disenador_landing",
       rolLabel: { uno: "diseñador", varios: "diseñadores" },
@@ -86,8 +112,10 @@ export const CAPACIDAD = {
     // Una página de marca se cuenta como 5 landings en la cola del diseñador.
     pagina_marca: {
       cola: "landing",
-      rol: "disenador_landing",
-      rolLabel: { uno: "diseñador", varios: "diseñadores" },
+      rol: "programador",
+      rolLabel: { uno: "programador", varios: "programadores" },
+      personasFijas: 1,
+      activo: true,
       primerDia: 1,
       diasSiguientes: 1,
       margenDias: 2,
@@ -97,8 +125,10 @@ export const CAPACIDAD = {
     // Una optimización/CRO se cuenta como 2 landings.
     cro: {
       cola: "landing",
-      rol: "disenador_landing",
-      rolLabel: { uno: "diseñador", varios: "diseñadores" },
+      rol: "programador",
+      rolLabel: { uno: "programador", varios: "programadores" },
+      personasFijas: 1,
+      activo: true,
       primerDia: 1,
       diasSiguientes: 1,
       margenDias: 2,
@@ -250,11 +280,21 @@ export function calcularEntrega(e: EntradaEntrega): ResultadoEntrega {
     };
   }
 
+  if (!regla.activo) {
+    return {
+      tipo: e.tipo, cantidad, fecha: null, fechaSinCola: null, inicio: null,
+      diasHabiles: 0, diasProduccion: 0, margenDias: 0, unidadesEnCola: 0, unidadesEnEspera: 0,
+      atrasados: 0, personas: 0, capacidadDia: 0, estimado: false,
+      motivos: [regla.motivoInactivo ?? "Este servicio no se calcula aquí por ahora."],
+    };
+  }
+
   const motivos: string[] = [];
   const colaLabel = COLA_LABELS[regla.cola];
 
   const activos = e.equipo[regla.rol] ?? 0;
-  const personas = Math.max(1, activos);
+  const fijas = regla.personasFijas != null;
+  const personas = regla.personasFijas ?? Math.max(1, activos);
   const primerDia = regla.primerDia * personas;
   const siguientes = regla.diasSiguientes * personas;
 
@@ -295,7 +335,9 @@ export function calcularEntrega(e: EntradaEntrega): ResultadoEntrega {
   );
   motivos.push(
     regla.primerDia === regla.diasSiguientes
-      ? `Capacidad: ${siguientes} por día hábil (${plural(personas, regla.rolLabel)} × ${regla.diasSiguientes}).`
+      ? fijas
+        ? `Capacidad: ${siguientes} por día hábil (las hace el ${regla.rolLabel.uno}; fijo).`
+        : `Capacidad: ${siguientes} por día hábil (${plural(personas, regla.rolLabel)} × ${regla.diasSiguientes}).`
       : `Capacidad: ${primerDia} el primer día y ${siguientes} cada día siguiente (${plural(personas, regla.rolLabel)}).`,
   );
   motivos.push(
@@ -304,7 +346,13 @@ export function calcularEntrega(e: EntradaEntrega): ResultadoEntrega {
   if (corridos > 0) motivos.push(`Ese día ya estaba lleno de entregas prometidas: se corrió ${corridos} día(s) hábil(es).`);
   if (unidadesEnEspera > 0) motivos.push(`${plural(unidadesEnEspera, colaLabel)} esperan información del cliente y no se contaron.`);
   if (atrasados > 0) motivos.push(`Ojo: ${atrasados} trabajo(s) de esta cola ya pasaron su fecha prometida.`);
-  if (activos === 0) motivos.push(`No hay ${regla.rolLabel.varios} activos en Usuarios: calculé con 1.`);
+  if (!fijas && activos === 0) motivos.push(`No hay ${regla.rolLabel.varios} activos en Usuarios: calculé con 1.`);
+  // Festivos de Colombia: solo aviso, la fecha no se mueve.
+  for (let f = inicio; f <= fecha; f = sumarDias(f, 1)) {
+    if (CAPACIDAD.recordatoriosFestivos.includes(f) && esDiaHabil(f)) {
+      motivos.push(`Ojo: el ${fechaLarga(f)} es festivo en Colombia (no cambia la fecha).`);
+    }
+  }
   if (!regla.confirmada) motivos.push("Estimado: este servicio no tiene una regla de capacidad confirmada.");
 
   return {

@@ -226,7 +226,7 @@ export async function consultarAsistenteEntrega(
     const totalUsd = completos ? precios.reduce((s, p) => s + (p.totalUsd ?? 0), 0) : null;
 
     const mensaje = fecha
-      ? mensajePlantilla({ cliente: pedido.cliente, items: pedido.items, fecha, precioCop: null, variante: 0 })
+      ? mensajePlantilla({ cliente: pedido.cliente, items: pedido.items.filter((_, i) => entregas[i]?.fecha), fecha, precioCop: null, variante: 0 })
       : "";
 
     return {
