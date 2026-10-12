@@ -17,8 +17,8 @@ async function llavesDeGoogle(): Promise<Jwk[]> {
 const b64 = (s: string) => Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 
 /** Comprueba el token que entrega «Entrar con Google» (firma, emisor, destinatario y
- * vigencia) y devuelve el correo verificado, o null si algo no cuadra. */
-export async function correoDeGoogle(credential: string): Promise<string | null> {
+ * vigencia) y devuelve el correo verificado y el nombre, o null si algo no cuadra. */
+export async function datosDeGoogle(credential: string): Promise<{ email: string; name: string } | null> {
   try {
     const [h, p, f] = credential.split(".");
     if (!h || !p || !f) return null;
@@ -34,13 +34,14 @@ export async function correoDeGoogle(credential: string): Promise<string | null>
     if (!verify("RSA-SHA256", Buffer.from(h + "." + p), llave, b64(f))) return null;
 
     const d = JSON.parse(b64(p).toString("utf8")) as {
-      iss?: string; aud?: string; exp?: number; email?: string; email_verified?: boolean | string;
+      iss?: string; aud?: string; exp?: number; email?: string; email_verified?: boolean | string; name?: string;
     };
     if (d.aud !== GOOGLE_CLIENT_ID) return null;
     if (d.iss !== "https://accounts.google.com" && d.iss !== "accounts.google.com") return null;
     if (!d.exp || d.exp * 1000 < Date.now()) return null;
     if (d.email_verified !== true && d.email_verified !== "true") return null;
-    return d.email ? d.email.trim().toLowerCase() : null;
+    if (!d.email) return null;
+    return { email: d.email.trim().toLowerCase(), name: String(d.name ?? "").trim().slice(0, 80) };
   } catch {
     return null;
   }

@@ -126,3 +126,47 @@ export async function deleteUser(id: string): Promise<ActionResult> {
     };
   }
 }
+
+// ---------- Solicitudes de acceso (registro con Google) ----------
+
+/** Acepta a quien pidió acceso con Google: activa la cuenta con el rol elegido
+ * y le quita la marca de pendiente. Desde ese momento entra con Google. */
+export async function aprobarSolicitud(id: string, role: UserRole): Promise<ActionResult> {
+  const profile = await requireProfile();
+  try {
+    if (!(ADMIN_ROLES as string[]).includes(profile.role)) {
+      return { error: "Solo el CEO puede administrar usuarios." };
+    }
+    if (role === "ceo") return { error: "El rol de CEO no se asigna desde una solicitud." };
+    const admin = createAdminClient();
+    const { error } = await admin.from("users").update({ active: true, role }).eq("id", id);
+    if (error) return { error: error.message };
+    await admin.auth.admin.updateUserById(id, { app_metadata: { solicitud: "aprobada" } });
+    revalidatePath("/admin/usuarios");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}
+
+/** Rechaza una solicitud pendiente: borra la cuenta que se creó al pedir acceso.
+ * Solo actúa sobre cuentas marcadas como pendientes, nunca sobre usuarios ya aceptados. */
+export async function rechazarSolicitud(id: string): Promise<ActionResult> {
+  const profile = await requireProfile();
+  try {
+    if (!(ADMIN_ROLES as string[]).includes(profile.role)) {
+      return { error: "Solo el CEO puede administrar usuarios." };
+    }
+    const admin = createAdminClient();
+    const { data: cuenta } = await admin.auth.admin.getUserById(id);
+    if (cuenta?.user?.app_metadata?.solicitud !== "pendiente") {
+      return { error: "Esta cuenta ya no es una solicitud pendiente." };
+    }
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) return { error: error.message };
+    revalidatePath("/admin/usuarios");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ocurrió un error inesperado." };
+  }
+}

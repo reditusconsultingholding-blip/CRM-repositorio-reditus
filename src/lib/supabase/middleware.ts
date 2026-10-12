@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   "/apple-icon",
   "/manifest.webmanifest",
   "/sw.js",
+  "/privacidad",
 ];
 // INGRESOS_ROLES/ADMIN_ROLES vienen de lib/roles.ts (antes eran una copia
 // hardcodeada aparte, aquí mismo, que se desincronizó — directora_operativa

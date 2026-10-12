@@ -206,21 +206,32 @@ export async function validarSesionHuella(): Promise<{ ok: boolean }> {
   return { ok: true };
 }
 
-/** Ingreso con Google: se comprueba el token de Google, se busca el usuario del CRM
- * con ese correo (o su alias) y, solo si existe y está activo, se le abre la sesión.
- * Nunca crea usuarios: quien no esté registrado no entra. */
-export async function entrarConGoogle(credential: string): Promise<{ error: string } | undefined> {
-  const { correoDeGoogle } = await import("@/lib/google-token");
+export type GoogleState =
+  | { error: string }
+  | { registrar: true; correo: string; nombre: string }
+  | { pendiente: true; correo: string }
+  | undefined;
+
+/** Ingreso con Google: se comprueba el token de Google y se busca el usuario del CRM
+ * con ese correo (o su alias). Si existe y está activo, se le abre la sesión. Si no
+ * existe, se le devuelve `registrar` para que pida acceso eligiendo su rol; nadie
+ * entra hasta que el CEO lo acepte en Usuarios. */
+export async function entrarConGoogle(credential: string): Promise<GoogleState> {
+  const { datosDeGoogle } = await import("@/lib/google-token");
   const { GOOGLE_ALIAS } = await import("@/lib/google-login");
 
-  const correoGoogle = await correoDeGoogle(String(credential ?? ""));
-  if (!correoGoogle) return { error: "No pudimos comprobar tu cuenta de Google. Intenta de nuevo." };
-  const email = GOOGLE_ALIAS[correoGoogle] ?? correoGoogle;
+  const google = await datosDeGoogle(String(credential ?? ""));
+  if (!google) return { error: "No pudimos comprobar tu cuenta de Google. Intenta de nuevo." };
+  const email = GOOGLE_ALIAS[google.email] ?? google.email;
 
   const admin = createAdminClient();
   const { data: perfil } = await admin.from("users").select("id, active").eq("email", email).maybeSingle();
-  if (!perfil) return { error: `La cuenta ${correoGoogle} no está registrada en el CRM. Pídele acceso al administrador.` };
-  if (!perfil.active) return { error: "Esta cuenta está desactivada. Contacta al administrador." };
+  if (!perfil) return { registrar: true, correo: google.email, nombre: google.name };
+  if (!perfil.active) {
+    const { data: cuenta } = await admin.auth.admin.getUserById(perfil.id);
+    if (cuenta?.user?.app_metadata?.solicitud === "pendiente") return { pendiente: true, correo: google.email };
+    return { error: "Esta cuenta está desactivada. Contacta al administrador." };
+  }
 
   const { data: enlace, error: errEnlace } = await admin.auth.admin.generateLink({ type: "magiclink", email });
   const token_hash = enlace?.properties?.hashed_token;
@@ -231,4 +242,51 @@ export async function entrarConGoogle(credential: string): Promise<{ error: stri
   if (error) return { error: "No se pudo iniciar sesión por un problema del servidor. Intenta de nuevo en unos segundos." };
 
   redirect("/dashboard");
+}
+
+const ROLES_SOLICITABLES = ["gerente_comercial", "directora_operativa", "editor_video", "disenador_landing", "programador"];
+
+/** Registro con Google: la persona (ya comprobada por Google) dice su nombre y su rol.
+ * Se crea la cuenta DESACTIVADA y marcada como solicitud pendiente, y se avisa al CEO.
+ * No abre sesión: solo entra cuando el CEO la acepte. */
+export async function solicitarAcceso(credential: string, nombre: string, rol: string): Promise<GoogleState> {
+  const { datosDeGoogle } = await import("@/lib/google-token");
+  const { GOOGLE_ALIAS } = await import("@/lib/google-login");
+  const { ROLE_LABELS } = await import("@/lib/roles");
+  const { notify } = await import("@/lib/notify");
+
+  const google = await datosDeGoogle(String(credential ?? ""));
+  if (!google) return { error: "Tu sesión de Google venció. Toca otra vez «Continuar con Google»." };
+  const email = GOOGLE_ALIAS[google.email] ?? google.email;
+  const name = String(nombre ?? "").trim().slice(0, 80);
+  if (name.length < 3) return { error: "Escribe tu nombre completo." };
+  if (!ROLES_SOLICITABLES.includes(rol)) return { error: "Elige tu rol." };
+
+  const admin = createAdminClient();
+  const { data: existe } = await admin.from("users").select("id").eq("email", email).maybeSingle();
+  if (existe) return { pendiente: true, correo: google.email };
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+    app_metadata: { solicitud: "pendiente" },
+    user_metadata: { name },
+  });
+  if (error || !data.user) return { error: "No se pudo enviar la solicitud. Intenta de nuevo en unos segundos." };
+
+  const { error: errPerfil } = await admin
+    .from("users")
+    .insert({ id: data.user.id, name, email, role: rol, active: false, password_set: false });
+  if (errPerfil) {
+    await admin.auth.admin.deleteUser(data.user.id);
+    return { error: "No se pudo enviar la solicitud. Intenta de nuevo en unos segundos." };
+  }
+
+  const { data: ceos } = await admin.from("users").select("id").eq("role", "ceo").eq("active", true);
+  const etiqueta = ROLE_LABELS[rol as keyof typeof ROLE_LABELS] ?? rol;
+  for (const c of ceos ?? []) {
+    await notify(admin, c.id, "nuevo_pedido", `${name} pidió acceso como ${etiqueta}`, "/admin/usuarios");
+  }
+
+  return { pendiente: true, correo: google.email };
 }
