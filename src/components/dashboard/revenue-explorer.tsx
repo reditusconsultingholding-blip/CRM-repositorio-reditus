@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { hoyEnBogota } from "@/lib/utils";
 import { getRevenueForRange } from "@/app/(protected)/dashboard/revenue-actions";
 
 function fmtUsd(n: number) {
@@ -16,13 +17,14 @@ function fmtCop(n: number) {
   return `${Math.round(n).toLocaleString("es-CO")} COP`;
 }
 
+// Todo se cuenta desde el día de Bogotá: en UTC, desde las 7 p. m. «hoy» ya era mañana.
+const today = () => hoyEnBogota();
+
 function isoDaysAgo(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
+  const d = new Date(`${today()}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 }
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 export function RevenueExplorer() {
   const [start, setStart] = useState(today());

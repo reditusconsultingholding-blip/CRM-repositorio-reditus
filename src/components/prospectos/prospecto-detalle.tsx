@@ -51,6 +51,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Chip, ETIQUETA, Segmento } from "./piezas";
 import { SubirPieza } from "./subir-pieza";
+import { CorreosProspecto } from "./correos-prospecto";
+import type { CorreosProspecto as Correos } from "@/lib/prospeccion-correo";
 
 export type DetalleProps = {
   id: string;
@@ -62,6 +64,8 @@ export type DetalleProps = {
   etapa: Etapa;
   pros: Prospeccion;
   asignables: { id: string; name: string }[];
+  /** Prospección por correo: línea de tiempo y permisos (ver `correos-prospecto.tsx`). */
+  correo?: { correos: Correos; falta: string | null; sinConfirmar: boolean; puedeAutorizar: boolean };
 };
 
 const SIN_ASIGNAR = "__nadie__";
@@ -167,6 +171,8 @@ export function ProspectoDetalle(props: DetalleProps) {
           </Card>
 
           <Mensaje key={`m-${pros.mensaje.length}-${pros.mensaje.slice(0, 24)}`} id={id} pros={pros} etapa={etapa} terminado={terminado} />
+
+          {props.correo && pros.canal === "correo" && <CorreosProspecto id={id} pais={pros.pais} {...props.correo} />}
         </div>
       </div>
     </div>

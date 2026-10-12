@@ -135,7 +135,7 @@ export function EntrarGoogle() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-white/35">
+      <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-white/55">
         <span className="h-px flex-1 bg-white/10" />o con tu cuenta de Google
         <span className="h-px flex-1 bg-white/10" />
       </div>
@@ -203,7 +203,7 @@ export function EntrarGoogle() {
         </p>
       )}
       {!registro && !pendiente && (
-        <p className="text-center text-xs leading-relaxed text-white/40">¿Eres nuevo en el equipo? Entra con Google, elige tu rol y Alank te acepta.</p>
+        <p className="text-center text-xs leading-relaxed text-white/60">¿Eres nuevo en el equipo? Entra con Google, elige tu rol y Alank te acepta.</p>
       )}
     </div>
   );

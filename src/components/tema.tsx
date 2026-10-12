@@ -31,16 +31,31 @@ function suscribir(f: () => void) {
 }
 const leer = () => document.documentElement.classList.contains("dark");
 
+// true mientras el CRM está montado: fuera (login, Pulso, encuesta) manda el sistema.
+let dentroDelCrm = false;
+
+/** Tema para lo que se pinta fuera del layout (toasts): dentro del CRM el del
+ * interruptor; fuera, el del sistema. */
+export function useTemaToasts(): "light" | "dark" | "system" {
+  return useSyncExternalStore(
+    suscribir,
+    () => (dentroDelCrm ? (leer() ? "dark" : "light") : "system"),
+    () => "system",
+  );
+}
+
 /** Aplica el tema mientras se está dentro del CRM y lo retira al salir (login, Pulso). */
 export function TemaGuardia() {
   useEffect(() => {
+    dentroDelCrm = true;
     aplicar(oscuroPreferido());
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const alCambiar = () => aplicar(oscuroPreferido());
     mq.addEventListener("change", alCambiar);
     return () => {
       mq.removeEventListener("change", alCambiar);
-      document.documentElement.classList.remove("dark");
+      dentroDelCrm = false;
+      aplicar(false);
     };
   }, []);
   return null;

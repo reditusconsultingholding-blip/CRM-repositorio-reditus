@@ -39,7 +39,7 @@ function Cifrado() {
 
   return (
     <>
-      <span aria-hidden="true" className="select-none text-[#22b8ff]">
+      <span aria-hidden="true" className="select-none text-[#0a6cb8] dark:text-[#22b8ff]">
         {texto}
       </span>
       <span className="sr-only">Cifra oculta</span>
@@ -110,7 +110,7 @@ export function BotonCifras({ className, conTexto = false }: { className?: strin
       }}
       className={cn(
         "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-border p-1 text-xs font-medium text-muted-foreground transition-colors hover:border-ring/60 hover:text-foreground",
-        ocultas && "border-[#22b8ff]/50 text-[#22b8ff]",
+        ocultas && "border-[#22b8ff]/50 text-[#0a6cb8] dark:text-[#22b8ff]",
         conTexto && "px-2.5 py-1.5",
         className,
       )}

@@ -105,17 +105,39 @@ function enFila<T>(clave: string, fn: () => Promise<T>): Promise<T> {
 
 // --------------------------------------------------------- plantilla ----
 
+// La plantilla casi nunca cambia y se necesita en CADA acción y en cada
+// pintada: se recuerda unos segundos en el proceso para no ir a Storage cada
+// vez. Al guardarla aquí se renueva al instante; en otro proceso, el cambio
+// del CEO se ve a lo sumo con este retraso.
+const PLANTILLA_VIGENCIA_MS = 15_000;
+let plantillaReciente: { plantilla: Plantilla; hasta: number } | null = null;
+
 export async function leerPlantillaGuardada(admin: Admin): Promise<Plantilla> {
+  if (plantillaReciente && plantillaReciente.hasta > Date.now()) return structuredClone(plantillaReciente.plantilla);
   const r = await leerJson(admin, RUTA_PLANTILLA);
   // Sin archivo (o ilegible): la plantilla inicial. No se escribe sola.
-  return r.dato ? leerPlantilla(r.dato) : plantillaInicial();
+  const plantilla = r.dato ? leerPlantilla(r.dato) : plantillaInicial();
+  // Un fallo de lectura no se recuerda: la próxima vez se vuelve a intentar.
+  if (!r.error) plantillaReciente = { plantilla: structuredClone(plantilla), hasta: Date.now() + PLANTILLA_VIGENCIA_MS };
+  return plantilla;
 }
 
 export async function guardarPlantilla(admin: Admin, plantilla: Plantilla): Promise<{ error?: string }> {
   const b = await asegurarBucket(admin);
   if (b.error) return b;
-  return enFila(RUTA_PLANTILLA, () => escribirJson(admin, RUTA_PLANTILLA, plantilla));
+  const g = await enFila(RUTA_PLANTILLA, () => escribirJson(admin, RUTA_PLANTILLA, plantilla));
+  plantillaReciente = g.error ? null : { plantilla: structuredClone(plantilla), hasta: Date.now() + PLANTILLA_VIGENCIA_MS };
+  cuentasPasadas.clear(); // los días pasados sin registro se arman con la plantilla
+  return g;
 }
+
+// Conteo de días YA PASADOS para la tira de la semana (solo para pintar,
+// nunca para escribir): la persona ya no puede tocarlos y solo cambian si
+// alguien los revisa. Se recuerdan un minuto para que marcar varias tareas
+// seguidas no relea toda la semana cada vez.
+const CUENTA_VIGENCIA_MS = 60_000;
+const cuentasPasadas = new Map<string, { conRegistro: boolean; cuenta: Cuenta; hasta: number }>();
+const claveCuenta = (fecha: string, userId: string) => `${fecha}/${userId}`;
 
 // --------------------------------------------------------------- días ----
 
@@ -141,20 +163,25 @@ export async function leerRevision(admin: Admin, fecha: string, userId: string):
  * Leer-modificar-escribir del archivo de UNA persona en UN día. `cambio`
  * recibe el archivo (o uno nuevo armado con la plantilla) y lo modifica; si
  * devuelve `{ error }` no se guarda nada.
+ *
+ * `cambio` recibe también el día tal como estaba ANTES del cambio, cruzado
+ * con la revisión (estado de cada tarea): ahí mismo se valida que la tarea
+ * exista y siga abierta, con una sola ida a Storage (día y revisión a la
+ * vez) en lugar de leer todo antes y volver a leerlo para escribir.
  */
 export async function cambiarDia(
   admin: Admin,
   plantilla: Plantilla,
   persona: Persona,
   fecha: string,
-  cambio: (dia: ArchivoDia) => { error: string } | void,
+  cambio: (dia: ArchivoDia, antes: DiaVista) => { error: string } | void,
 ): Promise<{ error: string } | { dia: ArchivoDia }> {
   const b = await asegurarBucket(admin);
   if (b.error) return { error: b.error };
   return enFila(rutaDia(fecha, persona.id), async () => {
-    const leido = await leerDia(admin, fecha, persona.id);
-    if (leido.error) return { error: `No se pudo leer tu día: ${leido.error}. Intenta de nuevo.` };
-    const vista = armarDia(plantilla, persona, fecha, leido.dia, null, fecha);
+    const [leido, rev] = await Promise.all([leerDia(admin, fecha, persona.id), leerRevision(admin, fecha, persona.id)]);
+    if (leido.error || rev.error) return { error: `No se pudo leer tu día: ${leido.error ?? rev.error}. Intenta de nuevo.` };
+    const vista = armarDia(plantilla, persona, fecha, leido.dia, rev.revision, fecha);
     const ahora = new Date().toISOString();
     const dia: ArchivoDia = leido.dia ?? {
       version: 1,
@@ -179,11 +206,12 @@ export async function cambiarDia(
     });
     dia.nombre = persona.name;
     dia.rol = persona.role;
-    const r = cambio(dia);
+    const r = cambio(dia, vista);
     if (r && "error" in r) return r;
     dia.actualizado = ahora;
     if (dia.historial.length > 300) dia.historial = dia.historial.slice(-300);
     const g = await escribirJson(admin, rutaDia(fecha, persona.id), dia);
+    cuentasPasadas.delete(claveCuenta(fecha, persona.id));
     return g.error ? { error: g.error } : { dia };
   });
 }
@@ -204,6 +232,7 @@ export async function cambiarRevision(
     revision.actualizado = new Date().toISOString();
     if (revision.historial.length > 300) revision.historial = revision.historial.slice(-300);
     const g = await escribirJson(admin, rutaRevision(fecha, userId), revision);
+    cuentasPasadas.delete(claveCuenta(fecha, userId));
     return g.error ? { error: g.error } : { revision };
   });
 }
@@ -240,17 +269,40 @@ export type SemanaPersona = {
   cumplio: boolean;
 };
 
-export async function cargarSemana(admin: Admin, plantilla: Plantilla, personas: Persona[], lunes: string): Promise<SemanaPersona[]> {
+/**
+ * `hasta`: último día que cuenta (por defecto hoy); lo posterior se trata como futuro.
+ */
+export async function cargarSemana(
+  admin: Admin,
+  plantilla: Plantilla,
+  personas: Persona[],
+  lunes: string,
+  opciones: { hasta?: string } = {},
+): Promise<SemanaPersona[]> {
   const hoy = hoyBogota();
+  const tope = opciones.hasta && opciones.hasta < hoy ? opciones.hasta : hoy;
   const fechas = diasDeSemana(lunes);
   return Promise.all(
     personas.map(async (persona) => {
       const dias = await Promise.all(
         fechas.map(async (fecha) => {
-          const futuro = fecha > hoy;
+          const futuro = fecha > tope;
           // Un día futuro no tiene archivos: se arma con la plantilla y no cuenta.
-          const dia = futuro ? armarDia(plantilla, persona, fecha, null, null, hoy) : await cargarDia(admin, plantilla, persona, fecha);
-          return { fecha, futuro, conRegistro: dia.conRegistro, cuenta: contar(dia.tareas) };
+          if (futuro) {
+            const dia = armarDia(plantilla, persona, fecha, null, null, hoy);
+            return { fecha, futuro, conRegistro: dia.conRegistro, cuenta: contar(dia.tareas) };
+          }
+          const clave = claveCuenta(fecha, persona.id);
+          const recordado = fecha < hoy ? cuentasPasadas.get(clave) : undefined;
+          if (recordado && recordado.hasta > Date.now()) return { fecha, futuro, conRegistro: recordado.conRegistro, cuenta: recordado.cuenta };
+          const [d, r] = await Promise.all([leerDia(admin, fecha, persona.id), leerRevision(admin, fecha, persona.id)]);
+          const dia = armarDia(plantilla, persona, fecha, d.dia, r.revision);
+          const cuenta = contar(dia.tareas);
+          // Solo se recuerda un día pasado que se leyó bien.
+          if (fecha < hoy && !d.error && !r.error) {
+            cuentasPasadas.set(clave, { conRegistro: dia.conRegistro, cuenta, hasta: Date.now() + CUENTA_VIGENCIA_MS });
+          }
+          return { fecha, futuro, conRegistro: dia.conRegistro, cuenta };
         }),
       );
       const total = sumar(dias.filter((d) => !d.futuro).map((d) => d.cuenta));
@@ -312,15 +364,25 @@ export async function avisarPendientes(admin: Admin, fecha: string, momento: "ta
   return { avisados };
 }
 
-/** Resumen de la semana (lunes a sábado) para el CEO: quién cumplió y quién no. */
-export async function resumenSemanalCeo(admin: Admin, lunes: string): Promise<{ enviados: number; texto: string; omitido?: string }> {
-  if (await yaAvisadoHoy(admin, "recomendacion_ceo", PREFIJO_SEMANA)) return { enviados: 0, texto: "", omitido: "ya enviado" };
+/**
+ * Resumen de la semana (lunes a sábado) para el CEO: quién cumplió y quién no.
+ * Con `hasta` es un corte parcial: cuenta solo hasta ese día y lo dice.
+ */
+export async function resumenSemanalCeo(admin: Admin, lunes: string, hasta?: string): Promise<{ enviados: number; texto: string; omitido?: string }> {
+  // El corte del sábado y el cierre no se tapan entre sí: cada uno mira su propio texto.
+  if (await yaAvisadoHoy(admin, "recomendacion_ceo", `${PREFIJO_SEMANA} ${hasta ? "corte" : "semana"}`)) return { enviados: 0, texto: "", omitido: "ya enviado" };
   const plantilla = await leerPlantillaGuardada(admin);
   const equipo = await equipoActivo(admin);
-  const semana = await cargarSemana(admin, plantilla, conSecuencia(plantilla, equipo), lunes);
+  const semana = await cargarSemana(admin, plantilla, conSecuencia(plantilla, equipo), lunes, { hasta });
   if (!semana.length) return { enviados: 0, texto: "", omitido: "nadie tiene secuencia" };
-  const partes = semana.map((s) => `${s.persona.name.split(" ")[0]} ${s.total.pct} % (${s.cumplio ? "cumplió" : "NO cumplió"})`);
-  const texto = `${PREFIJO_SEMANA} semana del ${fechaCorta(lunes)} al ${fechaCorta(sumarDias(lunes, 5))} · ${partes.join(" · ")} · meta ${plantilla.umbral} %`;
+  const partes = semana.map((s) =>
+    hasta
+      ? `${s.persona.name.split(" ")[0]} ${s.total.pct} % (${s.cumplio ? "va cumpliendo" : "va por debajo"})`
+      : `${s.persona.name.split(" ")[0]} ${s.total.pct} % (${s.cumplio ? "cumplió" : "NO cumplió"})`,
+  );
+  const texto = hasta
+    ? `${PREFIJO_SEMANA} corte del ${fechaCorta(lunes)} al ${fechaCorta(hasta)} (falta el sábado) · ${partes.join(" · ")} · meta ${plantilla.umbral} %`
+    : `${PREFIJO_SEMANA} semana del ${fechaCorta(lunes)} al ${fechaCorta(sumarDias(lunes, 5))} · ${partes.join(" · ")} · meta ${plantilla.umbral} %`;
   const ceos = equipo.filter((p) => p.role === "ceo");
   for (const ceo of ceos) await avisar(admin, ceo.id, "recomendacion_ceo", texto, `/seguimiento?vista=semana&semana=${lunes}`);
   return { enviados: ceos.length, texto };
@@ -328,8 +390,15 @@ export async function resumenSemanalCeo(admin: Admin, lunes: string): Promise<{ 
 
 /**
  * Lo que engancha el cron diario (corre a las 12:00 UTC = 7:00 a. m. Bogotá):
- * de martes a domingo recuerda lo que quedó sin entregar el día anterior, y
- * el lunes le manda al CEO el resumen de la semana que acaba de cerrar.
+ * de martes a domingo recuerda lo que quedó sin entregar el día anterior; el
+ * SÁBADO le manda al CEO el resumen de la semana con corte al viernes (a las
+ * 7 a. m. el sábado apenas empieza, por eso no se cuenta), y el lunes el
+ * cierre definitivo de lunes a sábado.
+ *
+ * Va aquí y no como un segundo cron en vercel.json porque no hay certeza de
+ * que el plan de Vercel lo admita ni de que CRON_SECRET esté puesto (sin él,
+ * /api/cron/seguimiento responde 503). El aviso de las 5 p. m. del mismo día
+ * sigue necesitando esa ruta con un programador a esa hora.
  */
 export async function tareasDeCronSeguimiento(admin: Admin): Promise<string[]> {
   const hoy = hoyBogota();
@@ -337,6 +406,10 @@ export async function tareasDeCronSeguimiento(admin: Admin): Promise<string[]> {
   const ayer = sumarDias(hoy, -1);
   const p = await avisarPendientes(admin, ayer, "manana");
   hechas.push(`seguimiento_pendientes:${p.omitido ?? p.avisados}`);
+  if (diaSemana(hoy) === 6) {
+    const r = await resumenSemanalCeo(admin, lunesDe(hoy), ayer);
+    hechas.push(`seguimiento_semana_sabado:${r.omitido ?? r.enviados}`);
+  }
   if (diaSemana(hoy) === 1) {
     const r = await resumenSemanalCeo(admin, lunesDe(ayer));
     hechas.push(`seguimiento_semana:${r.omitido ?? r.enviados}`);

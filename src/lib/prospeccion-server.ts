@@ -359,20 +359,25 @@ export async function crearProspectoProspeccion(
 // ------------------------------------------------- envío automático ----
 
 /**
- * PUNTO DE EXTENSIÓN — envío automático del mensaje (todavía no existe).
+ * PUNTO DE EXTENSIÓN — envío automático del mensaje.
  *
- * Hoy el mensaje se copia y se envía a mano, y luego se marca «Video
- * enviado» en la pantalla. Cuando exista el servidor de envíos (correo,
- * Instagram o WhatsApp), se implementa aquí: recibe el prospecto con su
- * canal, contacto y mensaje final, lo entrega por el canal y devuelve
- * `{ enviado: true }`. La acción `marcarEnviado` de
- * `prospectos/actions.ts` es quien debe llamarla antes de mover la etapa.
+ * Correo: YA está conectado, pero no pasa por aquí. El envío no es
+ * inmediato: lo hace el trabajador del servidor en horario laboral, después
+ * de la aprobación explícita en el bloque «Correos» de la ficha
+ * (`aprobarEnvio` en `lib/prospeccion-correo-server.ts`); cuando el correo
+ * sale de verdad, ese mismo módulo mueve el prospecto a «Video enviado».
+ *
+ * Instagram y WhatsApp: siguen a mano. Cuando exista un servidor para esos
+ * canales se implementa aquí y `marcarEnviado(id, true)` lo llama antes de
+ * mover la etapa.
  */
 export async function enviarMensajeAutomatico(
   fila: FilaProspeccion,
   prospeccion: Prospeccion,
 ): Promise<{ enviado: boolean; motivo?: string }> {
   void fila;
-  void prospeccion;
-  return { enviado: false, motivo: "El envío automático todavía no está conectado: copia el mensaje y envíalo a mano." };
+  if (prospeccion.canal === "correo") {
+    return { enviado: false, motivo: "El correo lo envía el servidor: apruébalo en el bloque «Correos» de la ficha." };
+  }
+  return { enviado: false, motivo: "El envío automático por este canal todavía no está conectado: copia el mensaje y envíalo a mano." };
 }

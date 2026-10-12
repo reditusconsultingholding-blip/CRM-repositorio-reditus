@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { toast } from "sonner";
 import { Bell, BellOff } from "lucide-react";
 import { savePushSubscription, removePushSubscription } from "@/app/(protected)/perfil/push-actions";
@@ -13,9 +13,15 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
+const sinCambios = () => () => {};
+
 export function PushToggle() {
-  const [supported] = useState(
-    () => typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window,
+  // En el servidor y al hidratar vale false (igual que el HTML que llegó);
+  // después el navegador dice si soporta push. Así no hay aviso de hidratación.
+  const supported = useSyncExternalStore(
+    sinCambios,
+    () => "serviceWorker" in navigator && "PushManager" in window,
+    () => false,
   );
   const [subscribed, setSubscribed] = useState(false);
   const [pending, startTransition] = useTransition();

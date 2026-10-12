@@ -226,7 +226,7 @@ function Formulario() {
             {entrandoHuella ? "Esperando tu huella…" : "Entrar con huella o PIN"}
           </Button>
           {errorHuella && <Aviso>{errorHuella}</Aviso>}
-          <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-white/35">
+          <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-white/55">
             <span className="h-px flex-1 bg-white/10" />o con contraseña
             <span className="h-px flex-1 bg-white/10" />
           </div>
@@ -294,7 +294,7 @@ function Formulario() {
           {errorHuella && <Aviso>{errorHuella}</Aviso>}
         </>
       )}
-      <p className="flex items-start gap-2 text-xs leading-relaxed text-white/40">
+      <p className="flex items-start gap-2 text-xs leading-relaxed text-white/60">
         <KeyRound className="mt-0.5 size-3.5 shrink-0 text-[#5cc8ff]" />
         ¿Primera vez? Escribe tu correo y toca Entrar: te pedimos crear tu contraseña.
       </p>

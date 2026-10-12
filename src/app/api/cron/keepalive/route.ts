@@ -150,9 +150,10 @@ export async function GET(request: NextRequest) {
   }
 
   // Seguimiento diario: como este cron corre a las 7:00 a. m. de Bogotá, de
-  // martes a domingo recuerda lo que quedó sin entregar AYER y el lunes le
-  // manda al CEO el resumen de la semana cerrada. El aviso de las 5 p. m. y
-  // el resumen del sábado se disparan con /api/cron/seguimiento.
+  // martes a domingo recuerda lo que quedó sin entregar AYER, el sábado le
+  // manda al CEO el resumen de la semana con corte al viernes y el lunes el
+  // cierre de lunes a sábado. El aviso de las 5 p. m. del mismo día solo se
+  // puede disparar con /api/cron/seguimiento desde un programador a esa hora.
   try {
     tasks.push(...(await tareasDeCronSeguimiento(supabase)));
   } catch (e) {

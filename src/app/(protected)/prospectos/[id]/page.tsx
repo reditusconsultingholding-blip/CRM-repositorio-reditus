@@ -3,6 +3,8 @@ import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ORIGEN_PROSPECCION, ROLES_ASIGNABLES, etapaEfectiva, leerProspeccion } from "@/lib/prospeccion";
 import { ProspectoDetalle } from "@/components/prospectos/prospecto-detalle";
+import { ROLES_ACTIVAN_ENVIO, leerCorreos } from "@/lib/prospeccion-correo";
+import { envioSinConfirmar, faltaParaEnviar } from "@/lib/prospeccion-correo-server";
 
 // Ficha de un prospecto del embudo «video gratis»: datos, guion, producción
 // y mensaje de entrega. Solo roles de Ingresos (la RLS de `prospectos`
@@ -37,6 +39,8 @@ export default async function ProspectoPage({ params }: { params: Promise<{ id: 
     if (actual) asignables.push({ id: actual.id as string, name: actual.name as string });
   }
 
+  const correos = leerCorreos(fila.respuestas_calificacion);
+
   return (
     <ProspectoDetalle
       id={fila.id as string}
@@ -48,6 +52,12 @@ export default async function ProspectoPage({ params }: { params: Promise<{ id: 
       etapa={etapaEfectiva(fila.estado as string, pros)}
       pros={pros}
       asignables={asignables}
+      correo={{
+        correos,
+        falta: faltaParaEnviar({ email: (fila.email as string | null) ?? null }, pros),
+        sinConfirmar: envioSinConfirmar(correos),
+        puedeAutorizar: ROLES_ACTIVAN_ENVIO.includes(profile.role),
+      }}
     />
   );
 }

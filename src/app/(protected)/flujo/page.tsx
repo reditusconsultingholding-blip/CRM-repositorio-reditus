@@ -7,14 +7,15 @@ import { LiveSync } from "@/components/live-sync";
 
 type Role = FlujoItemRole | "ceo" | "todos";
 
+// Todos dan al menos 4,5:1 con letra blanca (se usan como relleno de fichas).
 const ROLE_COLOR: Record<Role, string> = {
   ceo: "#1a3a7a",
   comercial: "#0f7a5c",
-  operativa: "#b5722a",
+  operativa: "#9a5f1f",
   landing: "#7a3a9c",
   video: "#b5305c",
-  claude: "#c26b1f",
-  imagenes_ads: "#1f9c8f",
+  claude: "#a55a17",
+  imagenes_ads: "#17807a",
   programador: "#2a7a9c",
   todos: "#5b6478",
 };
@@ -73,8 +74,8 @@ function FlujoTable({ items, emptyText }: { items: FlujoItem[]; emptyText: strin
           className="flex items-center gap-3 rounded-md border p-2.5 text-sm hover:bg-muted/40"
         >
           <span
-            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
-            style={{ background: `${ROLE_COLOR[item.role]}1a`, color: ROLE_COLOR[item.role] }}
+            className="rd-rol-texto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
+            style={{ background: `${ROLE_COLOR[item.role]}1a`, "--rol": ROLE_COLOR[item.role] } as React.CSSProperties}
           >
             {item.etapaLabel}
           </span>
@@ -155,7 +156,7 @@ export default async function FlujoPage() {
                       className="flex-1 rounded-md border p-3"
                       style={{ borderColor: ROLE_COLOR[f.role], background: `${ROLE_COLOR[f.role]}14` }}
                     >
-                      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: ROLE_COLOR[f.role] }}>
+                      <p className="rd-rol-texto text-xs font-semibold uppercase tracking-wide" style={{ "--rol": ROLE_COLOR[f.role] } as React.CSSProperties}>
                         {f.titulo}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">{f.etapas}</p>
@@ -207,8 +208,8 @@ export default async function FlujoPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold">{e.nombre}</span>
                       <span
-                        className="rounded-full px-2 py-0.5 text-[11px] font-medium"
-                        style={{ background: `${ROLE_COLOR[e.role]}1a`, color: ROLE_COLOR[e.role] }}
+                        className="rd-rol-texto rounded-full px-2 py-0.5 text-[11px] font-medium"
+                        style={{ background: `${ROLE_COLOR[e.role]}1a`, "--rol": ROLE_COLOR[e.role] } as React.CSSProperties}
                       >
                         {e.roleLabel ?? ROLE_LABEL[e.role]}
                       </span>

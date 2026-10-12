@@ -44,7 +44,7 @@ export function LiveSync({ tables = [] }: { tables?: string[] }) {
       <span className={`size-1.5 rounded-full bg-green-500 ${pulsing ? "animate-ping" : ""}`} />
       Sync
       {lastSync && (
-        <span className="font-mono">
+        <span className="font-mono" suppressHydrationWarning>
           {lastSync.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </span>
       )}

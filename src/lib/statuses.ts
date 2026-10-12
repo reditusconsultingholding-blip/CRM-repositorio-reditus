@@ -43,6 +43,7 @@ export type RequerimientoEstado = (typeof REQUERIMIENTO_ESTADOS)[number];
 export const REQUERIMIENTO_TERMINADOS: RequerimientoEstado[] = ["Terminado", "ENTREGADO", "SUBIDA"];
 
 // Tailwind bg/text classes approximating the original spreadsheet colors.
+// Las de texto blanco van sobre 600/700 (no 500) para llegar a contraste 4,5:1.
 export const INGRESO_ESTADO_COLORS: Record<IngresoEstado, string> = {
   "Nuevo pedido": "bg-yellow-300 text-yellow-950",
   "En progreso": "bg-orange-300 text-orange-950",
@@ -50,7 +51,7 @@ export const INGRESO_ESTADO_COLORS: Record<IngresoEstado, string> = {
   NADA: "bg-neutral-200 text-neutral-700",
   ESPERANDO: "bg-slate-800 text-white",
   "Por revisión": "bg-indigo-200 text-indigo-950",
-  Corregir: "bg-red-500 text-white",
+  Corregir: "bg-red-600 text-white",
   CORREGIDO: "bg-emerald-200 text-emerald-950",
   ENTREGADO: "bg-cyan-300 text-cyan-950",
   ASIGNANDO: "bg-purple-400 text-purple-950",
@@ -62,11 +63,11 @@ export const REQUERIMIENTO_ESTADO_COLORS: Record<RequerimientoEstado, string> = 
   "Nuevo pedido": "bg-yellow-300 text-yellow-950",
   "En progreso": "bg-orange-400 text-orange-950",
   "Por revisión": "bg-indigo-200 text-indigo-950",
-  Corregir: "bg-red-500 text-white",
+  Corregir: "bg-red-600 text-white",
   Terminado: "bg-green-300 text-green-950",
   ENTREGADO: "bg-cyan-300 text-cyan-950",
   "NO LABORADO": "bg-neutral-300 text-neutral-700",
-  "POR SUBIR": "bg-purple-500 text-white",
+  "POR SUBIR": "bg-purple-600 text-white",
   "ESPERA INFO": "bg-neutral-800 text-white",
   CORREGIDO: "bg-emerald-300 text-emerald-950",
   "NO APROBADO": "bg-red-800 text-white",
@@ -88,7 +89,7 @@ export const PROSPECTO_ESTADO_COLORS: Record<ProspectoEstado, string> = {
   agendado: "bg-indigo-300 text-indigo-950",
   calificado: "bg-emerald-300 text-emerald-950",
   descartado: "bg-neutral-300 text-neutral-700",
-  convertido: "bg-green-500 text-white",
+  convertido: "bg-green-700 text-white",
 };
 
 // Prueba Social: se decide una vez el requerimiento está Terminado — si el
@@ -100,7 +101,7 @@ export const PRUEBA_SOCIAL_COLORS: Record<PruebaSocialEstado, string> = {
   Pendiente: "bg-neutral-200 text-neutral-700",
   Apto: "bg-emerald-200 text-emerald-950",
   "No apto": "bg-red-200 text-red-950",
-  Subido: "bg-green-500 text-white",
+  Subido: "bg-green-700 text-white",
 };
 
 // "Pagado" a nivel de requerimiento (además del pago a nivel de ingreso) —
@@ -108,8 +109,8 @@ export const PRUEBA_SOCIAL_COLORS: Record<PruebaSocialEstado, string> = {
 export const REQUERIMIENTO_PAGADO_ESTADOS = ["Sí", "No", "Por terminar"] as const;
 export type RequerimientoPagadoEstado = (typeof REQUERIMIENTO_PAGADO_ESTADOS)[number];
 export const REQUERIMIENTO_PAGADO_COLORS: Record<RequerimientoPagadoEstado, string> = {
-  Sí: "bg-green-500 text-white",
-  No: "bg-red-500 text-white",
+  Sí: "bg-green-700 text-white",
+  No: "bg-red-600 text-white",
   "Por terminar": "bg-neutral-200 text-neutral-700",
 };
 

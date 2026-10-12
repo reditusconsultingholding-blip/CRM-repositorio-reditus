@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { hoyEnBogota } from "@/lib/utils";
 import { Bell, BellOff, Package, DollarSign } from "lucide-react";
 import {
   Dialog,
@@ -41,7 +42,8 @@ export function MonthCalendar({
   // getUTCDay: 0=domingo..6=sábado → convertimos a lunes=0..domingo=6
   const leadingBlanks = (firstOfMonth.getUTCDay() + 6) % 7;
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  // «Hoy» es el día de Bogotá: en UTC, desde las 7 p. m. ya marcaba mañana.
+  const todayKey = hoyEnBogota();
 
   const cells: { key: string | null; day: number | null; isWeekend: boolean }[] = [];
   for (let i = 0; i < leadingBlanks; i++) cells.push({ key: null, day: null, isWeekend: false });

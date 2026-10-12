@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useOptimistic, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import {
   faltaPara,
   horaBogota,
   type DiaVista,
+  type EstadoTarea,
   type TareaVista,
 } from "@/lib/seguimiento";
 import { agregarEnlace, guardarNota, marcarTarea, prepararEvidencia, quitarEvidencia, registrarEvidencia } from "@/app/(protected)/seguimiento/actions";
@@ -77,8 +78,12 @@ function TarjetaTarea({ dia, tarea, numero }: { dia: DiaVista; tarea: TareaVista
   const [conEnlace, setConEnlace] = useState(false);
   const [nota, setNota] = useState(tarea.entrega.nota);
   const [pending, startTransition] = useTransition();
+  // Al marcar o desmarcar, la tarjeta cambia en el acto; el servidor sigue
+  // validando y, si rechaza el cambio, vuelve sola a como estaba.
+  const [marca, ponerMarca] = useOptimistic<boolean | null>(null);
+  const estado: EstadoTarea = marca === null ? tarea.estado : marca ? "hecha" : "pendiente";
   const cerrada = tarea.estado === "aprobada";
-  const entregada = tarea.estado === "hecha" || cerrada;
+  const entregada = estado === "hecha" || cerrada;
   const [abierta, setAbierta] = useState(!entregada);
   const ocupado = !!subiendo || pending;
   const falta = faltaPara(tarea, tarea.entrega);
@@ -150,14 +155,15 @@ function TarjetaTarea({ dia, tarea, numero }: { dia: DiaVista; tarea: TareaVista
   }
 
   function marcar(hecha: boolean) {
+    if (hecha) setAbierta(false);
     startTransition(async () => {
+      ponerMarca(hecha);
       const r = await marcarTarea(tarea.id, hecha, nota);
-      if (r.error) toast.error(r.error);
-      else if (r.aviso) toast.success(r.aviso, { duration: 7000 });
-      else if (hecha) {
-        toast.success("Tarea entregada");
-        setAbierta(false);
-      }
+      if (r.error) {
+        toast.error(r.error);
+        if (hecha) setAbierta(true);
+      } else if (r.aviso) toast.success(r.aviso, { duration: 7000 });
+      else if (hecha) toast.success("Tarea entregada");
     });
   }
 
@@ -172,9 +178,9 @@ function TarjetaTarea({ dia, tarea, numero }: { dia: DiaVista; tarea: TareaVista
   return (
     <Card
       className={cn(
-        tarea.estado === "devuelta" && "border-destructive/50",
-        tarea.estado === "aprobada" && "border-emerald-500/40",
-        tarea.estado === "hecha" && "border-primary/40",
+        estado === "devuelta" && "border-destructive/50",
+        estado === "aprobada" && "border-emerald-500/40",
+        estado === "hecha" && "border-primary/40",
       )}
     >
       <CardContent className="flex flex-col gap-3">
@@ -190,7 +196,7 @@ function TarjetaTarea({ dia, tarea, numero }: { dia: DiaVista; tarea: TareaVista
           <span className="min-w-0 flex-1">
             <span className="block font-heading text-base font-semibold leading-snug">{tarea.titulo}</span>
             <span className="mt-1 flex flex-wrap items-center gap-1.5">
-              <ChipEstado estado={tarea.estado} />
+              <ChipEstado estado={estado} />
               {tarea.evidencia ? (
                 <Chip tono={n >= tarea.cantidad ? "verde" : "ambar"}>
                   {n} de {tarea.cantidad} {tarea.cantidad === 1 ? "evidencia" : "evidencias"}
@@ -204,7 +210,7 @@ function TarjetaTarea({ dia, tarea, numero }: { dia: DiaVista; tarea: TareaVista
           <ChevronDown className={cn("mt-1 size-4 shrink-0 text-muted-foreground transition-transform", abierta && "rotate-180")} />
         </button>
 
-        {tarea.estado === "devuelta" && tarea.revision && (
+        {estado === "devuelta" && tarea.revision && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/[0.06] p-3 text-sm" role="alert">
             <p className="font-semibold text-destructive">
               {tarea.revision.porNombre.split(" ")[0]} te la devolvió · {horaBogota(tarea.revision.en)}

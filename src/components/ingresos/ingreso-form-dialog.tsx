@@ -329,6 +329,7 @@ export function IngresoFormDialog({
                     {i === 0 && <Label className="text-xs text-muted-foreground">Cant.</Label>}
                     <Input
                       type="number"
+                      aria-label={`Cantidad del servicio ${i + 1}`}
                       min={1}
                       step="1"
                       value={item.cantidad}
@@ -339,6 +340,7 @@ export function IngresoFormDialog({
                     {i === 0 && <Label className="text-xs text-muted-foreground">Precio c/u</Label>}
                     <Input
                       type="number"
+                      aria-label={`Precio por unidad del servicio ${i + 1}`}
                       step="0.01"
                       value={item.precio_unitario}
                       onChange={(e) =>
@@ -351,6 +353,7 @@ export function IngresoFormDialog({
                       type="button"
                       size="icon"
                       variant="ghost"
+                      aria-label={`Quitar el servicio ${i + 1}`}
                       disabled={items.length === 1}
                       onClick={() => removeItem(i)}
                     >

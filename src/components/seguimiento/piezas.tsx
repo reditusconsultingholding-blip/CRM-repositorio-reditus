@@ -123,7 +123,7 @@ export function PaginaDia({ pagina, compacta = false }: { pagina: PaginaReditus;
               <span
                 className={cn(
                   "absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white",
-                  l.lado === "antes" ? "bg-black/70" : "bg-[#0072ff]",
+                  l.lado === "antes" ? "bg-black/70" : "bg-[#0068e8]",
                 )}
               >
                 {l.rotulo}

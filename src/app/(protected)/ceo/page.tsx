@@ -223,7 +223,13 @@ export default async function CeoPage() {
         </TabsContent>
 
         <TabsContent value="asistente">
-          <CeoAssistant initialMessages={ceoMensajes} />
+          {/* Responde con rentabilidad, nómina y clientes: con las cifras ocultas
+              no se monta y su historial tampoco viaja al navegador. */}
+          {ocultas ? (
+            <CifrasBloqueadas texto="El modo privado está puesto: el asistente responde con cifras de la empresa, así que queda en pausa (y su historial no se carga en este navegador) hasta que las vuelvas a mostrar." />
+          ) : (
+            <CeoAssistant initialMessages={ceoMensajes} />
+          )}
         </TabsContent>
 
         <TabsContent value="sistema" className="flex flex-col gap-4">
@@ -275,7 +281,7 @@ function Row({
   );
 }
 
-function CifrasBloqueadas() {
+function CifrasBloqueadas({ texto }: { texto?: string }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed px-6 py-12 text-center">
       <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -283,8 +289,8 @@ function CifrasBloqueadas() {
       </span>
       <p className="font-heading text-base font-semibold tracking-tight">Cifras ocultas</p>
       <p className="max-w-sm text-sm text-muted-foreground">
-        El modo privado está puesto: estas cifras no se muestran ni se cargan en este navegador hasta que las
-        vuelvas a mostrar.
+        {texto ??
+          "El modo privado está puesto: estas cifras no se muestran ni se cargan en este navegador hasta que las vuelvas a mostrar."}
       </p>
       <BotonCifras conTexto />
     </div>

@@ -11,6 +11,7 @@ import { EstadoSelect } from "@/components/estado-select";
 import { PROSPECTO_ESTADOS, PROSPECTO_ESTADO_COLORS, type ProspectoEstado } from "@/lib/statuses";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LiveSync } from "@/components/live-sync";
+import { PestanasProspectos } from "@/components/prospectos/pestanas";
 import {
   Table,
   TableBody,
@@ -109,6 +110,8 @@ export default async function ProspectosPage() {
           <ProspeccionFormDialog />
         </div>
       </div>
+
+      <PestanasProspectos activa="embudo" />
 
       <TableroProspeccion tarjetas={tarjetas} />
 

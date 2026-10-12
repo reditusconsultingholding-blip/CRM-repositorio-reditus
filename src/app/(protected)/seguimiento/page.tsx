@@ -36,12 +36,13 @@ function uno(v: string | string[] | undefined): string {
 }
 
 export default async function SeguimientoPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const perfil = await requireProfile();
-  const q = await searchParams;
   const admin = createAdminClient();
+  // Todo a la vez (una sola espera en vez de dos): si no hay sesión,
+  // requireProfile corta con el redirect y lo demás se descarta sin pintarse.
+  const [perfil, plantilla, equipo] = await Promise.all([requireProfile(), leerPlantillaGuardada(admin), equipoActivo(admin)]);
+  const q = await searchParams;
   const yo: Persona = { id: perfil.id, name: perfil.name, role: perfil.role };
   const hoy = hoyBogota();
-  const [plantilla, equipo] = await Promise.all([leerPlantillaGuardada(admin), equipoActivo(admin)]);
 
   const esCeo = yo.role === "ceo";
   const tengoSecuencia = tieneSecuencia(plantilla, yo);
