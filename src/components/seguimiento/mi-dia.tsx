@@ -229,7 +229,7 @@ function TarjetaTarea({ dia, tarea, numero }: { dia: DiaVista; tarea: TareaVista
           <div className="flex flex-col gap-3">
             <Instrucciones texto={tarea.instrucciones} />
             {tarea.paginaDelDia && dia.pagina && <PaginaDia pagina={dia.pagina} />}
-            {tarea.resenas && <RecursoResenas />}
+            {tarea.resenas && <RecursoResenas fecha={dia.fecha} />}
             {tarea.enlaces.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {tarea.enlaces.map((l) =>

@@ -1,4 +1,5 @@
-import { CheckCircle2, CircleDashed, Clock3, ExternalLink, FileText, Link2, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, CircleDashed, Clock3, Columns2, ExternalLink, FileText, Link2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASE_CLIPS,
@@ -7,6 +8,7 @@ import {
   esImagen,
   esVideo,
   imagenPagina,
+  resenasDelDia,
   type Cuenta,
   type EstadoTarea,
   type Evidencia,
@@ -141,6 +143,14 @@ export function PaginaDia({ pagina, compacta = false }: { pagina: PaginaReditus;
         ))}
       </div>
       {!compacta && (
+        <Link
+          href={`/seguimiento/antes-despues?p=${pagina.id}`}
+          className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-lg border border-primary/40 bg-card px-3 text-sm font-medium text-primary hover:border-primary sm:h-9"
+        >
+          <Columns2 className="size-4" /> Ver antes y después en simultáneo
+        </Link>
+      )}
+      {!compacta && (
         <p className="mt-2 text-xs text-muted-foreground">
           {pagina.rotulo}. De dónde sale el antes: {pagina.nota}
         </p>
@@ -150,22 +160,36 @@ export function PaginaDia({ pagina, compacta = false }: { pagina: PaginaReditus;
 }
 
 /** De dónde sacar las reseñas: clips publicados y el zip con todas. */
-export function RecursoResenas() {
+export function RecursoResenas({ fecha }: { fecha?: string }) {
+  const hoy = fecha ? resenasDelDia(fecha) : [];
+  const letra = (c: string) => c.replace("citas-", "").replace(".mp4", "").toUpperCase();
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-3">
       <p className="rd-etiqueta text-muted-foreground">De dónde sacar las reseñas</p>
+      {hoy.length > 0 && (
+        <p className="mt-1 text-sm">
+          Hoy te tocan: <b className="font-semibold">{hoy.map(letra).join(", ")}</b>. Mañana siguen las 4 siguientes.
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {CLIPS_RESENAS.map((c) => (
-          <a
-            key={c}
-            href={`${BASE_CLIPS}${c}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium hover:border-primary/50 hover:text-primary"
-          >
-            Clip {c.replace("citas-", "").replace(".mp4", "").toUpperCase()}
-          </a>
-        ))}
+        {CLIPS_RESENAS.map((c) => {
+          const toca = hoy.includes(c);
+          return (
+            <a
+              key={c}
+              href={`${BASE_CLIPS}${c}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:border-primary/50 hover:text-primary",
+                toca ? "border-primary bg-primary/10 text-primary" : "border-border bg-card",
+              )}
+            >
+              Clip {letra(c)}
+              {toca && <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">Hoy</span>}
+            </a>
+          );
+        })}
       </div>
       <a href={ZIP_RESENAS} className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
         <FileText className="size-3" /> Descargar todas las reseñas (zip)

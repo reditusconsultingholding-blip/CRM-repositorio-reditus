@@ -76,6 +76,10 @@ export type OpcionesVideo = {
 
 export const OPCIONES_VIDEO_BASE: OpcionesVideo = { subtitulos: true, voz: true, modelo: null };
 export const MAX_IMAGENES_PRODUCTO = 4;
+/** Fotos del producto subidas desde «Crear video» (pegadas o arrastradas): carpeta dentro de `BUCKET_VIDEOS_GENERADOS`. */
+export const CARPETA_FOTOS_PRODUCTO = "videos-fotos";
+export const MAX_FOTO_PRODUCTO_BYTES = 10 * 1024 * 1024;
+export const TIPOS_FOTO_PRODUCTO: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
 
 export type ProgresoTrabajo = { hecho: number; total: number; detalle: string };
 

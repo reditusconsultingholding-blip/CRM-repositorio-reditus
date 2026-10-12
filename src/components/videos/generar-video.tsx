@@ -53,6 +53,9 @@ const huellaVideos = (g: GuionGuardado) => g.versiones.map((v) => `${v.n}|${v.vi
 type Props = {
   /** Hay servidor de videos conectado (existe SERVIDOR_SECRET). */
   activo: boolean;
+  /** Fotos del producto (enlaces https, uno por línea). Las comparte con el paso 02, donde se suben. */
+  fotos: string;
+  onFotos: (texto: string) => void;
   guardado: GuionGuardado | null;
   sinGuardar: boolean;
   bloqueado: boolean;
@@ -61,8 +64,7 @@ type Props = {
   onGuardado: (g: GuionGuardado, cargar: boolean) => void;
 };
 
-export function GenerarVideo({ activo, guardado, sinGuardar, bloqueado, puedeAprobar, puedeUsarEnProspecto, onGuardado }: Props) {
-  const [fotos, setFotos] = useState("");
+export function GenerarVideo({ activo, fotos, onFotos: setFotos, guardado, sinGuardar, bloqueado, puedeAprobar, puedeUsarEnProspecto, onGuardado }: Props) {
   const [subtitulos, setSubtitulos] = useState(true);
   const [voz, setVoz] = useState(true);
   const [modelo, setModelo] = useState("");
@@ -219,7 +221,8 @@ export function GenerarVideo({ activo, guardado, sinGuardar, bloqueado, puedeApr
               aria-label="Fotos del producto"
             />
             <span className="text-xs font-normal text-muted-foreground">
-              Las escenas donde aparece el producto se generan a partir de la primera foto, para no inventar el envase.
+              Las escenas donde aparece el producto se generan a partir de la primera foto, para no inventar el envase. Las
+              que subas en el paso 02 (arrastrando o con Ctrl+V) aparecen aquí solas.
             </span>
           </Label>
           <div className="flex flex-col gap-2">

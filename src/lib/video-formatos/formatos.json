@@ -1,5 +1,5 @@
 {
-  "version": "5c62506cc9",
+  "version": "a5dedbe627",
   "reglas_comunes": "# Columna vertebral · reglas que valen para TODOS los formatos\n\nSíntesis de la base de Reditus. No reemplaza a la fuente: la resume para que cada formato la herede.\n\nCómo leer las citas:\n- `[base §N]` = `supernova/conocimiento/videos-ia/BASE_CONOCIMIENTO.md`, sección N.\n- `[método §N]` = `supernova/conocimiento/videos-ia/antonio/METODO_ANTONIO.md`, sección N (ahí está el minuto exacto de cada clase).\n- `[clase N hh:mm:ss]` = cita directa de una clase de Antonio.\n- `[propuesta]` = aporte de este repositorio, sin fuente. Se valida probando.\n\n## 1. Estructura del guion: la montaña rusa\n\nEs «la estructura de Antonio» [método §3.2]. Todo formato la cumple, cambie lo que cambie por fuera:\n\n1. PASO 1 · IMPACTO (hook, 0–3 s): situación real e identificable, o pregunta «al cuello». Nunca una promesa.\n2. PASO 2 · BAJADA: la consecuencia, agrandada y dicha de forma indirecta.\n3. PASO 3 · REFUERZO: otro dolor, o la solución que ya probó y le falló.\n4. PASO 4 · SUBIDA: el producto como solución, con su mecanismo en una frase.\n5. PASO 5 · CTA: la oferta local del país, según la etapa del embudo.\n\nEn todo guion cada bloque va rotulado con su paso («PASO 1 · IMPACTO (0–3 s)»), para que se vea que la estructura se está aplicando [propuesta de formato].\n\nEl producto real se ve en pantalla en el paso 4, en mano o en demostración de uso, y sigue visible en el paso 5 [base §3.1: «producto en mano: uso y beneficio»][método §4.2: prompt de producto en mano]. En TOFU puede no aparecer antes [método §3.1]. En los formatos animados entra además una toma real del producto, porque la base admite mezclar IA con tomas reales [base §1]; el punto exacto del corte es [propuesta].\n\nEquivale al HOOK → DESARROLLO → CTA de los briefs reales [base §1, §4]. El único tiempo con fuente es «gancho 0–3 s, desarrollo 3–25 s, CTA al final» [base §3]; los demás segundos de cada formato son [propuesta].\n\n## 2. Reglas del guion\n\n- El hook es lo más importante: se le dedica la mayor parte del tiempo y se reescribe hasta lograr el «efecto wow» [método §1, §3].\n- Situaciones de la vida real al principio [método §3.2].\n- Tono según el país: Colombia más agresivo y directo; España más pasivo; jerga local [método §3].\n- Etapa del embudo coherente con duración y cierre: TOFU largo, tipo historia y con CTA suave; MOFU medio, educa y valida; BOFU corto, con oferta, urgencia y prueba social [método §3.1].\n- Cada bloque hablado tiene unas 20–24 palabras (unas 2 líneas), que es un clip de 8 s [método §3.3, §5.3].\n- El CTA lleva la oferta local (por ejemplo, envío gratis y pago contra entrega) y se dice mirando a cámara [base §1][método §9.1].\n- Cada video de un lote necesita un hook distinto; las variaciones cambian el inicio y conservan el cuerpo [base §1].\n- Sin claims médicos, credenciales inventadas («soy el doctor…») ni promesas con cifra y plazo. En nichos sensibles el hook va como pregunta [base §1][método §8].\n- No se copian identidad, textos ni marcas de las referencias: solo formato, encuadre y ritmo [base §1].\n- Precios, cifras, testimonios y resultados nunca se inventan: si el cliente no los dio, van entre [corchetes] para completar [propuesta, coherente con base §1].\n\n## 3. Reglas visuales y de generación\n\n- Vertical 9:16, MP4 [base §1].\n- Lo natural vende más que lo producido; que no se perciba como IA [método §1].\n- La imagen es el insumo del video: primero una imagen aprobada, luego se anima [método §4].\n- Cada imagen sale de la original aprobada, nunca de una derivada [método §5.4].\n- Prompt autónomo por escena: nunca «la misma mujer» ni «como en la escena anterior» [base §3.2].\n- Personas realistas: piel con microporos y microvellos, sin suavizado; nunca pedir «hiperrealista» [método §4.1].\n- Producto y etiqueta idénticos al real; tamaño proporcional y coherente [base §7][método §4.2].\n- Acento con gentilicio y ciudad; misma voz en todos los clips [método §5.2, §5.4].\n- Diálogo del prompt sin dos puntos y con comas en lugar de puntos; quien calla lleva \"[no habla, solo escucha]\" [método §5.4].\n- Animado: escenas de unos 2 s y movimientos «fluidos, no lentos» [método §5.4].\n\n## 4. Edición\n\n- B-roll cada 3 s como máximo, atado a la palabra exacta que se dice [método §7].\n- Zoom-in lento en los clips [método §7].\n- Música por tramo: triste en el problema, alegre en la solución; voz 70 %, música 30 % [método §7].\n- Subtítulos limpios, en una línea, junto a la cara; hechos con Captions [método §8].\n- Para Colombia, un género musical local en vez de un trend genérico [base §1].\n\n## 5. Investigación de mercado\n\n- Sale de las referencias que manda el cliente y de TikTok / Meta Ads Library [base §1].\n- De la investigación deben salir: dolor funcional y emocional, cliente ideal, objeciones, creencias, mecanismo, ángulos y oferta [método §2].\n- Se buscan patrones que se repiten y se hace más de eso [método §1].\n- La base no trae métricas de rendimiento (CTR, ROAS, retención): ningún formato de este repositorio afirma cifras [base, aviso inicial].",
   "formatos": [
     {
@@ -1214,6 +1214,121 @@
         {
           "escena": "Toma real · producto en mano (paso 4)",
           "prompt": "IMAGEN: una mano real de [mujer/hombre] con rasgos de {{pais}} sostiene {{producto}} (foto real, etiqueta sin alterar, tamaño proporcional y coherente) en [contexto de uso cotidiano], luz natural, grabado con celular.\nMOVIMIENTO: la mano gira un poco el producto y [lo abre / lo aplica / lo sirve]; se corta antes de terminar la acción.\nSIN DIÁLOGO. Sirve de B-roll sobre la frase de la subida.\nFORMATO: 9:16, 3 s"
+        }
+      ]
+    },
+    {
+      "slug": "usos-del-producto",
+      "nombre": "Usos del producto",
+      "estado": "por confirmar",
+      "confianza": "media. Lo pidió el CEO en la reunión del 12-oct-2026 («un formato que se llame usos del producto, que solo el producto sea el protagonista»). La estructura y los prompts son una interpretación de trabajo sobre la montaña rusa de Antonio; falta que él los valide.",
+      "para_que_sirve": "Solo el producto en pantalla, sin personas a cámara. Muestra uno tras otro los usos reales del producto, con voz narrada o solo texto. Sirve cuando el producto se explica viéndolo funcionar.",
+      "duracion": "20–30 s",
+      "relacion_aspecto": "9:16",
+      "etapa_embudo": "MOFU y BOFU",
+      "necesita": [
+        "fotos reales del producto (2 a 4 ángulos)",
+        "lista de 3 usos que confirme el cliente",
+        "voz narradora con acento del país (opcional)",
+        "oferta local"
+      ],
+      "producto_en_pantalla": "Todo el video. El producto real es el protagonista desde el paso 1; en el paso 4 se ven sus usos uno por uno",
+      "riesgos": [
+        "producto o etiqueta deformados entre escenas",
+        "usos inventados que el cliente no confirmó",
+        "manos o personas que le roban el protagonismo",
+        "video plano sin un estímulo cada 3 s",
+        "tamaño del producto que cambia de una escena a otra"
+      ],
+      "fuentes": [
+        "reunión 12-oct-2026",
+        "método §3.2",
+        "método §5.4",
+        "método §7",
+        "base §1"
+      ],
+      "que_es": "Video de producto puro: no hay presentador, entrevistado ni personaje. La cámara se queda con el producto real y lo muestra en uso, un uso por escena, con cortes rápidos [reunión 12-oct-2026]. Puede llevar voz narrada o ir solo con texto en pantalla y música. Cada escena se genera a partir de la foto real, para no inventar el envase [método §5.4].",
+      "cuando_si": [
+        "El producto se entiende viéndolo funcionar: utensilios, accesorios, belleza, hogar [propuesta].",
+        "Tiene varios usos o beneficios que se pueden mostrar, y el cliente los confirma [propuesta].",
+        "Cuando no hay rostro ni se quiere usar avatar, o el cliente pide que no aparezcan personas [propuesta].",
+        "Público tibio o caliente que ya conoce el problema y quiere ver el producto de cerca [propuesta]."
+      ],
+      "cuando_no": [
+        "Si el beneficio no se ve (suplementos cuyo efecto es interno): mejor objeto parlante, podcast o historia [propuesta].",
+        "Si el cliente no tiene fotos reales del producto: sin ellas el envase se inventa y se nota [base §3.1, errores típicos].",
+        "Público frío que todavía no reconoce el problema: ahí va una historia [método §3.1]."
+      ],
+      "estructura": [
+        {
+          "paso": 1,
+          "tiempo": "0–3 s",
+          "escena": "Impacto",
+          "que_pasa": "El producto en primer plano haciendo su uso más llamativo, con un rótulo corto",
+          "fuente": "[método §3.2][propuesta]"
+        },
+        {
+          "paso": 2,
+          "tiempo": "3–7 s",
+          "escena": "Bajada",
+          "que_pasa": "La situación incómoda que resuelve, vista sin personas: el objeto o el lugar del problema",
+          "fuente": "[método §3.2][propuesta]"
+        },
+        {
+          "paso": 3,
+          "tiempo": "7–11 s",
+          "escena": "Refuerzo",
+          "que_pasa": "Lo que se usa normalmente y no sirve, al lado del producto",
+          "fuente": "[método §3.2][propuesta]"
+        },
+        {
+          "paso": 4,
+          "tiempo": "11–23 s",
+          "escena": "Subida",
+          "que_pasa": "Tres usos del producto, uno por escena de 4 s, con el nombre de cada uso en pantalla",
+          "fuente": "[método §5.4][propuesta]"
+        },
+        {
+          "paso": 5,
+          "tiempo": "23–28 s",
+          "escena": "CTA",
+          "que_pasa": "El producto quieto, de frente, con la oferta local",
+          "fuente": "[base §1][método §9.1]"
+        }
+      ],
+      "reglas_visuales": [
+        "Solo el producto: sin rostros ni personas a cámara. Si un uso necesita una mano, entra solo la mano y no tapa la etiqueta [propuesta].",
+        "Toda escena parte de la foto real del producto; tamaño proporcional y coherente entre escenas, etiqueta sin alterar [método §5.4].",
+        "Un estímulo cada 3 s como máximo: cambio de uso, de ángulo o de rótulo [método §7].",
+        "Zoom in lento o giro corto, enfocando el producto en todo momento [método §7].",
+        "Fondo del contexto real de uso (cocina, baño, bolso), no fondo de estudio vacío [propuesta].",
+        "Texto en pantalla: el nombre de cada uso, máximo 4 palabras [propuesta]."
+      ],
+      "plantilla": "PRODUCTO: {{producto}} | PAÍS/ACENTO: {{pais}} | FORMATO: Usos del producto 9:16 | DURACIÓN: 28 s | CLIENTE: {{cliente}}\n\nPASO 1 · IMPACTO (0–3 s) · solo el producto: \"[El uso más llamativo de {{producto}}, en una frase]\"\n   PRODUCTO EN PANTALLA: {{producto}} real, en primer plano, desde este paso y durante todo el video\nPASO 2 · BAJADA (3–7 s): \"Porque {{dolor}} pasa todos los días.\"\nPASO 3 · REFUERZO (7–11 s): \"Y [lo que se usa normalmente] no lo resuelve.\"\nPASO 4 · SUBIDA (11–23 s) · un uso por escena: \"Uso 1: [uso confirmado por el cliente]. Uso 2: [uso confirmado]. Uso 3: [uso confirmado]. {{beneficio}}.\"\nPASO 5 · CTA (23–28 s) · producto de frente: \"{{oferta}}. Pídelo en el enlace.\"\n\nTEXTO EN PANTALLA: el nombre de cada uso, máximo 4 palabras\nMÚSICA: ritmo constante, con golpe en cada cambio de uso\nPERSONAS: ninguna a cámara; solo manos si el uso lo exige",
+      "prompts": [
+        {
+          "escena": "Escena 1 · Impacto",
+          "prompt": "IMAGEN: {{producto}} (foto real) en primer plano sobre [superficie del contexto de uso], haciendo [su uso más llamativo], tamaño proporcional y coherente, etiqueta sin alterar.\nMOVIMIENTO: zoom in lento, enfocando el producto en todo momento.\nSIN PERSONAS A CÁMARA. SIN DIÁLOGO: la voz es narración aparte.\nFORMATO: 9:16, 4 s"
+        },
+        {
+          "escena": "Escena 2 · Bajada",
+          "prompt": "IMAGEN: [el objeto o el lugar donde ocurre el problema], sin personas, luz natural, mismo ambiente de la escena 1.\nMOVIMIENTO: cámara de izquierda a derecha, lento.\nSIN DIÁLOGO.\nFORMATO: 9:16, 4 s"
+        },
+        {
+          "escena": "Escena 3 · Refuerzo",
+          "prompt": "IMAGEN: [lo que se usa normalmente y no sirve] a un lado y {{producto}} (foto real) al otro, misma superficie, etiqueta sin alterar.\nMOVIMIENTO: la cámara pasa de la alternativa al producto.\nSIN PERSONAS A CÁMARA. SIN DIÁLOGO.\nFORMATO: 9:16, 4 s"
+        },
+        {
+          "escena": "Escena 4 · Subida (repetir por cada uso)",
+          "prompt": "IMAGEN: {{producto}} (foto real) en uso: [uso confirmado por el cliente], en [contexto real de ese uso]. Si hace falta, entra solo una mano, sin tapar la etiqueta. Tamaño proporcional y coherente.\nMOVIMIENTO: fotograma inicial con el producto quieto, fotograma final con el uso completo; mismo fondo en ambos.\nSIN ROSTROS. SIN DIÁLOGO.\nFORMATO: 9:16, 4 s. Espacio libre arriba para el nombre del uso."
+        },
+        {
+          "escena": "Escena 5 · CTA",
+          "prompt": "IMAGEN: {{producto}} (foto real) de frente, centrado, en [contexto de uso], luz de día.\nMOVIMIENTO: zoom out lento, enfocando el producto en todo momento.\nFORMATO: 9:16, 5 s. Espacio libre abajo para el rótulo de la oferta."
+        },
+        {
+          "escena": "Voz narradora (opcional)",
+          "prompt": "VOZ: [mujer/hombre de N años], tono cercano, [gentilicio y ciudad de {{pais}}].\nTEXTO: el guion completo, con comas en lugar de puntos."
         }
       ]
     }

@@ -53,6 +53,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Chip, ETIQUETA } from "@/components/prospectos/piezas";
 import { CorreccionesCliente, TONO_ESTADO } from "./correcciones";
 import { GenerarVideo } from "./generar-video";
+import { FotosProducto } from "./fotos-producto";
 
 export type ProspectoOrigen = { id: string; nombre: string };
 
@@ -179,6 +180,8 @@ export function CrearVideo(props: Props) {
   const [avisoMercado, setAvisoMercado] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | null>(null);
   const [guiones, setGuiones] = useState(props.guiones);
+  // Fotos del producto (enlaces https, uno por línea): se suben en el paso 02 y las usa el paso 07.
+  const [fotos, setFotos] = useState("");
   const arriba = useRef<HTMLDivElement>(null);
 
   const formato = useMemo(() => formatos.find((f) => f.slug === datos.formato) ?? null, [formatos, datos.formato]);
@@ -487,6 +490,9 @@ export function CrearVideo(props: Props) {
             >
               <Textarea value={datos.valores} onChange={(e) => set("valores", e.target.value)} maxLength={4000} rows={4} />
             </Campo>
+          </div>
+          <div className="md:col-span-2">
+            <FotosProducto fotos={fotos} onChange={setFotos} />
           </div>
         </CardContent>
       </Card>
@@ -814,6 +820,8 @@ export function CrearVideo(props: Props) {
         <CardContent className="flex flex-col gap-2">
           <GenerarVideo
             activo={props.videoActivo}
+            fotos={fotos}
+            onFotos={setFotos}
             guardado={actual}
             sinGuardar={sinGuardar}
             bloqueado={!!ocupado}

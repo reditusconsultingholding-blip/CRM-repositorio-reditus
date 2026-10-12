@@ -115,6 +115,27 @@ function mcd(a: number, b: number): number {
 // Lunes de referencia: el día hábil número 0 de la rotación.
 const ORIGEN_ROTACION = "2026-10-12";
 
+/** Días hábiles (lunes a sábado) transcurridos desde el lunes de referencia. */
+function diaHabil(fecha: string): number {
+  const semanas = Math.round((aDate(lunesDe(fecha)).getTime() - aDate(ORIGEN_ROTACION).getTime()) / (7 * 86_400_000));
+  return semanas * 6 + (Math.min(diaSemana(fecha), 6) - 1);
+}
+
+/** Cuántas reseñas se publican por día (lo que pidió el CEO: 1, 2, 3, 4 y al día siguiente las 4 que siguen). */
+export const RESENAS_POR_DIA = 4;
+
+/**
+ * Reseñas que tocan en una fecha: avanza de a cuatro por la lista de clips y,
+ * al llegar al final, vuelve a empezar desde el primero. Igual para todo el
+ * equipo. El domingo no hay.
+ */
+export function resenasDelDia(fecha: string, cuantas: number = RESENAS_POR_DIA): string[] {
+  const n = CLIPS_RESENAS.length;
+  if (!n || diaSemana(fecha) === 7) return [];
+  const inicio = (((diaHabil(fecha) * cuantas) % n) + n) % n;
+  return Array.from({ length: Math.min(cuantas, n) }, (_, i) => CLIPS_RESENAS[(inicio + i) % n]);
+}
+
 /**
  * Página del día: rotación determinista por fecha, la misma para todo el
  * equipo. Cuenta los días hábiles (lunes a sábado) desde el lunes 12-oct-2026
@@ -128,8 +149,7 @@ export function paginaDelDia(fecha: string): PaginaReditus | null {
   const lista = PAGINAS.filter((p) => p.rotacion);
   const dia = diaSemana(fecha);
   if (!lista.length || dia === 7) return null;
-  const semanas = Math.round((aDate(lunesDe(fecha)).getTime() - aDate(ORIGEN_ROTACION).getTime()) / (7 * 86_400_000));
-  const habil = semanas * 6 + (dia - 1);
+  const habil = diaHabil(fecha);
   let salto = Math.min(7, lista.length);
   while (salto < lista.length && mcd(salto, lista.length) !== 1) salto++;
   if (salto >= lista.length) salto = 1;
@@ -229,10 +249,11 @@ export function plantillaInicial(): Plantilla {
         CONTENIDO,
         "Historia 1 · Proyecto de Reditus: antes y después",
         [
-          "Publica en historias de Instagram el antes y después de la página del día (la de abajo).",
+          "Antes de empezar: borra las historias de ayer para que no se acumulen y abre la secuencia con la imagen de «Muy buenos días, estamos activos».",
+          "Después publica en historias de Instagram el antes y después de la página del día (la de abajo). Para grabarla usa «Ver antes y después en simultáneo»: las dos páginas bajan a la vez.",
           "1. Usa el video que grabaste hoy con Valeria. Si todavía no está, sube dos historias: captura del ANTES con el texto «Así estaba» y captura del DESPUÉS con «Así la dejamos en Reditus».",
           "2. Escribe encima el nombre de la marca y una frase corta de qué cambió (ejemplo: «ahora se compra en un toque»).",
-          "3. Va de primera: es lo que abre la secuencia del día.",
+          "3. Va justo después de la imagen de buenos días. Mírala antes de publicar: sin bordes blancos a los lados y que se lea bien en el celular.",
           "Evidencia: captura de la historia ya publicada.",
         ].join("\n"),
         { paginaDelDia: true },
@@ -242,15 +263,15 @@ export function plantillaInicial(): Plantilla {
         "gerente_comercial",
         2,
         CONTENIDO,
-        "Historias 2 a 4 · Tres o cuatro reseñas de clientes",
+        "Historias 2 a 5 · Cuatro reseñas de clientes",
         [
-          "Después del proyecto, publica de 3 a 4 reseñas de clientes satisfechos, una por historia.",
-          "1. Sácalas de los clips de reseñas (enlaces abajo): descarga el clip o toma la captura.",
-          "2. No repitas las de ayer: ve rotando las letras (hoy a, b, c; mañana d, e, f…).",
+          "Después del proyecto, publica 4 reseñas de clientes satisfechos, una por historia.",
+          "1. Sácalas de los clips de reseñas (enlaces abajo): descarga el clip y ponlo en el cuadro de la plantilla de reseñas.",
+          "2. Publica las 4 que el CRM marca como «Hoy». Mañana marca las 4 siguientes y, cuando se acaban, vuelve a empezar desde la primera.",
           "3. Ponle a cada una un texto corto arriba: «Lo que dicen nuestros clientes».",
-          "Evidencia: una captura por cada reseña publicada (mínimo 3).",
+          "Evidencia: una captura por cada reseña publicada (las 4).",
         ].join("\n"),
-        { cantidad: 3, resenas: true },
+        { cantidad: RESENAS_POR_DIA, resenas: true },
       ),
       t(
         "ana-cierre",
@@ -275,7 +296,7 @@ export function plantillaInicial(): Plantilla {
         "Estados de WhatsApp · La misma secuencia, en el mismo orden",
         [
           "Sube a los estados de WhatsApp lo mismo que publicaste en Instagram y en el mismo orden:",
-          "1. Proyecto (antes y después). 2. Las 3 o 4 reseñas. 3. Cierre «últimos cupos» con el enlace https://reditusconsulting.org/aplicar escrito en el texto del estado.",
+          "1. Imagen de buenos días. 2. Proyecto (antes y después). 3. Las 4 reseñas de hoy. 4. Cierre «últimos cupos» con el enlace https://reditusconsulting.org/aplicar escrito en el texto del estado.",
           "Evidencia: captura de tus estados donde se vea la secuencia completa publicada.",
         ].join("\n"),
         { enlaces: [{ rotulo: "Enlace para aplicar", url: ENLACE_APLICAR }] },
@@ -344,9 +365,9 @@ export function plantillaInicial(): Plantilla {
         "directora_operativa",
         3,
         CONTENIDO,
-        "Subir a TikTok el contenido que Ana publicó hoy",
+        "Subir a TikTok todo lo que Ana publicó hoy",
         [
-          "Sube a la cuenta de TikTok de Reditus el video de antes y después que Ana publicó hoy.",
+          "Sube a la cuenta de TikTok de Reditus el video de antes y después que Ana publicó hoy, y a las historias de TikTok la misma secuencia de historias de Ana, en el mismo orden.",
           "1. Descripción: una frase con el resultado + «Aplica en el enlace del perfil». 2. De 3 a 5 etiquetas (#ecommerce #shopify #landingpage #tiendaonline). 3. Revisa que el enlace del perfil lleve a https://reditusconsulting.org/aplicar.",
           "Evidencia: el enlace de la publicación en TikTok.",
         ].join("\n"),

@@ -1,6 +1,6 @@
 "use server";
 
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES, type Profile } from "@/lib/auth";
@@ -33,7 +33,16 @@ import {
 } from "@/lib/videos-server";
 import { ORIGEN_PROSPECCION, leerProspeccion } from "@/lib/prospeccion";
 import { guardarProspeccion, leerFila } from "@/lib/prospeccion-server";
-import { ID_TRABAJO, trabajoActivo, vistaTrabajo, type TrabajoVista } from "@/lib/trabajos-video";
+import {
+  BUCKET_VIDEOS_GENERADOS,
+  CARPETA_FOTOS_PRODUCTO,
+  ID_TRABAJO,
+  MAX_FOTO_PRODUCTO_BYTES,
+  TIPOS_FOTO_PRODUCTO,
+  trabajoActivo,
+  vistaTrabajo,
+  type TrabajoVista,
+} from "@/lib/trabajos-video";
 import {
   buscarTrabajo,
   cancelarTrabajo,
@@ -537,5 +546,49 @@ export async function colaVideos(): Promise<{ trabajos: TrabajoVista[]; tope: To
     const admin = createAdminClient();
     const r = await listarTrabajos(admin);
     return { trabajos: r.trabajos.map(vistaTrabajo), tope: await topeDeHoy(admin), aviso: r.error };
+  });
+}
+
+// ------------------------------------------------ fotos del producto ----
+//
+// Fotos pegadas (Ctrl+V) o arrastradas en «Crear video». Van al bucket de los
+// videos generados (público, como ellos) con un nombre al azar imposible de
+// adivinar, porque el servidor de videos las descarga por https sin sesión.
+// Subida en dos pasos: el CRM firma la subida y el navegador manda el archivo
+// directo a Storage (una acción del servidor no aguanta archivos grandes).
+
+const NOMBRE_FOTO = /^\d{13}-[0-9a-f]{16}\.(png|jpg|webp)$/;
+
+/** Paso 1: valida la foto y devuelve dónde subirla. */
+export async function prepararFotoProducto(archivo: { tipo: string; tamano: number }): Promise<{ path: string; token: string } | { error: string }> {
+  return seguro(async () => {
+    const x = await entrar();
+    if ("error" in x) return x;
+    const ext = TIPOS_FOTO_PRODUCTO[String(archivo?.tipo ?? "")];
+    if (!ext) return { error: "La foto debe ser PNG, JPG o WebP." };
+    const tamano = Number(archivo?.tamano ?? 0);
+    if (!tamano || tamano > MAX_FOTO_PRODUCTO_BYTES) {
+      return { error: `La foto pesa ${(tamano / 1024 / 1024).toFixed(1)} MB y el máximo es ${MAX_FOTO_PRODUCTO_BYTES / 1024 / 1024} MB.` };
+    }
+    const path = `${CARPETA_FOTOS_PRODUCTO}/${x.profile.id}/${Date.now()}-${randomBytes(8).toString("hex")}.${ext}`;
+    const { data, error } = await createAdminClient().storage.from(BUCKET_VIDEOS_GENERADOS).createSignedUploadUrl(path);
+    if (error || !data) return { error: `No se pudo preparar la subida: ${error?.message ?? "sin respuesta"}` };
+    return { path: data.path, token: data.token };
+  });
+}
+
+/** Paso 2: confirma que la foto quedó en Storage y devuelve su enlace https. */
+export async function confirmarFotoProducto(path: string): Promise<{ url: string } | { error: string }> {
+  return seguro(async () => {
+    const x = await entrar();
+    if ("error" in x) return x;
+    const ruta = String(path ?? "");
+    const carpeta = `${CARPETA_FOTOS_PRODUCTO}/${x.profile.id}`;
+    const base = ruta.startsWith(`${carpeta}/`) ? ruta.slice(carpeta.length + 1) : "";
+    if (!NOMBRE_FOTO.test(base)) return { error: "Foto inválida." };
+    const almacen = createAdminClient().storage.from(BUCKET_VIDEOS_GENERADOS);
+    const { data: lista, error } = await almacen.list(carpeta, { search: base });
+    if (error || !lista?.some((o) => o.name === base)) return { error: "La subida no terminó. Intenta de nuevo." };
+    return { url: almacen.getPublicUrl(ruta).data.publicUrl };
   });
 }
