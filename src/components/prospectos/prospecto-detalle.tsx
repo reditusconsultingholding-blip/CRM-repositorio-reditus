@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   CalendarClock,
   Check,
+  Clapperboard,
   Copy,
   ExternalLink,
   Pencil,
@@ -42,7 +43,7 @@ import {
   type Servicio,
 } from "@/lib/prospeccion";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -417,7 +418,16 @@ function Guion({ id, pros }: { id: string; pros: Prospeccion }) {
             ? "Estructura de video ganador: gancho, problema, producto en mano, prueba y llamado a la acción."
             : "Diagnóstico, primer pantallazo propuesto y guion del recorrido."}
         </CardDescription>
-        <CardAction className="flex gap-1">
+        <CardAction className="flex flex-wrap justify-end gap-1">
+          {esVideo && (
+            <Link
+              href={`/videos?prospecto=${id}`}
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+              title="Elegir otro formato de video (podcast, entrevista, claymation…) y escribir el guion con investigación de mercado"
+            >
+              <Clapperboard /> Crear con formato
+            </Link>
+          )}
           {hayGuion && !editando && (
             <>
               <Button variant="ghost" size="sm" onClick={() => copiar(pros.guion, "Guion copiado")}>

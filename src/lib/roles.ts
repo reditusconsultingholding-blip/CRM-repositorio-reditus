@@ -23,3 +23,5 @@ export const INGRESOS_ROLES: UserRole[] = ["ceo", "gerente_comercial", "director
 export const ADMIN_ROLES: UserRole[] = ["ceo"];
 // Pulso muestra ventas y conversión de los clientes: mismo criterio que Ingresos.
 export const PULSO_ROLES: UserRole[] = INGRESOS_ROLES;
+// «Crear video» (/videos): los roles de Ingresos y quien edita video.
+export const VIDEOS_ROLES: UserRole[] = [...INGRESOS_ROLES, "editor_video"];

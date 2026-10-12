@@ -17,13 +17,14 @@ import {
   Flame,
   ListChecks,
   Clapperboard,
+  Film,
 } from "lucide-react";
 import { signOut } from "@/app/(protected)/actions";
 import { Button } from "@/components/ui/button";
 import { ChatBadge } from "@/components/chat/chat-badge";
 import { CurrencyWidget } from "@/components/currency-widget";
 import { RentabilidadWidget } from "@/components/ceo/rentabilidad-widget";
-import { ROLE_LABELS, INGRESOS_ROLES, type UserRole } from "@/lib/roles";
+import { ROLE_LABELS, INGRESOS_ROLES, VIDEOS_ROLES, type UserRole } from "@/lib/roles";
 
 // Ingresos/Prospectos/Clientes usan INGRESOS_ROLES (de lib/roles.ts) en vez
 // de una lista aparte — antes había una copia hardcodeada acá que se
@@ -46,6 +47,9 @@ const ALL_LINKS = [
     roles: ["editor_video", "disenador_landing", "programador"],
     grupo: "Operación",
   },
+  // Guiones por formato para cualquier producto; no confundir con la entrada
+  // de arriba, que son las piezas gratis asignadas del embudo de prospección.
+  { href: "/videos", label: "Crear video", icon: Film, roles: VIDEOS_ROLES, grupo: "Operación" },
   { href: "/prospectos", label: "Prospectos", icon: UserPlus, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/clientes", label: "Clientes", icon: Contact, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/flujo", label: "Flujo de trabajo", icon: Workflow, roles: null, grupo: "Equipo" },
