@@ -12,6 +12,9 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Chip, ETIQUETA } from "@/components/prospectos/piezas";
+import { progresoDeVideo } from "@/lib/progreso-video";
+import { BarraProgresoVideo } from "./progreso-video";
+import { useTiemposVideo } from "./proyectos-lista";
 
 export type Pendiente =
   | { clave: string; tipo: "imagen"; g: GuionGuardado; n: number; url: string; motivo: string; foto: string | null; voz: string }
@@ -58,6 +61,7 @@ type Props = {
  */
 export function BandejaAtencion({ guiones, puedeAprobar, onActualizado, onAbrir, onRefrescar }: Props) {
   const lista = useMemo(() => pendientesDe(guiones), [guiones]);
+  const tiempos = useTiemposVideo();
   const [abierta, setAbierta] = useState(false);
   const [saltados, setSaltados] = useState<Set<string>>(new Set());
   const [ocupado, setOcupado] = useState(false);
@@ -162,6 +166,12 @@ export function BandejaAtencion({ guiones, puedeAprobar, onActualizado, onAbrir,
                   : "No queda nada en la bandeja."}
               </DialogDescription>
             </DialogHeader>
+
+            {actual && versionVigente(actual.g)?.proyecto && (
+              <div data-barra-bandeja>
+                <BarraProgresoVideo progreso={progresoDeVideo(versionVigente(actual.g)?.proyecto ?? null, tiempos)} compacta />
+              </div>
+            )}
 
             {!actual && (
               <Button className="self-start" onClick={() => setAbierta(false)}>

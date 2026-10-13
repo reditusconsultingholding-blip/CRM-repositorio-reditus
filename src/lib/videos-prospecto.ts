@@ -47,7 +47,8 @@ export type VideoProspecto = {
 /** Un prospecto al que se le puede hacer video: solo sus datos de producción. */
 export type CandidatoVideo = { id: string; nombre: string; producto: string; tienda: string; pais: string; creado: string };
 
-export type FilaVideoProspecto = { candidato: CandidatoVideo; video: VideoProspecto };
+/** `proyecto`: el proyecto por escenas del video ya lanzado (para su barra de avance). */
+export type FilaVideoProspecto = { candidato: CandidatoVideo; video: VideoProspecto; proyecto?: import("@/lib/proyecto-video").ProyectoVideo | null };
 
 export const videoVacio = (prospectoId: string): VideoProspecto => ({
   prospectoId,

@@ -11,6 +11,7 @@ import { aprobarVideo, usarVideoEnProspecto } from "@/app/(protected)/videos/act
 import {
   agregarFotoProyecto,
   ajustarAuto,
+  ajustarPlan,
   aprobarPiezas,
   cancelarTrabajoProyecto,
   crearVariaciones,
@@ -55,6 +56,8 @@ import { CorregirProyecto } from "./proyecto-corregir";
 import { CrearVariaciones } from "./variaciones";
 import { PlanEscenas } from "./proyecto-plan";
 import { RevisionPiezas } from "./proyecto-revision";
+import { RetroVideo } from "./aprendizajes";
+import { useConfirmar } from "./progreso-video";
 
 /** Cada cuánto se consulta mientras hay algo generándose y la pestaña está a la vista. */
 const SONDEO_MS = 4000;
@@ -108,6 +111,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
   const [serie, setSerie] = useState(0);
   const [variando, setVariando] = useState(false);
   const enAccion = useRef(false);
+  const [confirmar, dialogoConfirmar] = useConfirmar();
   const huellaActual = useRef("");
   const alGuardar = useRef(onGuardado);
   useEffect(() => {
@@ -196,19 +200,19 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
 
   async function pedirClips() {
     const seg = paraClip.reduce((s, e) => s + e.duracion, 0);
-    if (!window.confirm(`Se van a generar ${paraClip.length} ${paraClip.length === 1 ? "clip" : "clips"} (${seg} s de video). Es lo que más cuesta. ¿Continuar?`)) return;
+    if (!(await confirmar(`Se van a generar ${paraClip.length} ${paraClip.length === 1 ? "clip" : "clips"} (${seg} s de video). Es lo que más cuesta.`, { titulo: "¿Generar los clips?", si: "Sí, generar" }))) return;
     await pedir("clips", "Clips en cola");
   }
 
   async function rehacerPlan() {
-    if (auto.activo && !window.confirm("El modo directo está encendido: al proponer el plan de nuevo, las imágenes se piden de inmediato. ¿Continuar?")) return;
-    if (!window.confirm("Se propone el plan de nuevo desde el guion. Las imágenes y clips de este plan se descartan (lo ya gastado sigue contando). ¿Continuar?")) return;
+    const texto = "Se propone el plan de nuevo desde el guion. Las imágenes y clips de este plan se descartan (lo ya gastado sigue contando)." + (auto.activo ? " El modo automático está encendido: las imágenes se piden de inmediato." : "");
+    if (!(await confirmar(texto, { titulo: "¿Proponer el plan de nuevo?", si: "Sí, proponer de nuevo" }))) return;
     if (await correr("plan", () => crearProyecto(id, { fotos: fotos.length ? fotos : proyecto.contexto.fotos, ficha, reemplazar: true, directo: auto.activo }), "Plan propuesto de nuevo")) setSerie((s) => s + 1);
   }
 
   async function aprobarFinal() {
     if (!version) return;
-    if (!window.confirm("¿Aprobar el video? A partir de aquí se puede copiar su enlace y pasarlo al prospecto.")) return;
+    if (!(await confirmar("A partir de aquí se puede copiar su enlace y pasarlo al prospecto.", { titulo: "¿Aprobar el video?", si: "Sí, aprobar" }))) return;
     enAccion.current = true;
     setAccion("final");
     const r = await aprobarVideo(id, version.n);
@@ -220,7 +224,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
   }
 
   async function alProspecto() {
-    if (!version || !window.confirm("Esto reemplaza la pieza actual de la ficha del prospecto por este video. ¿Continuar?")) return;
+    if (!version || !(await confirmar("Esto reemplaza la pieza actual de la ficha del prospecto por este video.", { titulo: "¿Usar este video en el prospecto?", si: "Sí, reemplazar" }))) return;
     setAccion("prospecto");
     const r = await usarVideoEnProspecto(id, version.n);
     setAccion(null);
@@ -273,7 +277,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
       return void toast.error("Eso no es un JSON válido. Debe ser una lista de escenas o un objeto con «escenas».");
     }
     if (!Array.isArray(escenas) || !escenas.length) return void toast.error("El plan pegado no trae escenas.");
-    if (!window.confirm(`Se reemplaza el plan por las ${escenas.length} escenas pegadas (las piezas ya generadas se descartan). ¿Continuar?`)) return;
+    if (!(await confirmar(`Se reemplaza el plan por las ${escenas.length} escenas pegadas (las piezas ya generadas se descartan).`, { titulo: "¿Importar este plan?", si: "Sí, importar" }))) return;
     // Sin número de escena: así ninguna hereda piezas de otra por coincidencia.
     const limpias = escenas.map((e) => ({ ...(e && typeof e === "object" ? e : {}), n: 0 }));
     if (await correr("plan", () => guardarPlan(id, { escenas: limpias }), "Plan importado")) {
@@ -289,7 +293,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
     <div className="flex flex-col gap-4">
       {/* ---------------------------------------------- estado y costo */}
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
-        <div className="flex flex-wrap items-center gap-2" role="status" aria-live="polite">
+        <div className={cn("flex flex-wrap items-center gap-2", paso && "hidden")} role="status" aria-live="polite">
           <Chip tono={resumen.tono}>{resumen.etiqueta}</Chip>
           <span className="min-w-0 flex-1 basis-48 text-xs text-muted-foreground">{resumen.detalle}</span>
           <Chip>
@@ -298,7 +302,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
         </div>
         {enPaso(1) && (
           <>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className={cn("grid gap-2 sm:grid-cols-3", paso && "hidden")}>
           <Etapa titulo="1 · Imágenes base" hecho={resumen.imagenes.aprobadas} total={resumen.imagenes.total} extra={resumen.imagenes.porAprobar ? `${resumen.imagenes.porAprobar} por revisar` : resumen.imagenes.enCurso ? `${resumen.imagenes.enCurso} en proceso` : ""} />
           <Etapa titulo="2 · Clips" hecho={resumen.clips.aprobadas} total={resumen.clips.total} extra={resumen.clips.porAprobar ? `${resumen.clips.porAprobar} por revisar` : resumen.clips.enCurso ? `${resumen.clips.enCurso} en proceso` : ""} />
           <Etapa titulo="3 · Armado" hecho={videoVigente ? 1 : 0} total={1} extra={ESTADO_FINAL_LABELS[final.estado]} pulso={armando} />
@@ -326,7 +330,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2" data-auto={auto.activo ? "si" : "no"}>
           <label className="flex items-center gap-2 text-sm font-medium">
             <input type="checkbox" className="size-4 accent-primary" checked={auto.activo} disabled={ocupado} onChange={(e) => void correr("auto", () => ajustarAuto(id, { activo: e.target.checked }))} />
-            Modo directo
+            Que avance solo (modo automático)
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="size-4 accent-primary" checked={auto.imagenes} disabled={ocupado} onChange={(e) => void correr("auto", () => ajustarAuto(id, { imagenes: e.target.checked }))} />
@@ -350,7 +354,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
         {auto.parada && (
           <div role="alert" data-parada={auto.parada.codigo} className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2">
             <Chip tono="rojo">Detenido</Chip>
-            <span className="min-w-0 flex-1 basis-56 text-xs leading-relaxed">{auto.parada.texto}</span>
+            <span className="min-w-0 flex-1 basis-56 text-sm leading-relaxed">{auto.parada.texto}</span>
             {auto.parada.codigo === "imagen-dudosa" ? (
               <Button size="sm" onClick={() => setRevision({ tipo: "imagen", n: primeraPorAprobar("imagen") ?? 1 })}>
                 <Check /> Revisar
@@ -367,18 +371,28 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
           </div>
         )}
         {!activo && (
-          <p className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          <p className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm leading-relaxed text-muted-foreground">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <span>
-              La generación se activa al conectar el servidor de videos (variable <code>SERVIDOR_SECRET</code>). Mientras tanto puedes revisar y editar el plan de escenas: queda guardado.
+              La generación todavía no está conectada (falta enlazar el servidor de videos). Mientras tanto puedes revisar y editar el plan de escenas: queda guardado.
             </span>
           </p>
         )}
-        {[...(aviso ? [aviso] : []), ...(enPaso(1) ? proyecto.avisos : [])].map((a) => (
-          <p key={a} role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-            {a}
+        {aviso && (
+          <p role="status" className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm leading-relaxed">
+            {aviso}
           </p>
-        ))}
+        )}
+        {enPaso(1) && proyecto.avisos.length > 0 && (
+          <details className="rounded-lg border border-amber-500/30 bg-amber-500/10" data-avisos={proyecto.avisos.length}>
+            <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">Avisos ({proyecto.avisos.length})</summary>
+            <ul className="flex list-disc flex-col gap-1.5 px-3 pb-3 pl-8 text-sm leading-relaxed">
+              {proyecto.avisos.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          </details>
+        )}
 
         {/* ------------------------------------------ lo que toca hacer */}
         <div className="flex flex-wrap items-center gap-2">
@@ -445,7 +459,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
                 {videoVigente ? ESTADO_FINAL_LABELS[final.estado] : armando ? "Versión anterior · armando la nueva" : "Versión anterior · hay cambios por armar"}
               </Chip>
             </div>
-            <p className="text-xs leading-relaxed text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               {final.estado === "aprobada"
                 ? `Aprobado por ${version?.videoAprobado?.por || "—"}.`
                 : final.estado === "por-aprobar"
@@ -505,6 +519,8 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
         </div>
       )}
 
+      {final.url && enPaso(5) && puedeAprobar && <RetroVideo guionId={id} formatoNombre={guardado.formatoNombre || guardado.formato} />}
+
       {/* ---------------------------------------------- vistas */}
       {paso === 5 && !final.url && (
         <p className="rounded-xl border border-border bg-card px-3 py-3 text-sm text-muted-foreground">
@@ -553,13 +569,13 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
             <li className="flex w-40 flex-col gap-2 rounded-2xl border border-dashed border-border p-3 opacity-80 sm:w-44">
               <span className="font-heading text-sm font-black italic uppercase">Personajes base</span>
               <span className="text-xs leading-snug text-muted-foreground">
-                Preparado, todavía no activo: hoy cada escena generada describe a su personaje en su propio prompt (paso 3). El material de personaje reutilizable entre escenas necesita al trabajador.
+                Preparado, todavía no activo: hoy cada escena generada describe a su personaje en sus propias instrucciones. El material de personaje reutilizable entre escenas necesita al trabajador.
               </span>
             </li>
           </ul>
           <div className="rounded-xl border border-border bg-card p-3">
             <span className={ETIQUETA}>Ficha del producto que usa el proyecto</span>
-            <p className="mt-1 text-xs leading-relaxed whitespace-pre-wrap">{proyecto.contexto.analisisProducto || "Sin ficha: los prompts no describen el tamaño ni el uso del producto."}</p>
+            <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap">{proyecto.contexto.analisisProducto || "Sin ficha: las escenas no saben el tamaño ni el uso del producto."}</p>
             <p className="mt-2 text-xs text-muted-foreground">La ficha se corrige fuera del estudio, junto a los datos del producto. Cierre: «{proyecto.contexto.cierre.oferta}» · «{proyecto.contexto.cierre.llamadoALaAccion}».</p>
           </div>
         </div>
@@ -611,8 +627,15 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
 
       {paso === 1 && (
         <details className="rounded-xl border border-border bg-card">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Avanzado: pegar o importar un plan (JSON)</summary>
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Avanzado</summary>
           <div className="flex flex-col gap-2 border-t border-border p-3">
+            <div className="flex flex-wrap items-center gap-2" id="ajustar-plan">
+              <Button variant="outline" disabled={ocupado || enCurso} onClick={() => void correr("ajustar", () => ajustarPlan(id)).then((ok) => ok && setSerie((s) => s + 1))}>
+                {accion === "ajustar" ? "Ajustando…" : "Ajustar el plan a las reglas del video automático"}
+              </Button>
+              <span className="min-w-0 flex-1 basis-56 text-sm text-muted-foreground">Alarga o reparte las frases que no caben, hace que el cierre se diga en voz y deja la mayoría del video en clips. No genera ni gasta nada.</span>
+            </div>
+            <span className="text-sm font-medium">Traer un plan hecho fuera (JSON)</span>
             <p className="text-xs text-muted-foreground">
               El plan lo propone el sistema; esto es solo para traer uno hecho fuera. Lista de escenas con <code>paso</code>, <code>tipo</code> («generada», «foto-real», «cierre»), <code>duracion</code>, <code>voz</code>, <code>promptImagen</code> y{" "}
               <code>promptVideo</code>. Se le aplican las mismas reglas: cierre al final con foto real, hasta 20 escenas.
@@ -648,6 +671,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
           }}
         />
       )}
+      {dialogoConfirmar}
       {revision && (
         <RevisionPiezas
           tope={proyecto.topeIntentos}
@@ -680,7 +704,7 @@ function Etapa({ titulo, hecho, total, extra, pulso }: { titulo: string; hecho: 
       <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={titulo} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
         <div className={cn("h-full rounded-full bg-primary transition-[width] duration-500", pulso && "animate-pulse")} style={{ width: `${pulso ? Math.max(pct, 35) : pct}%` }} />
       </div>
-      <span className="min-h-4 text-[11px] text-muted-foreground">{total > 0 ? extra : "No hay escenas generadas"}</span>
+      <span className="min-h-4 text-xs text-muted-foreground">{total > 0 ? extra : "No hay escenas generadas"}</span>
     </div>
   );
 }
@@ -692,7 +716,7 @@ function TarjetaEscena({ e, tope, esCeo, ocupado, onAbrir, onReabrir }: { e: Esc
   const topeImagen = generada && e.imagen.intentos >= tope && e.imagen.estado !== "aprobada" && e.imagen.estado !== "por-aprobar";
   const topeClip = generada && e.clip.intentos >= tope && e.clip.estado !== "aprobada" && e.clip.estado !== "por-aprobar";
   return (
-    <li className="flex w-32 shrink-0 snap-start flex-col gap-1.5 sm:w-36" data-escena={e.n}>
+    <li className="flex w-40 shrink-0 snap-start flex-col gap-1.5 sm:w-48" data-escena={e.n}>
       <button
         type="button"
         onClick={onAbrir}
@@ -703,29 +727,29 @@ function TarjetaEscena({ e, tope, esCeo, ocupado, onAbrir, onReabrir }: { e: Esc
           // eslint-disable-next-line @next/next/no-img-element
           <img src={miniatura} alt="" loading="lazy" className={cn("size-full object-cover", enProceso && "opacity-40")} />
         ) : (
-          <span className="px-2 text-center text-[11px] text-white/60">{generada ? "Sin imagen todavía" : "Falta la foto"}</span>
+          <span className="px-2 text-center text-xs text-white/60">{generada ? "Sin imagen todavía" : "Falta la foto"}</span>
         )}
-        <span className="absolute top-1.5 left-1.5 flex size-6 items-center justify-center rounded-full bg-black/70 font-mono text-xs font-semibold text-white">{e.n}</span>
-        {enProceso && <span className="absolute inset-x-0 bottom-0 animate-pulse bg-primary/90 py-1 text-center text-[11px] font-medium text-primary-foreground">Generando…</span>}
+        <span className="absolute top-1.5 left-1.5 flex size-8 items-center justify-center rounded-full bg-black/75 text-sm font-bold text-white">{e.n}</span>
+        {enProceso && <span className="absolute inset-x-0 bottom-0 animate-pulse bg-primary/90 py-1 text-center text-xs font-medium text-primary-foreground">Generando…</span>}
         {generada && e.clip.url && !enProceso && <Film className="absolute right-1.5 bottom-1.5 size-4 text-white drop-shadow" aria-label="Tiene clip" />}
       </button>
-      <span className="line-clamp-1 text-xs font-medium">{e.titulo || NOMBRE_PASO[e.paso]}</span>
-      <span className="font-mono text-[11px] text-muted-foreground">
-        paso {e.paso} · {e.duracion} s
+      <span className="line-clamp-2 text-sm font-semibold">{e.titulo || NOMBRE_PASO[e.paso]}</span>
+      <span className="text-xs text-muted-foreground">
+        {generada ? "Generada" : e.tipo === "cierre" ? "Cierre" : "Foto real"} · {e.duracion} s
       </span>
       {generada ? (
         <span className="flex flex-col gap-1">
           <Chip tono={TONO_PIEZA[e.imagen.estado]}>
-            Img · {ESTADO_PIEZA_LABELS[e.imagen.estado]} · {e.imagen.intentos}/{tope}
+            Imagen · {ESTADO_PIEZA_LABELS[e.imagen.estado]}
           </Chip>
           {e.imagen.revision && e.imagen.revision.veredicto !== "sin-ia" && (
             <Chip tono={e.imagen.revision.veredicto === "aprobada-auto" ? "verde" : e.imagen.revision.veredicto === "rechazada-auto" ? "rojo" : "ambar"}>{VEREDICTO_LABELS[e.imagen.revision.veredicto].replace(": decide una persona", "")}</Chip>
           )}
           <Chip tono={TONO_PIEZA[e.clip.estado]}>
-            Clip · {ESTADO_PIEZA_LABELS[e.clip.estado]} · {e.clip.intentos}/{tope}
+            Clip · {ESTADO_PIEZA_LABELS[e.clip.estado]}
           </Chip>
           {(topeImagen || topeClip) && (
-            <span className="text-[11px] leading-snug text-destructive">
+            <span className="text-xs leading-snug text-destructive">
               Tope de {tope} intentos: no se regenera más.
               {esCeo && (
                 <Button variant="ghost" size="xs" className="mt-1" disabled={ocupado} onClick={() => onReabrir(topeImagen ? "imagen" : "clip")}>
@@ -774,7 +798,7 @@ export function ConvertirEnProyecto({ guardado, sinGuardar, activo, fotos, ficha
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3">
       <p className="text-sm font-medium">Video por escenas, con revisión en cada paso</p>
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         El guion se parte en escenas. Primero se generan las imágenes base (centavos) y las apruebas; solo de las aprobadas se generan los clips; el armado no cuesta. Las escenas del producto y el cierre usan
         tus fotos reales, animadas: el producto sale idéntico y cuestan cero.
         {!activo ? " El plan se puede armar ya; la generación se activa al conectar el servidor de videos." : ""}

@@ -265,21 +265,24 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                   )}
 
                   {e.tipo === "generada" ? (
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <details className="rounded-lg border border-border bg-muted/30" data-avanzado-escena>
+                    <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Avanzado: instrucciones para generar esta escena</summary>
+                    <div className="grid gap-3 border-t border-border p-3 md:grid-cols-2">
                       <Label className="flex flex-col items-stretch gap-1.5">
-                        <span>Prompt de la imagen base</span>
+                        <span>Cómo debe verse la imagen</span>
                         <Textarea value={e.promptImagen} maxLength={4000} rows={5} disabled={quieto} className="max-h-60 text-xs" onChange={(ev) => cambiar(e.clave, { promptImagen: ev.target.value })} />
                       </Label>
                       <Label className="flex flex-col items-stretch gap-1.5">
-                        <span>Prompt del clip (qué se mueve)</span>
+                        <span>Qué se mueve en el clip</span>
                         <Textarea value={e.promptVideo} maxLength={4000} rows={5} disabled={quieto} className="max-h-60 text-xs" onChange={(ev) => cambiar(e.clave, { promptVideo: ev.target.value })} />
                       </Label>
                       {(e.imagen.url || e.clip.url) && (
                         <p className="text-xs text-muted-foreground md:col-span-2">
-                          Esta escena ya tiene piezas generadas. Cambiar el prompt no las cambia: hay que regenerarlas (cuenta como intento).
+                          Esta escena ya tiene piezas generadas. Cambiar estas instrucciones no las cambia: hay que regenerarlas (cuenta como intento).
                         </p>
                       )}
                     </div>
+                    </details>
                   ) : (
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col gap-1.5">
@@ -323,7 +326,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                       </Label>
                       {esCierre && (
                         <p className="text-xs text-muted-foreground">
-                          El cierre siempre va al final, con la foto real y el rótulo: «{proyecto.contexto.cierre.oferta}» · «{proyecto.contexto.cierre.llamadoALaAccion}».
+                          El cierre siempre va al final, con la foto real y la oferta en texto grande: «{proyecto.contexto.cierre.oferta}» · «{proyecto.contexto.cierre.llamadoALaAccion}».
                         </p>
                       )}
                     </div>
@@ -340,7 +343,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
         })}
       </ol>
 
-      <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-3 md:grid-cols-[auto_auto_minmax(0,1fr)_minmax(0,14rem)]">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border bg-muted/30 p-3">
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" className="size-4 accent-primary" checked={opciones.subtitulos} disabled={quieto} onChange={(e) => setOpciones((o) => ({ ...o, subtitulos: e.target.checked }))} />
           Subtítulos
@@ -349,14 +352,19 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
           <input type="checkbox" className="size-4 accent-primary" checked={opciones.voz} disabled={quieto} onChange={(e) => setOpciones((o) => ({ ...o, voz: e.target.checked }))} />
           Voz
         </label>
-        <Input value={opciones.musica ?? ""} maxLength={600} disabled={quieto} placeholder="Música: enlace https del audio (vacío = sin música)" aria-label="Música" onChange={(e) => setOpciones((o) => ({ ...o, musica: e.target.value || null }))} />
+        <details className="basis-full" data-avanzado-opciones>
+          <summary className="cursor-pointer text-sm font-medium">Avanzado: música propia y modelo</summary>
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <Input value={opciones.musica ?? ""} maxLength={600} disabled={quieto} placeholder="Música propia: enlace https a un mp3 (vacío = la elige sola según el tono)" aria-label="Música" onChange={(e) => setOpciones((o) => ({ ...o, musica: e.target.value || null }))} />
         <Input value={opciones.modelo ?? ""} maxLength={160} disabled={quieto} placeholder="Modelo (opcional)" aria-label="Modelo de video" onChange={(e) => setOpciones((o) => ({ ...o, modelo: e.target.value || null }))} />
+          </div>
+        </details>
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3" id="voz-del-proyecto">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">Voz y música del video</span>
-          <Chip tono={vozP.motor === "clip" ? "azul" : "neutro"}>{vozP.motor === "clip" ? "La voz sale de cada clip" : "Narración aparte (ElevenLabs)"}</Chip>
+          <Chip tono={vozP.motor === "clip" ? "azul" : "neutro"}>{vozP.motor === "clip" ? "La voz sale de cada clip" : "Narración aparte"}</Chip>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <Label className="flex flex-col items-stretch gap-1.5">
@@ -386,13 +394,16 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
             Va idéntica en todos los clips: es lo que sostiene que la voz no cambie de un clip a otro. Aun así puede variar un poco; si un clip suena distinto, se regenera solo ese.
           </span>
         </Label>
-        <label className="flex items-start gap-2 text-sm">
+        <details data-avanzado-voz>
+        <summary className="cursor-pointer text-sm font-medium">Avanzado: narración aparte</summary>
+        <label className="mt-2 flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={vozP.motor === "narracion"} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, motor: e.target.checked ? "narracion" : "clip" }))} />
           <span>
             Usar narración aparte (ElevenLabs) en vez de la voz del clip
             <span className="block text-xs text-muted-foreground">Apagado por decisión del dueño. Solo funciona si el servidor de videos tiene esa clave.</span>
           </span>
         </label>
+        </details>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -2,6 +2,10 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { registrarAprendizaje } from "@/lib/aprendizajes-video-server";
+import type { EtapaAprendizaje, OrigenAprendizaje } from "@/lib/aprendizajes-video";
+import { TIEMPOS_BASE, type TiemposVideo } from "@/lib/progreso-video";
 import { unstable_rethrow } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES, type Profile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,10 +34,10 @@ import {
   type ProyectoVideo,
   type TipoPieza,
 } from "@/lib/proyecto-video";
-import { heredarProyecto, normalizarPlan, planDeCorreccion, proyectoDeVariacion, type CorreccionProyecto, type PedidoVariacion } from "@/lib/proyecto-video-plan";
+import { enriquecerPlan, heredarProyecto, normalizarPlan, planDeCorreccion, proyectoDeVariacion, type CorreccionProyecto, type PedidoVariacion } from "@/lib/proyecto-video-plan";
 import { alDiaYAvanzar, analizarFotosProducto, armarProyecto, avanzar, conCandado, encolarEtapa, marcarEnMarcha, ponerAlDiaProyecto, type AnalisisFotos } from "@/lib/proyecto-video-server";
 import { ID_TRABAJO, type EtapaTrabajo, type TrabajoVista } from "@/lib/trabajos-video";
-import { cancelarTrabajo, creditosDeHoy, servidorVideoActivo, topeDeHoy, type TopeDiario } from "@/lib/trabajos-video-server";
+import { cancelarTrabajo, creditosDeHoy, listarTrabajos, servidorVideoActivo, topeDeHoy, type TopeDiario } from "@/lib/trabajos-video-server";
 import { leerConfigVideos, type ConfigVideos } from "@/lib/videos-config";
 import { escribirConfig, leerConfig } from "@/lib/videos-config-server";
 
@@ -99,6 +103,18 @@ async function abrir(id: string, escribir = true): Promise<Abierto | { error: st
 }
 
 type ConProyecto = Abierto & { p: ProyectoVideo };
+
+/**
+ * Lo que el dueño o la directora operativa escriben al rechazar o corregir queda como
+ * aprendizaje del formato (se condensa después de responder: no demora la acción).
+ */
+function aprender(x: Abierto, nota: string, etapa: EtapaAprendizaje, origen: OrigenAprendizaje) {
+  if (!["ceo", "directora_operativa"].includes(x.profile.role) || nota.trim().length < 12) return;
+  const pedido = { nota, quien: { id: x.profile.id, nombre: x.profile.name }, guionId: x.g.id, producto: x.g.producto, formato: x.g.formato, etapa, general: false, origen };
+  after(async () => {
+    await registrarAprendizaje(x.admin, pedido).catch(() => null);
+  });
+}
 
 /** Como `abrir`, pero exige que la versión vigente ya sea un proyecto. `p` es una copia que se puede modificar. */
 async function abrirProyecto(id: string): Promise<ConProyecto | { error: string }> {
@@ -375,6 +391,7 @@ export async function regenerarPieza(id: string, n: number, tipo: TipoPieza, not
     e[campo] = { ...e[campo], nota: limpia || e[campo].nota };
     const error = await encolar(x, campo === "imagen" ? "imagenes" : "clips", [e]);
     if (error) return { error };
+    if (limpia) aprender(x, limpia, campo === "imagen" ? "imagen" : "clip", "rechazo");
     return guardarTrasEncolar(x, antes);
   });
 }
@@ -429,6 +446,7 @@ export async function revisarPieza(id: string, n: number, tipo: TipoPieza, decis
       if (!limpia) return { error: "Escribe qué está mal: esa nota es la que recibe el generador al regenerar." };
       e[campo] = { ...pieza, estado: "rechazada", nota: limpia, revisadaPor: x.profile.name };
       anotar(p, `Escena ${e.n}: ${campo === "imagen" ? "imagen rechazada" : "clip rechazado"} por ${x.profile.name}: ${limpia}`);
+      aprender(x, limpia, campo === "imagen" ? "imagen" : "clip", "rechazo");
       // Sin imagen válida, el clip que salió de ella tampoco vale.
       if (campo === "imagen" && e.clip.url) e.clip = { ...e.clip, estado: "pendiente", url: null, trabajoId: null, revisadaPor: "" };
       finalPorRehacer(p);
@@ -509,6 +527,8 @@ export async function corregirProyecto(id: string, correccion: CorreccionProyect
     if (plan.bloqueos.length) return { error: plan.bloqueos.join(" ") };
     if (plan.vacio) return { error: "No marcaste ningún cambio." };
     const antes = [...p.trabajosAbiertos];
+    for (const k of c.imagenes) if (k.nota) aprender(x, k.nota, "imagen", "correccion");
+    for (const k of c.clips) if (k.nota) aprender(x, k.nota, "clip", "correccion");
 
     // 1) Lo que solo es de armado se escribe en el proyecto.
     p.escenas = p.escenas.map((e) => {
@@ -700,4 +720,69 @@ export async function agregarFotoProyecto(id: string, url: string): Promise<Esta
     anotar(p, `Foto real del producto agregada por ${x.profile.name}.`);
     return guardar({ ...x, g: { ...x.g, fotosProducto: p.contexto.fotos } }, p);
   });
+}
+
+/**
+ * «Ajustar a las reglas del video automático»: arregla el plan que ya existe SIN IA
+ * (alarga o reparte las frases que no caben, dice el cierre en voz, pasa fotos con frase
+ * a clip hasta que el 60 % sea clip generado, alterna las fotos). No encola nada: deja
+ * el plan listo para lanzar. Las piezas ya generadas de las escenas que no cambian se conservan.
+ */
+export async function ajustarPlan(id: string): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    if (hayTrabajoEnCurso(p)) return { error: "Hay algo generándose: espera a que termine para ajustar el plan." };
+    const r = enriquecerPlan(p.escenas, { guion: x.version.guion, formato: x.formato, fotos: p.contexto.fotos, fichaTexto: p.contexto.analisisProducto, producto: p.contexto.producto, voz: p.contexto.voz, rico: true });
+    if (!r.cambios.length) return { ...estado(x), aviso: "El plan ya cumple las reglas del video automático: no se cambió nada." };
+    p.escenas = r.escenas;
+    p.avisos = [`Plan ajustado a las reglas del video automático: ${r.cambios.join("; ")}. Revisa los prompts de las escenas nuevas.`, ...p.avisos.filter((a) => !/no cabe dicha con naturalidad|no se dice en voz|primera toma dura|Plan ajustado/.test(a))].slice(0, 8);
+    finalPorRehacer(p);
+    anotar(p, `Plan ajustado por ${x.profile.name}: ${r.cambios.join("; ")}.`);
+    // Ajustar no lanza nada: quien decide lanzar pulsa «Seguir» o enciende el modo directo.
+    const activo = p.auto.activo;
+    p.auto = { ...p.auto, activo: false };
+    const guardado = await guardar(x, p, `Plan ajustado: ${r.cambios.join("; ")}.`);
+    if ("error" in guardado || !activo) return guardado;
+    return guardado;
+  });
+}
+
+// ------------------------------------------------- tiempos para la barra ----
+
+let tiemposRecordados: { valor: TiemposVideo; hasta: number } | null = null;
+
+/**
+ * Cuánto tarda cada cosa, medido en los trabajos ya terminados (mediana por imagen,
+ * por clip y por armado). Sin historia suficiente valen los tiempos por defecto.
+ * Nunca falla: la barra de progreso no puede tumbar una pantalla.
+ */
+export async function tiemposVideo(): Promise<TiemposVideo> {
+  try {
+    const profile = await requireProfile();
+    if (!VIDEOS_ROLES.includes(profile.role)) return TIEMPOS_BASE;
+    if (tiemposRecordados && tiemposRecordados.hasta > Date.now()) return tiemposRecordados.valor;
+    const { trabajos } = await listarTrabajos(createAdminClient(), 40);
+    const muestras: Record<"imagenes" | "clips" | "armado", number[]> = { imagenes: [], clips: [], armado: [] };
+    for (const t of trabajos) {
+      if (t.estado !== "listo" || !t.etapa || t.etapa === "analisis" || !t.tomadoAt || !t.terminadoAt) continue;
+      const seg = (Date.parse(t.terminadoAt) - Date.parse(t.tomadoAt)) / 1000;
+      if (!Number.isFinite(seg) || seg < 5 || seg > 3600) continue;
+      muestras[t.etapa as "imagenes" | "clips" | "armado"].push(t.etapa === "armado" ? seg : seg / Math.max(1, t.escenasEtapa.length));
+    }
+    const mediana = (l: number[], def: number) => (l.length >= 2 ? Math.round([...l].sort((a, b) => a - b)[Math.floor(l.length / 2)]) : def);
+    const valor: TiemposVideo = {
+      ...TIEMPOS_BASE,
+      imagen: mediana(muestras.imagenes, TIEMPOS_BASE.imagen),
+      clip: mediana(muestras.clips, TIEMPOS_BASE.clip),
+      armado: mediana(muestras.armado, TIEMPOS_BASE.armado),
+      medidos: muestras.imagenes.length >= 2 && muestras.clips.length >= 2,
+    };
+    tiemposRecordados = { valor, hasta: Date.now() + 5 * 60_000 };
+    return valor;
+  } catch (err) {
+    unstable_rethrow(err);
+    return TIEMPOS_BASE;
+  }
 }

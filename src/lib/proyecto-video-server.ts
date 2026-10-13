@@ -2,6 +2,7 @@ import "server-only";
 import { planDeReferencia, textoDeCambios, textoDeReferencia, type CambiosClon, type TomaReferencia } from "@/lib/clonacion-video";
 import { ES_COLA_DE_PRUEBA, RAIZ_COLA } from "@/lib/cola-raiz";
 import { llamarClaude, llamarClaudeConImagenes } from "@/lib/ia-claude";
+import { elegirPista, preferenciasDelEquipo } from "@/lib/aprendizajes-video-server";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { REGLAS_COMUNES, buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
 import {
@@ -38,7 +39,7 @@ import {
   type TipoPieza,
   type Veredicto,
 } from "@/lib/proyecto-video";
-import { normalizarPlan, planDePlantilla, vozSinCompletar, type DatosPlan } from "@/lib/proyecto-video-plan";
+import { enriquecerPlan, faltasDeRiqueza, normalizarPlan, planDePlantilla, vozSinCompletar, type DatosPlan } from "@/lib/proyecto-video-plan";
 import { BUCKET_TRABAJOS, vistaTrabajo, type EtapaTrabajo, type TrabajoVista } from "@/lib/trabajos-video";
 import { avisar, crearTrabajoEtapa, leerTrabajos } from "@/lib/trabajos-video-server";
 import type { Exigencia } from "@/lib/videos-config";
@@ -162,9 +163,29 @@ Reglas de contenido:
 Devuelve únicamente un objeto JSON, sin texto antes ni después:
 {"voz":"…","tonoMusica":"energia","escenas":[{"paso":1,"titulo":"…","tipo":"generada","duracion":4,"voz":"…","locucion":"camara","promptImagen":"…","promptVideo":"…","foto":1,"movimiento":"acercar"}]}`;
 
+const REGLAS_AUTOMATICO = `--- VIDEO AUTOMÁTICO: REGLAS DE CALIDAD (mandan sobre la regla de costo de arriba) ---
+Este video se produce solo y nadie lo va a retocar: tiene que quedar bien, no ser un pase de diapositivas.
+- Al menos el 60 % de la duración es clip "generada" CON VOZ: una persona usando el producto y contándolo, o la situación del dolor con narrador. Las escenas "foto-real" quedan para 1 o 2 inserciones cortas del producto (3 s, sin frase larga) y el cierre.
+- Cada clip generado con voz dura de 6 a 8 segundos (el proveedor cobra el clip de 8 s igual: aprovéchalo). Excepción: el gancho, la primera escena, dura 4 s o menos y su frase tiene 8 palabras o menos.
+- La frase de cada escena CABE en su duración (mira «Palabras que caben por clip»). Si no cabe, alarga la escena hasta 8 s o reparte las oraciones en dos escenas generadas. Ninguna escena se queda con una frase que no cabe.
+- EL CIERRE SE DICE: la penúltima escena es "generada", del paso 5, con voz, y dice la oferta y el llamado a la acción (18 palabras o menos; si no caben, dos escenas). La última es el "cierre" con la foto real y el rótulo, sin frase.
+- No uses la misma foto en dos escenas seguidas.
+- En las escenas generadas donde aparece el producto, describe a la persona usándolo de verdad (puesto, en la mano, aplicándolo), con el producto idéntico al de las fotos de referencia.`;
+
+/** Lee la respuesta de la IA como plan ya normalizado, o null si no es un plan. Solo para decidir si hay que reintentar. */
+function planDeRespuesta(texto: string, d: DatosPlan): { escenas: EscenaProyecto[] } | null {
+  const crudo = primerJson(texto) as { escenas?: unknown } | null;
+  if (!Array.isArray(crudo?.escenas) || !crudo.escenas.length) return null;
+  const limpias = crudo.escenas.map((e) => {
+    const o = e && typeof e === "object" ? (e as Record<string, unknown>) : {};
+    return Object.fromEntries(CLAVES_ESCENA.filter((k) => k in o).map((k) => [k, o[k]]));
+  });
+  return normalizarPlan(limpias, d, { verificarVoz: true });
+}
+
 export type PlanPropuesto = { escenas: EscenaProyecto[]; origen: "ia" | "plantilla"; avisos: string[]; vozDescripcion: string; tonoMusica: TonoMusica };
 
-const CLAVES_ESCENA = ["paso", "titulo", "tipo", "duracion", "voz", "locucion", "promptImagen", "promptVideo", "foto", "movimiento"];
+const CLAVES_ESCENA: string[] = ["paso", "titulo", "tipo", "duracion", "voz", "locucion", "promptImagen", "promptVideo", "foto", "movimiento"];
 
 /**
  * Propone el plan de escenas de una versión del guion. Con IA cuando está; si
@@ -197,11 +218,23 @@ export async function proponerPlan(d: DatosPlan, formato: FormatoVideo, pais: st
           ...(cambios ? [textoDeCambios(cambios, { producto: d.producto, oferta: "la del cliente", llamado: "el del cliente", acento: d.voz?.acento ?? "" }), ""] : []),
         ]
       : []),
+    ...(d.rico ? [REGLAS_AUTOMATICO, ""] : []),
     "--- GUION ---",
     d.guion,
-  ].join("\n");
-  const r = await llamarClaude(`${SISTEMA_PLAN}\n\n--- BASE DE CONOCIMIENTO DE REDITUS ---\n${REGLAS_COMUNES}\n\n--- FORMATO ---\n${fichaFormato(formato)}`, usuario, 9000, { sinPensar: true });
+  ].join("\n") + (await preferenciasDelEquipo(formato.slug, ["imagen", "clip", "edicion", "cierre"]));
+  const sistema = `${SISTEMA_PLAN}\n\n--- BASE DE CONOCIMIENTO DE REDITUS ---\n${REGLAS_COMUNES}\n\n--- FORMATO ---\n${fichaFormato(formato)}`;
+  let r = await llamarClaude(sistema, usuario, 9000, { sinPensar: true });
   if ("error" in r) return respaldo(r.error.replace(" Mientras tanto puedes escribirlo a mano.", ""));
+  // Video automático: si el plan no cumple las reglas de calidad, se le pide a la IA UNA vez que lo corrija.
+  const vozEnElClip = !d.voz || d.voz.motor === "clip";
+  if (d.rico) {
+    const primero = planDeRespuesta(r.texto, d);
+    const faltas = primero ? faltasDeRiqueza(primero.escenas, vozEnElClip) : [];
+    if (faltas.length) {
+      const otra = await llamarClaude(sistema, `${usuario}\n\n--- TU PLAN ANTERIOR ---\n${r.texto.slice(0, 9000)}\n\n--- NO CUMPLE ---\n${faltas.map((f) => `- ${f}`).join("\n")}\n\nDevuelve el plan COMPLETO otra vez, corregido, en el mismo JSON. Para que una frase quepa: alarga la escena hasta 8 s o reparte sus oraciones en dos escenas generadas.`, 9000, { sinPensar: true });
+      if (!("error" in otra) && planDeRespuesta(otra.texto, d)) r = otra;
+    }
+  }
   const crudo = primerJson(r.texto) as { escenas?: unknown; voz?: unknown; tonoMusica?: unknown } | null;
   const lista = Array.isArray(crudo?.escenas) ? crudo.escenas : null;
   if (!lista?.length) return respaldo("La IA respondió el plan en un formato inesperado.");
@@ -212,6 +245,12 @@ export async function proponerPlan(d: DatosPlan, formato: FormatoVideo, pais: st
   });
   const n = normalizarPlan(limpias, d, { verificarVoz: true });
   if (!n.escenas.some((e) => e.tipo === "generada") && !n.escenas.some((e) => e.tipo === "foto-real")) return respaldo("La IA devolvió un plan sin escenas.");
+  // Si tras el reintento sigue sin cumplir, lo arregla el código: el plan sale YA ajustado, no con un aviso.
+  if (d.rico && faltasDeRiqueza(n.escenas, vozEnElClip).length) {
+    const arreglado = enriquecerPlan(n.escenas, d);
+    n.escenas = arreglado.escenas;
+    n.avisos = [...n.avisos.filter((a) => !/no cabe dicha con naturalidad|no se dice en voz|primera toma dura/.test(a)), ...(arreglado.cambios.length ? [`El plan se ajustó solo para cumplir las reglas del video automático: ${arreglado.cambios.join("; ")}.`] : [])];
+  }
   return { escenas: n.escenas, origen: "ia", avisos: n.avisos, vozDescripcion: typeof crudo?.voz === "string" ? crudo.voz.trim().slice(0, 400) : "", tonoMusica: (TONOS_MUSICA as readonly string[]).includes(crudo?.tonoMusica as string) ? (crudo?.tonoMusica as TonoMusica) : "neutro" };
 }
 
@@ -249,7 +288,13 @@ export async function armarProyecto(d: PedidoArmar): Promise<ProyectoVideo> {
     voz.idioma = /ingl[eé]s|english/.test(pedido) ? "en-US" : /portugu/.test(pedido) ? "pt-BR" : pais ? acentoDePais(pais).idioma : "es";
   }
   if (cambios?.persona) voz.descripcion = `${cambios.persona}; ${voz.descripcion}`.slice(0, 400);
-  const plan = await proponerPlan({ ...datosDePlan(g, d.version, d.formato, fotos, ficha), voz }, d.formato, g.pais, g.referenciaTomas, cambios);
+  // En modo directo nadie retoca el plan: salen las reglas de calidad del video automático (y el respaldo sin IA también las cumple).
+  const datos = { ...datosDePlan(g, d.version, d.formato, fotos, ficha), voz, rico: d.directo };
+  const plan = await proponerPlan(datos, d.formato, g.pais, g.referenciaTomas, cambios);
+  if (d.directo && plan.origen === "plantilla") {
+    const arreglado = enriquecerPlan(plan.escenas, datos);
+    plan.escenas = arreglado.escenas;
+  }
   if (plan.vozDescripcion && !cambios?.persona) voz.descripcion = plan.vozDescripcion;
   const cfg = await leerConfig(d.admin);
   // Un plan sin IA con escenas que cuestan no arranca solo: sus prompts son genéricos.
@@ -324,14 +369,14 @@ Devuelve únicamente JSON: {"gancho":{"nota":"ok","detalle":"…"},"producto":{�
  * trabajador mandó fotogramas, una pasada de visión. Deja la lista anotada junto
  * al video «por aprobar». No aprueba nada: decide una persona.
  */
-async function controlarFinal(p: ProyectoVideo, t: { resultado: { duracion: number | null; fotogramas: string[]; subtitulos: boolean | null } | null } | undefined, conVision: boolean): Promise<ControlFinal | null> {
+async function controlarFinal(formatoSlug: string, p: ProyectoVideo, t: { resultado: { duracion: number | null; fotogramas: string[]; subtitulos: boolean | null } | null } | undefined, conVision: boolean): Promise<ControlFinal | null> {
   const url = p.final.url;
   if (!url || p.final.estado !== "por-aprobar") return null;
   if (p.final.control?.url === url && (p.final.control.conFotogramas || !conVision || !t?.resultado?.fotogramas.length)) return null;
   const control = controlPorDatos(p, url, { duracion: t?.resultado?.duracion ?? null, subtitulos: t?.resultado?.subtitulos ?? null });
   const fotogramas = t?.resultado?.fotogramas ?? [];
   if (!conVision || fotogramas.length < 2) return control;
-  const r = await llamarClaudeConImagenes(SISTEMA_CONTROL, `Oferta que debe leerse al final: «${p.contexto.cierre.oferta}». Llamado: «${p.contexto.cierre.llamadoALaAccion}». Devuelve el JSON.`, fotogramas, 500, 6);
+  const r = await llamarClaudeConImagenes(SISTEMA_CONTROL, `Oferta que debe leerse al final: «${p.contexto.cierre.oferta}». Llamado: «${p.contexto.cierre.llamadoALaAccion}». Devuelve el JSON.${await preferenciasDelEquipo(formatoSlug, ["clip", "edicion", "cierre"])}`, fotogramas, 500, 6);
   if ("error" in r) return control;
   const o = primerJson(r.texto) as Record<string, { nota?: unknown; detalle?: unknown }> | null;
   if (!o) return control;
@@ -360,7 +405,7 @@ async function plegarGuion(g: GuionGuardado, conVision = false): Promise<{ g: Gu
     const trabajos = await leerTrabajos(ids);
     const r = plegarTrabajos(p, trabajos);
     // Video recién armado (o sin revisar): control de calidad automático, anotado junto al video.
-    const control = await controlarFinal(r.proyecto, trabajos.find((t) => t.id === r.proyecto.final.trabajoId), conVision);
+    const control = await controlarFinal(g.formato, r.proyecto, trabajos.find((t) => t.id === r.proyecto.final.trabajoId), conVision);
     if (control) {
       r.proyecto.final = { ...r.proyecto.final, control };
       const flojos = (Object.keys(control.puntos) as PuntoControl[]).filter((k) => control.puntos[k]?.nota !== "ok");
@@ -431,7 +476,7 @@ export function veredictoDe(criterios: RevisionIA["criterios"], exigencia: Exige
   return dudas.some((k) => k === "producto" || k === "texto") ? "dudosa" : "aprobada-auto";
 }
 
-type ParaRevisar = { n: number; imagenUrl: string; fotos: string[]; prompt: string; relacion: string; exigencia: Exigencia; yaRegenerada: boolean };
+type ParaRevisar = { n: number; formato?: string; imagenUrl: string; fotos: string[]; prompt: string; relacion: string; exigencia: Exigencia; yaRegenerada: boolean };
 
 // Doble de prueba (solo con la cola de prueba): REVISION_IMAGENES_DOBLE='{"1":"aprobada","2":"dudosa","3":"rechazada"}'.
 // «rechazada» rechaza el primer intento y aprueba el regenerado; «rechazada-siempre» rechaza los dos.
@@ -462,7 +507,7 @@ export async function revisarImagenIA(d: ParaRevisar): Promise<RevisionIA> {
   const fecha = new Date().toISOString();
   const r = await llamarClaudeConImagenes(
     SISTEMA_REVISION,
-    `Formato: ${d.relacion}. La PRIMERA imagen es la generada; las demás son las fotos reales del producto.\n\nLo que pedía la escena:\n${d.prompt.slice(0, 2500)}\n\nDevuelve el JSON.`,
+    `Formato: ${d.relacion}. La PRIMERA imagen es la generada; las demás son las fotos reales del producto.\n\nLo que pedía la escena:\n${d.prompt.slice(0, 2500)}\n\nDevuelve el JSON.${await preferenciasDelEquipo(d.formato ?? "", ["imagen"])}`,
     [d.imagenUrl, ...d.fotos.slice(0, 2)],
     400,
   );
@@ -507,10 +552,12 @@ export async function encolarEtapa(x: ContextoProyecto, p: ProyectoVideo, etapa:
       };
     }
   }
-  const r = await crearTrabajoEtapa(x.admin, { g: x.g, version: x.versionN, formato: x.formato, proyecto: p, etapa, escenas, quien: x.quien });
+  const pista = etapa === "armado" && !p.opciones.musica ? await elegirPista(x.admin, p.tonoMusica) : null;
+  const r = await crearTrabajoEtapa(x.admin, { g: x.g, version: x.versionN, formato: x.formato, proyecto: pista ? { ...p, opciones: { ...p.opciones, musica: pista.url } } : p, etapa, escenas, quien: x.quien });
   if ("error" in r) return r;
   const idTrabajo = r.trabajo.id;
   anotar(p, etapa === "armado" ? `Armado en cola (${x.quien.nombre}). No cuesta.` : `${etapa === "imagenes" ? "Imágenes" : "Clips"} en cola: ${escenas.length === 1 ? `escena ${escenas[0].n}` : `${escenas.length} escenas`} (${x.quien.nombre}).`);
+  if (pista) anotar(p, `Música del armado: una pista de la biblioteca, tono «${pista.tono}».`);
   if (etapa === "armado") {
     p.final = { ...p.final, estado: "en-cola", trabajoId: idTrabajo, armados: p.final.armados + 1, nota: "" };
   } else {
@@ -563,7 +610,7 @@ export async function avanzar(x: ContextoProyecto, p: ProyectoVideo): Promise<bo
     if (sinRevisar.length && p.auto.imagenes) {
       const revisiones = await Promise.all(
         sinRevisar.map((e) =>
-          revisarImagenIA({ n: e.n, imagenUrl: e.imagen.url as string, fotos: p.contexto.fotos, prompt: e.promptImagen, relacion: x.formato.relacion_aspecto || "9:16", exigencia: p.auto.exigencia, yaRegenerada: e.imagen.autoRegenerada }),
+          revisarImagenIA({ n: e.n, formato: x.formato.slug, imagenUrl: e.imagen.url as string, fotos: p.contexto.fotos, prompt: e.promptImagen, relacion: x.formato.relacion_aspecto || "9:16", exigencia: p.auto.exigencia, yaRegenerada: e.imagen.autoRegenerada }),
         ),
       );
       const regenerar: EscenaProyecto[] = [];

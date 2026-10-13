@@ -4,7 +4,7 @@ import { ES_COLA_DE_PRUEBA, RAIZ_COLA } from "@/lib/cola-raiz";
 import { llamarClaudeConImagenes } from "@/lib/ia-claude";
 import { ORIGEN_PROSPECCION, leerProspeccion } from "@/lib/prospeccion";
 import { fichaConDatos, leerFicha } from "@/lib/proyecto-video";
-import { alDiaYAvanzar, analizarFotosProducto, armarProyecto, conCandado } from "@/lib/proyecto-video-server";
+import { alDiaYAvanzar, analizarFotosProducto, armarProyecto, conCandado, ponerAlDiaProyecto } from "@/lib/proyecto-video-server";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { BUCKET_TRABAJOS, BUCKET_VIDEOS_GENERADOS, CARPETA_FOTOS_PRODUCTO, corchetes, pasosDelGuion } from "@/lib/trabajos-video";
 import { asegurarBucketTrabajos, topeDeHoy } from "@/lib/trabajos-video-server";
@@ -12,8 +12,8 @@ import { FORMATOS_VERSION, buscarFormato } from "@/lib/video-formatos";
 import { leerConfig } from "@/lib/videos-config-server";
 import { consultarFuentes, descargarImagenPublica, investigarProducto, leerProductoDeTienda } from "@/lib/videos-investigacion";
 import { ETAPAS_VIDEO_PROSPECTO, enMarcha, videoVacio, type CandidatoVideo, type EtapaVideoProspecto, type FilaVideoProspecto, type VideoProspecto } from "@/lib/videos-prospecto";
-import { codigoDePais, faltaEnElCierre, leerDatosVideo, nombrePais, rellenar, versionVigente, type DatosVideo, type GuionGuardado } from "@/lib/videos";
-import { escribirGuionArchivo, generarGuionVideo, regenerarCierreGuion } from "@/lib/videos-server";
+import { NOMBRE_MONEDA, codigoDePais, faltaEnElCierre, leerDatosVideo, nombreCorto, nombrePais, rellenar, versionVigente, type DatosVideo, type GuionGuardado } from "@/lib/videos";
+import { escribirGuionArchivo, generarGuionVideo, leerGuionArchivo, regenerarCierreGuion } from "@/lib/videos-server";
 
 // Video automático para un prospecto. Corre por etapas cortas (página y
 // fotos → investigación → guion, plan y lanzamiento) para caber en el tiempo
@@ -109,7 +109,19 @@ export async function candidatoDeVideo(admin: Admin, id: string): Promise<Candid
 export async function filasDeVideo(admin: Admin, limite = 30): Promise<FilaVideoProspecto[]> {
   const candidatos = await candidatosDeVideo(admin, limite);
   const videos = await Promise.all(candidatos.map((c) => leerVideoProspecto(c.id)));
-  return candidatos.map((candidato, i) => ({ candidato, video: videos[i] }));
+  // Los ya lanzados traen su proyecto al día (solo lectura): de ahí sale la barra de avance.
+  const proyectos = await Promise.all(
+    videos.map(async (v) => {
+      if (v.etapa !== "lanzado" || !v.guionId) return null;
+      try {
+        const g = await leerGuionArchivo(admin, v.guionId);
+        return g ? (versionVigente((await ponerAlDiaProyecto(admin, g, false)).g)?.proyecto ?? null) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return candidatos.map((candidato, i) => ({ candidato, video: videos[i], proyecto: proyectos[i] }));
 }
 
 // ------------------------------------------------------ elegir las fotos ----
@@ -161,7 +173,7 @@ const detener = (v: VideoProspecto, enEtapa: EtapaVideoProspecto, detalle: strin
 async function etapaPagina(admin: Admin, c: CandidatoVideo, v: VideoProspecto): Promise<VideoProspecto> {
   const tope = await topeDeHoy(admin);
   if (tope.usados >= tope.max) return { ...v, etapa: "agendado", detalle: `Hoy ya se pidieron ${tope.usados} de ${tope.max} videos (tope diario): queda en espera para mañana.` };
-  const leida = await leerProductoDeTienda(c.tienda, c.producto);
+  const leida = await leerProductoDeTienda(c.tienda, c.producto, c.pais);
   if ("error" in leida) return detener(v, "agendado", `No identifiqué el producto: ${leida.error}`);
   const p = leida.producto;
   const eleccion = await elegirFotos(p.imagenes, c.producto || p.titulo);
@@ -172,10 +184,14 @@ async function etapaPagina(admin: Admin, c: CandidatoVideo, v: VideoProspecto): 
   const producto = (c.producto || p.titulo).trim();
   const ficha = (await analizarFotosProducto(copias, { producto, pais: c.pais }, leerFicha(null))).ficha;
   // Oferta y llamado: solo lo que la página muestra. Lo que escribió una persona manda.
-  const oferta = v.oferta || (p.precio ? (p.precioAntes ? `${producto}: antes ${p.precioAntes}, ahora ${p.precio}` : `${producto} por ${p.precio}`) : "");
+  // La oferta: nombre corto + precio en la moneda de la página + la promoción que la página muestre (2x1, envío gratis).
+  const corto = nombreCorto(producto);
+  const promo = p.promos.length ? ` · ${p.promos.join(" · ")}` : "";
+  const oferta = v.oferta || (p.precio ? `${p.precioAntes ? `${corto}: antes ${p.precioAntes}, ahora ${p.precio}` : `${corto} por ${p.precio}`}${promo}` : "");
+  const notaMoneda = p.monedaSupuesta && p.precio ? ` OJO: la página no dice su moneda; se supuso ${p.moneda} por el país. Confírmalo.` : "";
   const siguiente: VideoProspecto = { ...v, producto, productoUrl: p.url, precio: p.precio, fotos: copias, ficha, oferta, llamado: v.llamado || "pide el tuyo en el enlace de abajo", retomarEn: "" };
   if (!oferta) return detener(siguiente, "agendado", "La página no muestra un precio ni una promoción: escribe la oferta aquí abajo (no se inventa) y vuelve a correrlo.");
-  return { ...siguiente, etapa: "pagina", detalle: `Producto: «${producto}». ${copias.length} ${copias.length === 1 ? "foto real tomada" : "fotos reales tomadas"} de la página${copias.length === 1 ? " (solo una servía)" : ""}. Oferta propuesta: ${oferta}.` };
+  return { ...siguiente, etapa: "pagina", detalle: `Producto: «${producto}». ${copias.length} ${copias.length === 1 ? "foto real tomada" : "fotos reales tomadas"} de la página${copias.length === 1 ? " (solo una servía)" : ""}. Oferta propuesta: ${oferta}.${notaMoneda}` };
 }
 
 /** Etapa 2: investigación del mercado de ESE país (anuncios activos, página) y mini investigación de dolores. */
@@ -196,13 +212,15 @@ const INDICACION_PROSPECTO =
 /** Etapa 3: guion para ese país, proyecto por escenas y modo directo. La aprobación del dueño cuenta como visto bueno de la ficha. */
 async function etapaLanzar(admin: Admin, c: CandidatoVideo, v: VideoProspecto): Promise<VideoProspecto> {
   const base = leerDatosVideo(v.datos);
-  const formato = buscarFormato(base.formatosRecomendados[0] ?? "") ?? buscarFormato("usos-del-producto");
+  // La investigación siempre deja un formato; si faltara, va el que muestra a una persona usando el producto.
+  const formato = buscarFormato(base.formatosRecomendados[0] ?? "") ?? buscarFormato("ugc") ?? buscarFormato("usos-del-producto");
   if (!formato) return detener(v, "investigacion", "No hay formatos en la biblioteca.");
   const ahora = new Date().toISOString();
   // Quien aprobó el video confirma con eso la ficha (regla del dueño para los prospectos).
   const ficha = { ...(v.ficha ?? leerFicha(null)), confirmado: fichaConDatos(v.ficha ?? leerFicha(null)) ? { porId: v.decididoPorId, por: `${v.decididoPor} (al aprobar el video del prospecto)`, fecha: ahora } : null };
   const datos: DatosVideo = { ...base, formato: formato.slug, oferta: v.oferta, llamado: v.llamado, fotosProducto: v.fotos, fichaProducto: ficha };
-  const escrito = await generarGuionVideo(datos, formato, INDICACION_PROSPECTO);
+  const moneda = /€/.test(v.oferta) ? "euros" : (NOMBRE_MONEDA[(/\b([A-Z]{3})\b/.exec(v.oferta)?.[1] ?? "")] ?? "");
+  const escrito = await generarGuionVideo(datos, formato, `${INDICACION_PROSPECTO}${moneda ? ` El precio está en ${moneda}: dilo así, nunca en otra moneda.` : ""} El cierre debe DECIRSE en voz: oferta y llamado en una o dos oraciones cortas (18 palabras o menos entre las dos).`);
   if (escrito.origen !== "ia") return detener(v, "investigacion", `La IA no escribió el guion (${(escrito.aviso ?? "no está disponible").split(". ")[0]}). Vuelve a correrlo cuando la IA responda.`);
   let texto = escrito.texto;
   if (faltaEnElCierre(texto, datos).length) texto = (await regenerarCierreGuion(datos, texto)).texto;

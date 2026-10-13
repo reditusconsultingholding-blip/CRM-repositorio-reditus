@@ -192,6 +192,12 @@ Decisión del dueño: **la voz es la que genera el modelo de video dentro de cad
 3. **Fotogramas del final (opcional, recomendado)**: antes de cerrar el armado, subir de 3 a 6 fotogramas JPG del video ya armado con `{ toma, pedirSubida: true, tipo: "fotograma-final", indice: 1..6 }` y mandar sus rutas en el cierre: `fotogramas: ["<ruta>", …]`, en orden. El primero debe ser de los 2 primeros segundos; el último, del cierre con el rótulo; los demás, repartidos. Con ellos el CRM hace el control de calidad automático (gancho, producto visible, oferta y llamado al final, subtítulos) y lo deja anotado junto al video «por aprobar». Sin fotogramas, el control se hace solo con los datos (duración, plan), y lo dice.
 4. `duracion` en el resultado del armado ya existía: ahora se usa para comparar con el objetivo. Conviene mandarla siempre.
 
+### 15-oct-2026 · música por tono desde la biblioteca (lado del CRM; el trabajador no cambia)
+
+- Al encolar un **armado**, si el proyecto no trae una pista puesta a mano, el CRM elige una de la biblioteca (`trabajos/config/musica.json` = `{ "suspenso": [urls], "energia": [urls], "emotivo": [urls], "neutro": [urls] }`, más `_ultima` para rotar) según el `tonoMusica` del proyecto y la manda en `opciones.musica` (URL https de un mp3). Si ese tono no tiene pistas usa «neutro»; si tampoco hay, `opciones.musica` va `null` como antes.
+- Las pistas subidas desde la pantalla quedan públicas en `chat-files/videos-musica/<tono>/<marca>-<hex>.mp3`.
+- `opciones.tonoMusica` se sigue mandando igual.
+
 ### 14-oct-2026 · voz, uniones, música y análisis (lado del trabajador)
 
 Cómo quedó implementado lo del 14-oct del CRM (A, B y C) y lo poco que se añade. Nada de lo acordado cambia.

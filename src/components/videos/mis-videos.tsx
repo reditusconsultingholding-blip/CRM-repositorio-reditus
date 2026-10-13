@@ -3,6 +3,9 @@
 import { FolderOpen } from "lucide-react";
 import { versionVigente, videoAprobado, type GuionGuardado } from "@/lib/videos";
 import { resumenProyecto } from "@/lib/proyecto-video";
+import { enProduccion, progresoDeVideo } from "@/lib/progreso-video";
+import { BarraProgresoVideo } from "./progreso-video";
+import { useTiemposVideo } from "./proyectos-lista";
 import type { TrabajoVista } from "@/lib/trabajos-video";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +45,7 @@ type Props = {
 
 /** «Mis videos»: lo que pidió esta persona, con su estado, para no tener que buscarlo. */
 export function MisVideos({ guiones, trabajos, enCurso, abiertoId, onAbrir }: Props) {
+  const tiempos = useTiemposVideo();
   if (!guiones.length && !enCurso) return null;
   return (
     <Card>
@@ -59,6 +63,7 @@ export function MisVideos({ guiones, trabajos, enCurso, abiertoId, onAbrir }: Pr
           )}
           {guiones.map((g) => {
             const e = estadoMiVideo(g, trabajos[g.id]);
+            const p = versionVigente(g)?.proyecto;
             return (
               <li
                 key={g.id}
@@ -76,6 +81,11 @@ export function MisVideos({ guiones, trabajos, enCurso, abiertoId, onAbrir }: Pr
                 <Button variant="ghost" size="sm" disabled={g.id === abiertoId} onClick={() => onAbrir(g)}>
                   <FolderOpen /> {g.id === abiertoId ? "Abierto" : "Abrir"}
                 </Button>
+                {p && enProduccion(p) && (
+                  <div className="basis-full" data-barra-video={g.id}>
+                    <BarraProgresoVideo progreso={progresoDeVideo(p, tiempos)} compacta />
+                  </div>
+                )}
               </li>
             );
           })}

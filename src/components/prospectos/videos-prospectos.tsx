@@ -11,6 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Chip } from "@/components/prospectos/piezas";
+import { hayTrabajoEnCurso } from "@/lib/proyecto-video";
+import { progresoDeVideo } from "@/lib/progreso-video";
+import { BarraProgresoVideo, useConfirmar } from "@/components/videos/progreso-video";
+import { useTiemposVideo } from "@/components/videos/proyectos-lista";
 
 const TONO: Record<EtapaVideoProspecto, "neutro" | "azul" | "ambar" | "verde" | "rojo"> = {
   "sin-decidir": "ambar",
@@ -44,6 +48,8 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
   const [ocupado, setOcupado] = useState<string | null>(null);
   const corriendo = useRef(new Set<string>());
   const [trabajando, setTrabajando] = useState<string[]>([]);
+  const tiempos = useTiemposVideo();
+  const [confirmar, dialogoConfirmar] = useConfirmar();
 
   const poner = useCallback((v: VideoProspecto) => setFilas((l) => l.map((f) => (f.candidato.id === v.prospectoId ? { ...f, video: v } : f))), []);
 
@@ -88,7 +94,7 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
   }
 
   async function ultimos() {
-    if (!window.confirm("Se agendan los videos de los 3 prospectos más recientes que estén pendientes, sin preguntar uno por uno. Cada uno consulta anuncios y genera imágenes y clips (respetando los topes). ¿Continuar?")) return;
+    if (!(await confirmar("Se agendan los videos de los 3 prospectos más recientes que estén pendientes, sin preguntar uno por uno. Cada uno consulta anuncios y genera imágenes y clips (respetando los topes).", { titulo: "¿Generar para los últimos 3 prospectos?", si: "Sí, generar" }))) return;
     setOcupado("ultimos");
     const r = await generarParaLosUltimos(3);
     setOcupado(null);
@@ -101,6 +107,19 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
     const r = await videosDeProspectos();
     if (!("error" in r)) setFilas(r.filas);
   }
+
+  // La barra avanza sola: mientras algún video esté en marcha se vuelve a consultar, sin recargar la página.
+  const enAvance = filas.some((f) => enMarcha(f.video.etapa) || (f.video.etapa === "lanzado" && !!f.proyecto && f.proyecto.final.estado !== "por-aprobar" && f.proyecto.final.estado !== "aprobada" && (hayTrabajoEnCurso(f.proyecto) || (f.proyecto.auto.activo && !f.proyecto.auto.parada))));
+  useEffect(() => {
+    if (!enAvance) return;
+    const reloj = window.setInterval(() => {
+      if (document.hidden) return;
+      void videosDeProspectos().then((r) => {
+        if (!("error" in r)) setFilas(r.filas);
+      });
+    }, 8000);
+    return () => window.clearInterval(reloj);
+  }, [enAvance]);
 
   if (!filas.length) return null;
   const porDecidir = filas.filter((f) => f.video.etapa === "sin-decidir").length;
@@ -135,7 +154,7 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
       <CardContent className="flex flex-col gap-2">
         {esCeo && <p className="text-xs leading-relaxed text-muted-foreground">{COSTO_ESTIMADO_PROSPECTO}</p>}
         <ul className="flex flex-col gap-2">
-          {filas.map(({ candidato: c, video: v }) => (
+          {filas.map(({ candidato: c, video: v, proyecto }) => (
             <li key={c.id} className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3" data-prospecto={c.id} data-etapa={v.etapa}>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <Chip tono={TONO[v.etapa]}>{trabajando.includes(c.id) && enMarcha(v.etapa) ? "Trabajando…" : ETAPA_VIDEO_LABELS[v.etapa]}</Chip>
@@ -149,6 +168,11 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
                   </Link>
                 )}
               </div>
+              {v.etapa !== "sin-decidir" && v.etapa !== "no" && (
+                <div data-barra-prospecto={c.id}>
+                  <BarraProgresoVideo progreso={progresoDeVideo(proyecto ?? null, tiempos, { etapa: v.etapa, retomarEn: v.retomarEn, detalle: v.detalle })} medido={tiempos.medidos} />
+                </div>
+              )}
               {v.detalle && <p className="text-xs leading-relaxed">{v.detalle}</p>}
               {v.fotos.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -186,6 +210,7 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
             </li>
           ))}
         </ul>
+        {dialogoConfirmar}
       </CardContent>
     </Card>
   );

@@ -43,6 +43,8 @@ export type DatosPlan = {
     producto: string;
     /** La voz del proyecto. Con motor `clip`, las escenas de foto real no hablan: su frase va solo escrita. */
     voz?: VozProyecto;
+    /** Video automático: debe quedar bien sin que nadie lo retoque (mayoría de clips con voz, frases que caben, cierre dicho). */
+    rico?: boolean;
   };
 
 const ORACION = /[^.!?…]+[.!?…]+["”»]?|[^.!?…]+$/g;
@@ -74,13 +76,174 @@ export function repartirVoz(escenas: EscenaProyecto[], repartir: boolean): { esc
       });
     }
   }
-  const largas = salida.filter((e) => e.tipo === "generada" && e.locucion !== "texto" && contarPalabras(e.voz) > palabrasQueCaben(e.duracion));
+  const largas = salida.map((e, i) => ({ ...e, n: i + 1 })).filter((e) => e.tipo === "generada" && e.locucion !== "texto" && contarPalabras(e.voz) > palabrasQueCaben(e.duracion));
   if (largas.length) {
     avisos.push(
       `La frase de la escena ${largas.map((e) => `${e.n} (${contarPalabras(e.voz)} palabras para ${e.duracion} s; caben ${palabrasQueCaben(e.duracion)})`).join(", ")} no cabe dicha con naturalidad en su clip: recórtala o repártela, o el modelo la dirá atropellada o cortada.`,
     );
   }
   return { escenas: salida, avisos };
+}
+
+// ------------------------------------------------ video automático: que quede bien ----
+//
+// Reglas del dueño para un video que nadie va a retocar («que quede muy bien, no
+// cualquier cosa»):
+//  · al menos el 60 % de la duración es clip generado con voz (persona usando el
+//    producto o narrador); las fotos reales quedan para 1–2 inserciones cortas y el cierre;
+//  · clips de 6 a 8 s (el proveedor cobra el de 8 igual), salvo el gancho, que es corto;
+//  · ninguna frase se pasa de lo que cabe en su clip: se alarga la escena o se reparte;
+//  · el cierre se DICE: una escena generada con la oferta y el llamado, y después el rótulo con la foto real;
+//  · no se repite la misma foto en escenas seguidas.
+
+export const PARTE_GENERADA_MINIMA = 0.6;
+const MAX_INSERCIONES_DE_FOTO = 2;
+
+const habla = (e: EscenaProyecto) => e.tipo === "generada" && e.locucion !== "sin-voz" && e.locucion !== "texto" && !!e.voz.trim();
+const parteGenerada = (l: EscenaProyecto[]) => {
+  const total = l.reduce((x, e) => x + e.duracion, 0);
+  return total ? l.filter((e) => e.tipo === "generada").reduce((x, e) => x + e.duracion, 0) / total : 0;
+};
+
+/** Qué le falta a un plan para ser un buen video automático (vacío = cumple). Sirve para pedirle a la IA que lo corrija. */
+export function faltasDeRiqueza(escenas: EscenaProyecto[], vozEnElClip: boolean): string[] {
+  const faltas: string[] = [];
+  const parte = parteGenerada(escenas);
+  if (parte < PARTE_GENERADA_MINIMA) faltas.push(`solo el ${Math.round(parte * 100)} % de la duración es clip generado; debe ser al menos el ${PARTE_GENERADA_MINIMA * 100} %`);
+  const cortos = escenas.filter((e, i) => i > 0 && habla(e) && e.duracion < 6);
+  if (cortos.length) faltas.push(`hay ${cortos.length} clips con voz de menos de 6 s (deben durar de 6 a 8 s; solo el gancho puede ser más corto)`);
+  const largas = escenas.filter((e) => habla(e) && contarPalabras(e.voz) > palabrasQueCaben(e.duracion));
+  if (largas.length) faltas.push(`${largas.length} escenas tienen una frase que no cabe en su duración`);
+  if (vozEnElClip && !escenas.some((e) => e.paso === 5 && habla(e))) faltas.push("el cierre no se dice en voz: falta una escena generada en el paso 5 con la oferta y el llamado, antes del rótulo");
+  const fotos = escenas.filter((e) => e.tipo === "foto-real").length;
+  if (fotos > MAX_INSERCIONES_DE_FOTO) faltas.push(`hay ${fotos} escenas de foto real; como mucho ${MAX_INSERCIONES_DE_FOTO} inserciones cortas del producto, además del cierre`);
+  if (escenas.some((e, i) => i > 0 && e.tipo !== "generada" && escenas[i - 1].tipo !== "generada" && e.fotoUrl && e.fotoUrl === escenas[i - 1].fotoUrl)) faltas.push("se repite la misma foto en escenas seguidas");
+  return faltas;
+}
+
+/** Parte un texto en trozos de oraciones enteras que caben en un clip de 8 s. Una oración sola más larga queda entera. */
+function trozosQueCaben(texto: string): string[] {
+  const tope = palabrasQueCaben(MAX_CLIP);
+  const trozos: string[] = [];
+  let actual: string[] = [];
+  for (const o of oraciones(texto)) {
+    if (actual.length && contarPalabras([...actual, o].join(" ")) > tope) {
+      trozos.push(actual.join(" "));
+      actual = [];
+    }
+    actual.push(o);
+  }
+  if (actual.length) trozos.push(actual.join(" "));
+  return trozos;
+}
+
+/** Los segundos que necesita una frase para decirse con naturalidad, entre un mínimo y los 8 s del clip. */
+const segundosPara = (texto: string, minimo: number) => entre(Math.max(minimo, Math.ceil(contarPalabras(texto) / 2.6) + 1), 3, MAX_CLIP);
+
+/**
+ * Deja un plan dentro de las reglas del video automático SIN IA: alarga o reparte
+ * las frases, dice el cierre, convierte fotos en clips hasta llegar al 60 % y
+ * alterna las fotos. Es el último recurso cuando la IA, tras un reintento, no
+ * cumplió; también sirve para arreglar un plan viejo. Devuelve qué cambió.
+ */
+export function enriquecerPlan(entrada: EscenaProyecto[], d: DatosPlan): { escenas: EscenaProyecto[]; cambios: string[] } {
+  const cambios: string[] = [];
+  const pasos = pasosDelGuion(d.guion);
+  const quien = locucionDeFormato(d.formato.slug);
+  const vozEnElClip = !d.voz || d.voz.motor === "clip";
+  const quePasa = (paso: number) => d.formato.estructura.find((x) => x.paso === paso)?.que_pasa ?? NOMBRE_PASO[paso];
+  const nueva = (base: EscenaProyecto, voz: string, titulo: string, minimo: number): EscenaProyecto => {
+    const duracion = segundosPara(voz, minimo);
+    const p = promptsDePlantilla(d, base.paso, quePasa(base.paso), pasos.find((x) => x.paso === base.paso)?.texto ?? "", duracion, base.paso >= 4);
+    return {
+      ...base,
+      n: 0,
+      tipo: "generada",
+      titulo,
+      duracion,
+      voz,
+      locucion: base.tipo === "generada" && base.locucion !== "texto" && base.locucion !== "sin-voz" ? base.locucion : quien,
+      fotoUrl: null,
+      promptImagen: base.tipo === "generada" && base.promptImagen.trim() ? base.promptImagen : `${p.promptImagen}\nSituación que ilustra esta frase: «${voz}»`,
+      promptVideo: base.tipo === "generada" && base.promptVideo.trim() ? base.promptVideo : p.promptVideo,
+      imagen: piezaNueva(),
+      clip: piezaNueva(),
+    };
+  };
+  let escenas = entrada.map((e) => ({ ...e }));
+
+  // 1) El cierre se dice: una escena generada con la oferta y el llamado, justo antes del rótulo.
+  const iCierre = escenas.findIndex((e) => e.tipo === "cierre");
+  if (vozEnElClip && iCierre >= 0 && !escenas.some((e) => e.paso === 5 && habla(e))) {
+    const frase = escenas[iCierre].voz.trim() || (pasos.find((x) => x.paso === 5)?.voz ?? "");
+    if (frase) {
+      const dicha = nueva({ ...escenas[iCierre], paso: 5 }, frase, "Cierre dicho", 6);
+      escenas = [...escenas.slice(0, iCierre), dicha, { ...escenas[iCierre], voz: "", locucion: "sin-voz" as const }, ...escenas.slice(iCierre + 1)];
+      cambios.push("se agregó una escena hablada con la oferta y el llamado antes del rótulo de cierre");
+    }
+  }
+
+  // 2) Fotos reales: como mucho dos inserciones cortas. Las que llevan frase pasan a clip con voz.
+  const conFrase = escenas.filter((e) => e.tipo === "foto-real" && e.voz.trim());
+  let convertidas = 0;
+  for (const f of conFrase) {
+    const fotos = escenas.filter((e) => e.tipo === "foto-real").length;
+    if (parteGenerada(escenas) >= PARTE_GENERADA_MINIMA && fotos <= MAX_INSERCIONES_DE_FOTO) break;
+    escenas = escenas.map((e) => (e === f ? nueva(e, e.voz, e.titulo, 6) : e));
+    convertidas++;
+  }
+  if (convertidas) cambios.push(`${convertidas} ${convertidas === 1 ? "escena de foto pasó" : "escenas de foto pasaron"} a clip generado con voz (el producto se sigue viendo en las inserciones y en el cierre)`);
+  // Fotos mudas de sobra: se quitan; las que quedan son inserciones cortas.
+  const mudas = escenas.filter((e) => e.tipo === "foto-real" && !e.voz.trim());
+  const sobran = escenas.filter((e) => e.tipo === "foto-real").length - MAX_INSERCIONES_DE_FOTO;
+  if (sobran > 0) {
+    const quitar = new Set(mudas.slice(0, sobran));
+    if (quitar.size) {
+      escenas = escenas.filter((e) => !quitar.has(e));
+      cambios.push(`se quitaron ${quitar.size} inserciones de foto repetidas`);
+    }
+  }
+  escenas = escenas.map((e) => (e.tipo === "foto-real" ? { ...e, duracion: Math.min(e.duracion, 3) } : e));
+
+  // 3) Frases y duraciones: cada clip con voz dura lo que su frase necesita (6–8 s; el gancho puede ser corto);
+  //    lo que no cabe ni en 8 s se reparte por oraciones en otra escena.
+  let alargadas = 0;
+  let repartidas = 0;
+  escenas = escenas.flatMap((e, i) => {
+    if (!habla(e)) return [e];
+    const trozos = trozosQueCaben(e.voz);
+    const minimo = i === 0 ? 3 : 6;
+    const primera = { ...e, voz: trozos[0], duracion: segundosPara(trozos[0], minimo) };
+    if (primera.duracion !== e.duracion) alargadas++;
+    if (trozos.length === 1) return [primera];
+    repartidas++;
+    return [primera, ...trozos.slice(1).map((t, k) => nueva({ ...e, promptImagen: `${e.promptImagen}\nMisma situación y mismo personaje, otro ángulo (continuación ${k + 2}).`, promptVideo: e.promptVideo }, t, `${e.titulo} (sigue)`, 6))];
+  });
+  if (alargadas) cambios.push(`${alargadas} ${alargadas === 1 ? "clip se ajustó" : "clips se ajustaron"} a la duración que su frase necesita (6–8 s)`);
+  if (repartidas) cambios.push(`${repartidas} ${repartidas === 1 ? "frase larga se repartió" : "frases largas se repartieron"} en dos escenas, por oraciones`);
+
+  // 4) Si todavía falta clip generado, las fotos sin frase que queden también pasan a clip (con narración vacía no: se dejan).
+  // 5) No repetir la misma foto en escenas seguidas.
+  if (d.fotos.length > 1) {
+    let anterior: string | null = null;
+    let alternadas = 0;
+    escenas = escenas.map((e) => {
+      if (e.tipo === "generada") {
+        anterior = null;
+        return e;
+      }
+      let foto = e.fotoUrl;
+      if (foto && foto === anterior) {
+        foto = d.fotos[(d.fotos.indexOf(foto) + 1) % d.fotos.length];
+        alternadas++;
+      }
+      anterior = foto;
+      return { ...e, fotoUrl: foto };
+    });
+    // El cierre y la inserción anterior tampoco comparten foto si hay otra.
+    if (alternadas) cambios.push("se alternaron las fotos para no repetir la misma en escenas seguidas");
+  }
+  return { escenas: numerar(escenas.slice(0, MAX_ESCENAS_PROYECTO)), cambios };
 }
 
 /** El bloque de audio que se agrega al prompt del clip: quién habla, qué dice, en qué acento y con qué voz (siempre la misma). */

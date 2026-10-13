@@ -1,7 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   DollarSign,
@@ -26,6 +27,7 @@ import { ChatBadge } from "@/components/chat/chat-badge";
 import { CurrencyWidget } from "@/components/currency-widget";
 import { RentabilidadWidget } from "@/components/ceo/rentabilidad-widget";
 import { ROLE_LABELS, INGRESOS_ROLES, VIDEOS_ROLES, type UserRole } from "@/lib/roles";
+import { VISTAS_CREATIVOS, vistaDeParametros } from "@/lib/videos-vistas";
 
 // Ingresos/Prospectos/Clientes usan INGRESOS_ROLES (de lib/roles.ts) en vez
 // de una lista aparte — antes había una copia hardcodeada acá que se
@@ -71,6 +73,24 @@ const OCULTOS = [
 // El mismo orden de siempre, solo separado en bloques con su rótulo.
 const GRUPOS = ["Operación", "Comercial", "Equipo"] as const;
 
+const SUBENLACE =
+  "ml-7 rounded-md px-2.5 py-1.5 text-[13px] text-white/60 outline-none transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:ring-2 focus-visible:ring-[#00c6ff]/60 aria-[current=page]:bg-white/10 aria-[current=page]:font-medium aria-[current=page]:text-white";
+
+/** Las subentradas de «Creativos», con la activa según `?vista=` (lee la dirección: por eso va dentro de Suspense). */
+function SubCreativos({ enSeccion }: { enSeccion: boolean }) {
+  const parametros = useSearchParams();
+  const actual = enSeccion ? vistaDeParametros(parametros.get("vista"), parametros.get("guion")) : null;
+  return (
+    <>
+      {VISTAS_CREATIVOS.filter((v) => v.enMenu).map((v) => (
+        <Link key={v.clave} href={`/videos?vista=${v.clave}`} aria-current={actual === v.clave ? "page" : undefined} className={SUBENLACE}>
+          {v.nombre}
+        </Link>
+      ))}
+    </>
+  );
+}
+
 export function Sidebar({
   role,
   name,
@@ -115,7 +135,7 @@ export function Sidebar({
               {delGrupo.map((link) => {
                 const Icon = link.icon;
                 const active = link.href === hrefActivo;
-                return (
+                const enlace = (
                   <Link
                     key={link.href}
                     href={link.href}
@@ -126,6 +146,22 @@ export function Sidebar({
                     {link.label}
                     {link.href === "/chat" && <ChatBadge userId={userId} />}
                   </Link>
+                );
+                if (link.href !== "/videos") return enlace;
+                // «Creativos» despliega sus secciones: siempre al estar dentro, y al pasar o enfocar desde fuera.
+                return (
+                  <div key={link.href} className="group/creativos flex flex-col gap-0.5">
+                    {enlace}
+                    <div
+                      role="group"
+                      aria-label="Secciones de Creativos"
+                      className={active ? "flex flex-col gap-0.5 pb-1" : "hidden flex-col gap-0.5 pb-1 group-focus-within/creativos:flex md:group-hover/creativos:flex"}
+                    >
+                      <Suspense fallback={null}>
+                        <SubCreativos enSeccion={active} />
+                      </Suspense>
+                    </div>
+                  </div>
                 );
               })}
             </div>

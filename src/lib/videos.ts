@@ -544,12 +544,45 @@ export function reemplazarPasoCinco(guion: string, bloqueNuevo: string): string 
   return [...lineas.slice(0, b.inicio), ...bloqueNuevo.split("\n"), ...lineas.slice(b.fin)].join("\n");
 }
 
-/** Primera línea de todo guion: deja escrito de dónde salió el mercado. */
-export function lineaMercado(refs: Referencia[]): string {
-  const n = referenciasUtiles(refs).length;
-  return n
-    ? `MERCADO: ${n} ${n === 1 ? "referencia pegada" : "referencias pegadas"} por el equipo (la IA no vio los anuncios)`
-    : "MERCADO: sin referencias de mercado";
+/** Primera línea de todo guion: deja escrito, con verdad, de dónde salió el mercado (anuncios consultados, página, referencias pegadas). */
+export function lineaMercado(d: Pick<DatosVideo, "referencias" | "anunciosHallados" | "analisisProducto" | "analisisLeyoPagina" | "pais">): string {
+  const n = referenciasUtiles(d.referencias).length;
+  const a = d.anunciosHallados.length;
+  const partes = [
+    a ? `${a} ${a === 1 ? "anuncio activo" : "anuncios activos"} de Meta consultados (${nombrePais(d.pais)}; solo su texto y sus días activos)` : "",
+    d.analisisLeyoPagina ? "la página del producto" : "",
+    n ? `${n} ${n === 1 ? "referencia pegada" : "referencias pegadas"} por el equipo` : "",
+  ].filter(Boolean);
+  if (partes.length) return `MERCADO: investigación con ${partes.join(" + ")}`;
+  return d.analisisProducto.trim() ? "MERCADO: investigación con los datos del cliente (sin anuncios consultados)" : "MERCADO: sin referencias de mercado";
+}
+
+/** La moneda de cada país (código ISO). Solo se usa cuando la página no dice en qué moneda está su precio. */
+export const MONEDA_DE_PAIS: Record<string, string> = { CO: "COP", EC: "USD", MX: "MXN", PE: "PEN", CL: "CLP", AR: "ARS", PA: "USD", DO: "DOP", GT: "GTQ", VE: "USD", ES: "EUR", US: "USD" };
+/** Cómo se dice cada moneda en voz. */
+export const NOMBRE_MONEDA: Record<string, string> = { EUR: "euros", USD: "dólares", COP: "pesos", MXN: "pesos", ARS: "pesos", CLP: "pesos", DOP: "pesos", PEN: "soles", GTQ: "quetzales" };
+
+/** Un precio escrito para el rótulo: «79 €», «$89.900 COP». */
+export function precioEscrito(valor: number, moneda: string): string {
+  if (moneda === "EUR") return `${valor.toLocaleString("es-ES", { minimumFractionDigits: valor % 1 ? 2 : 0, maximumFractionDigits: 2 })} €`;
+  return `$${valor.toLocaleString("es-CO", { maximumFractionDigits: valor % 1 ? 2 : 0 })}${moneda ? ` ${moneda}` : ""}`;
+}
+
+/** «Ceryon Eclipse – Gafas de filtro… · lente roja» → «Ceryon Eclipse»: el nombre corto para la oferta y el rótulo. */
+export function nombreCorto(titulo: string): string {
+  const primero = titulo.split(/\s[–—|·:-]\s/)[0].trim();
+  return (primero.length >= 3 && primero.length <= 48 ? primero : titulo.trim()).slice(0, 60);
+}
+
+/** La categoría del producto, sin la marca: «Ceryon Eclipse – Gafas de filtro de luz azul para dormir» → «Gafas de filtro de luz azul para dormir». */
+export function categoriaDeProducto(producto: string, cliente: string): string {
+  const marca = new Set(cliente.toLowerCase().split(/\s+/).filter((p) => p.length > 2));
+  const trozos = producto
+    .split(/\s[–—|·:-]\s/)
+    .map((t) => t.trim())
+    .filter((t) => t.split(/\s+/).length >= 2 && !t.toLowerCase().split(/\s+/).some((p) => marca.has(p)));
+  // El trozo más descriptivo es el más largo que no nombra la marca.
+  return (trozos.sort((a, b) => b.length - a.length)[0] ?? "").slice(0, 80);
 }
 
 /** El porqué (una línea) con que la investigación recomendó un formato. Vacío si no lo recomendó. */

@@ -16,6 +16,8 @@ import { MAX_ANUNCIOS_GUARDADOS, VARIABLES_ANUNCIOS, leerAnuncios, type AnuncioV
 export const TOPE_DIARIO_INVESTIGACIONES = 10;
 /** Con menos anuncios útiles que esto en un país, se intenta el siguiente. */
 export const MINIMO_UTILES = 5;
+/** Con menos anuncios del producto que esto, se amplía a su categoría en el mismo país. */
+export const MINIMO_CATEGORIA = 3;
 export const DIAS_CACHE = 7;
 /** Plazo total para la fuente de anuncios, en ms. La acción entera debe caber en la función de Vercel. */
 export const PLAZO_ANUNCIOS_MS = 75_000;
@@ -87,7 +89,7 @@ function motivoDeFallo(mensaje: string): string {
  * Anuncios activos de Meta para un producto y un país, con caché y topes.
  * Nunca lanza: si algo no se pudo consultar, lo dice en `fuente.detalle`.
  */
-export async function consultarAnuncios(entrada: { producto: string; palabraClave: string; pais: string; forzar?: boolean }): Promise<ResultadoAnuncios> {
+export async function consultarAnuncios(entrada: { producto: string; palabraClave: string; pais: string; forzar?: boolean; categoria?: string }): Promise<ResultadoAnuncios> {
   const palabra = terminoDeBusqueda(entrada.producto, entrada.palabraClave);
   const via = viaAnuncios();
   if (!via) {
@@ -103,7 +105,10 @@ export async function consultarAnuncios(entrada: { producto: string; palabraClav
     };
   }
 
-  const huella = createHash("sha1").update(`${via}|${entrada.pais}|${palabra.toLowerCase()}`).digest("hex").slice(0, 24);
+  // Si los anuncios del producto son pocos, la segunda consulta va a su CATEGORÍA en el mismo país (no a otro país).
+  const categoria = terminoDeBusqueda(entrada.categoria ?? "", "");
+  const conCategoria = !!categoria && categoria.toLowerCase() !== palabra.toLowerCase();
+  const huella = createHash("sha1").update(`${via}|${entrada.pais}|${palabra.toLowerCase()}${conCategoria ? `|cat:${categoria.toLowerCase()}` : ""}`).digest("hex").slice(0, 24);
   const rutaCache = `${CARPETA}/cache-${huella}.json`;
   if (!entrada.forzar) {
     const g = (await leerJson(rutaCache)) as Guardado | null;
@@ -138,7 +143,7 @@ export async function consultarAnuncios(entrada: { producto: string; palabraClav
 
   const hasta = Date.now() + PLAZO_ANUNCIOS_MS;
   const tema = palabrasDelTema(entrada.producto, entrada.palabraClave);
-  const paises = [...new Set([entrada.pais, ...RESPALDO])];
+  const paises = conCategoria ? [entrada.pais] : [...new Set([entrada.pais, ...RESPALDO])];
   const consultados: string[] = [];
   const notas: string[] = [];
   let utiles: AnuncioCrudo[] = [];
@@ -161,6 +166,22 @@ export async function consultarAnuncios(entrada: { producto: string; palabraClav
         fallo = m;
         break; // Sin reintentos y sin probar otro país: si la cuenta falla, fallará igual.
       }
+    }
+  }
+
+  // Pocos anuncios del producto: panorama de la categoría en ese mismo país (segunda y última consulta).
+  if (conCategoria && !fallo && consultados.length && utiles.length < MINIMO_CATEGORIA) {
+    try {
+      const temaCategoria = palabrasDelTema(entrada.categoria ?? "", "");
+      const crudos = await buscarAnuncios(categoria, entrada.pais, hasta);
+      const buenos = filtrarYOrdenar(crudos, temaCategoria);
+      notas.push(`categoría «${categoria}» en ${entrada.pais}: ${crudos.length} recibidos, ${buenos.length} de la categoría`);
+      // Primero los del producto; después los de la categoría que no estén ya.
+      const vistos = new Set(utiles.map((a) => a.enlace));
+      utiles = [...utiles, ...buenos.filter((a) => !vistos.has(a.enlace))];
+    } catch (err) {
+      const m = err instanceof Error ? err.message : "error desconocido";
+      notas.push(m === "SIN_TIEMPO" ? "categoría: no alcanzó el tiempo" : `categoría: falló (${m.slice(0, 80)})`);
     }
   }
 
