@@ -1,5 +1,6 @@
 import "server-only";
 import { llamarClaude } from "@/lib/ia-claude";
+import { textoDeReferencia } from "@/lib/clonacion-video";
 import { lineaAnuncio } from "@/lib/investigacion-video/tipos";
 import { fichaConDatos, textoFicha } from "@/lib/proyecto-video";
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -224,7 +225,9 @@ export type AnuncioReferencia = {
  * `generarGuionVideo` recibe el texto y arma el guion bloque a bloque.
  */
 export async function analizarAnuncioReferencia(datos: DatosVideo): Promise<AnuncioReferencia> {
-  const texto = datos.anuncioClon.trim();
+  // La estructura toma por toma del formulario guiado y lo que se haya pegado (transcripción) van juntos.
+  const tomas = datos.referenciaTomas.length ? `ESTRUCTURA TOMA POR TOMA (descrita por el equipo):\n${textoDeReferencia(datos.referenciaTomas)}` : "";
+  const texto = [tomas, datos.anuncioClon.trim()].filter(Boolean).join("\n\n");
   return { fuente: texto ? "pegado" : "sin_referencia", texto, enlace: enlaceSeguro(datos.anuncioClonEnlace) ?? "" };
 }
 

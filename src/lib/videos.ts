@@ -4,6 +4,7 @@
 // (bucket `chat-files`, carpeta `videos/`), escrito y leído solo por acciones
 // del servidor. Ver `src/app/(protected)/videos/actions.ts`.
 import { leerAnuncios, leerFuentes, type AnuncioVideo, type FuenteConsultada } from "@/lib/investigacion-video/tipos";
+import { leerTomas, type TomaReferencia } from "@/lib/clonacion-video";
 import { MAX_FOTOS_PROYECTO, leerFicha, leerProyecto, type FichaProducto, type ProyectoVideo } from "@/lib/proyecto-video";
 
 export { VIDEOS_ROLES } from "@/lib/roles";
@@ -151,6 +152,8 @@ export type DatosVideo = {
   fotosProducto: string[];
   /** Ficha del producto: lo que la IA vio en las fotos y lo que se preguntó, confirmado por una persona. */
   fichaProducto: FichaProducto;
+  /** «Clonar anuncio»: la estructura de la referencia, toma por toma (función, duración, tipo, encuadre). Vacío = no se clona. */
+  referenciaTomas: TomaReferencia[];
 };
 
 /** Rótulo honesto de la investigación: dice de dónde salió lo que se lee. */
@@ -392,6 +395,7 @@ export function leerDatosVideo(raw: unknown): DatosVideo {
       .map((x) => x.slice(0, 600))
       .slice(0, MAX_FOTOS_PROYECTO),
     fichaProducto: leerFicha(o.fichaProducto),
+    referenciaTomas: leerTomas(o.referenciaTomas),
   };
 }
 
