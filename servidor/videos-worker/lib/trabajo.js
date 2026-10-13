@@ -1,5 +1,7 @@
 "use strict";
 // Un trabajo de punta a punta: generar cada escena → voz → montar → subir → reportar.
+// (Este es el video completo «de los de antes»: un trabajo SIN `etapa`. Los trabajos
+// con `etapa` — proyecto por escenas — los atiende lib/etapas.js; ver `procesar`.)
 //
 // Todo lo que se va haciendo queda en `datos/trabajos/<id>/` con un
 // `estado.json`. Si el proceso se cae o el equipo se reinicia, al volver se
@@ -10,6 +12,8 @@ const { tamano } = require("./ffmpeg");
 const { armarAss } = require("./subtitulos");
 const voz = require("./voz");
 const { TrabajoSoltado } = require("./crm");
+const { procesarEtapa, anotarCosto: anotarFila } = require("./etapas");
+const { limpiarProyectos } = require("./proyecto");
 
 const dos = (n) => String(n).padStart(2, "0");
 const redondo = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
@@ -58,9 +62,12 @@ function limpiarRestos(cfg) {
       .reverse();
     for (const f of videos.slice(cfg.config.conservarEntregados || 30)) fs.rmSync(path.join(cfg.carpetas.entregados, f), { force: true });
   }
+  limpiarProyectos(cfg);
 }
 
 async function procesar(trabajo, deps) {
+  // Proyecto por escenas: imágenes, clips o armado. Sin `etapa`, el video completo de siempre.
+  if (trabajo && trabajo.etapa) return procesarEtapa(trabajo, deps);
   const { cfg, crm, ff, proveedor, registro } = deps;
   const carpeta = path.join(cfg.carpetas.trabajos, trabajo.id);
   fs.mkdirSync(carpeta, { recursive: true });
@@ -318,20 +325,19 @@ async function procesar(trabajo, deps) {
   }
 }
 
-/** Una línea por trabajo en `registro/costos.csv`: con esto se estima el gasto del mes. */
+/** Una línea por trabajo en `registro/costos.csv` (las columnas las define lib/etapas.js). */
 function anotarCosto(cfg, t, proveedor, estado, duracion, resultado) {
-  try {
-    fs.mkdirSync(cfg.carpetas.registro, { recursive: true });
-    const archivo = path.join(cfg.carpetas.registro, "costos.csv");
-    if (!fs.existsSync(archivo)) fs.writeFileSync(archivo, "fecha,trabajo,guion,version,formato,proveedor,modelos,resultado,segundos_video,segundos_generados,costo_estimado_usd,creditos\n");
-    const costo = estado.costoDesconocido || estado.costoUsd === null ? "" : redondo(estado.costoUsd, 3);
-    fs.appendFileSync(
-      archivo,
-      [new Date().toISOString(), t.id, t.guionId, t.version, t.formato, proveedor, `"${estado.modelos.join(" ")}"`, resultado, redondo(duracion), redondo(estado.segundosGenerados), costo, estado.creditos ? redondo(estado.creditos, 2) : ""].join(",") + "\n",
-    );
-  } catch {
-    /* el registro de costos no debe tumbar un trabajo */
-  }
+  anotarFila(cfg, {
+    trabajo: t,
+    etapa: resultado === "un-clip" ? "un-clip" : "completo",
+    proveedor,
+    modelos: estado.modelos,
+    resultado: resultado === "un-clip" ? "listo" : resultado,
+    segundosVideo: duracion,
+    segundosGenerados: estado.segundosGenerados,
+    costoUsd: estado.costoDesconocido || estado.costoUsd === null ? null : estado.costoUsd,
+    creditos: estado.creditos,
+  });
 }
 
 /**

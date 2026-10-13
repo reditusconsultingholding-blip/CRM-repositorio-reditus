@@ -63,7 +63,7 @@ function frases(palabras, maxPalabras = 3, maxLetras = 18) {
  * Arma el archivo .ass completo.
  * `tramos`: [{ texto, desde, dura }] — lo que se dice en cada escena y cuándo.
  */
-function armarAss(tramos, { ancho, alto, fuente = "Arial", resaltado = "FFE600", maxPalabras = 3 }) {
+function armarAss(tramos, { ancho, alto, fuente = "Arial", resaltado = "FFE600", maxPalabras = 3 }, extra = null) {
   const tamano = Math.round(Math.min(ancho, alto) * 0.082);
   // ASS escribe los colores al revés (azul-verde-rojo).
   const bgr = resaltado.slice(4, 6) + resaltado.slice(2, 4) + resaltado.slice(0, 2);
@@ -77,6 +77,7 @@ function armarAss(tramos, { ancho, alto, fuente = "Arial", resaltado = "FFE600",
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    ...((extra && extra.estilos) || []),
     `Style: Anuncio,${fuente},${tamano},&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,${Math.round(tamano * 0.09)},${Math.round(tamano * 0.03)},2,${Math.round(ancho * 0.07)},${Math.round(ancho * 0.07)},${Math.round(alto * 0.24)},1`,
     "",
     "[Events]",
@@ -96,7 +97,9 @@ function armarAss(tramos, { ancho, alto, fuente = "Arial", resaltado = "FFE600",
       });
     }
   }
-  return { ass: [...cabecera, ...eventos, ""].join("\n"), eventos: eventos.length };
+  // `extra`: estilos y eventos ya armados que van en el mismo archivo (el rótulo de cierre).
+  const otros = (extra && extra.eventos) || [];
+  return { ass: [...cabecera, ...otros, ...eventos, ""].join("\n"), eventos: eventos.length + otros.length };
 }
 
 module.exports = { armarAss, palabrasConTiempo, frases };

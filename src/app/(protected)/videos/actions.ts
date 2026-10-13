@@ -34,6 +34,9 @@ import {
   regenerarCierreGuion,
 } from "@/lib/videos-server";
 import { consultarFuentes, investigarProducto, type AnalisisProducto, type FuentesConsultadas } from "@/lib/videos-investigacion";
+import { sellarFicha } from "@/lib/proyecto-video";
+import { heredarProyecto } from "@/lib/proyecto-video-plan";
+import { ponerAlDiaProyecto } from "@/lib/proyecto-video-server";
 import { ORIGEN_PROSPECCION, leerProspeccion } from "@/lib/prospeccion";
 import { guardarProspeccion, leerFila } from "@/lib/prospeccion-server";
 import {
@@ -136,6 +139,7 @@ function agregarVersion(
     videoUrl: null,
     videoTrabajoId: null,
     videoAprobado: null,
+    proyecto: null,
   };
   g.versiones = [...g.versiones, nueva];
   g.guion = nueva.guion;
@@ -206,14 +210,15 @@ export async function analizarProducto(raw: unknown): Promise<AnalisisProducto |
 }
 
 /** «Mis videos»: el último trabajo de video de cada guion que pidió quien llama (hasta 8). */
-export async function misVideos(): Promise<{ trabajos: Record<string, TrabajoVista> } | { error: string }> {
+export async function misVideos(): Promise<{ trabajos: Record<string, TrabajoVista>; guiones: GuionGuardado[] } | { error: string }> {
   return seguro(async () => {
     const a = await entrar();
     if ("error" in a) return a;
-    const { guiones } = await listarGuiones(createAdminClient());
+    const admin = createAdminClient();
+    const { guiones: leidos0 } = await listarGuiones(admin);
+    // Los proyectos por escenas recogen aquí lo que el servidor ya entregó.
+    const guiones = await Promise.all(leidos0.filter((g) => g.autorId === a.profile.id).slice(0, 8).map(async (g) => (await ponerAlDiaProyecto(admin, g, false)).g));
     const pares = guiones
-      .filter((g) => g.autorId === a.profile.id)
-      .slice(0, 8)
       .map((g) => ({ id: g.id, trabajo: versionVigente(g)?.videoTrabajoId ?? null }))
       .filter((x): x is { id: string; trabajo: string } => !!x.trabajo && ID_TRABAJO.test(x.trabajo));
     const leidos = await Promise.all(pares.map((p) => buscarTrabajo(p.trabajo)));
@@ -222,7 +227,7 @@ export async function misVideos(): Promise<{ trabajos: Record<string, TrabajoVis
       const t = leidos[i];
       if (t) trabajos[p.id] = vistaTrabajo(t.trabajo);
     });
-    return { trabajos };
+    return { trabajos, guiones };
   });
 }
 
@@ -281,10 +286,12 @@ export async function guardarGuionVideo(entrada: {
 
     const admin = createAdminClient();
     const ahora = new Date().toISOString();
+    const quien = { id: a.profile.id, nombre: a.profile.name };
 
     if (!entrada.id) {
       const nuevo: GuionGuardado = {
         ...p.datos,
+        fichaProducto: sellarFicha(p.datos.fichaProducto, null, quien, ahora),
         id: randomUUID(),
         version: 1,
         formatoNombre: p.formato.nombre,
@@ -313,6 +320,7 @@ export async function guardarGuionVideo(entrada: {
     const g: GuionGuardado = {
       ...previo,
       ...p.datos,
+      fichaProducto: sellarFicha(p.datos.fichaProducto, previo.fichaProducto, quien, ahora),
       formatoNombre: p.formato.nombre,
       formatosVersion: FORMATOS_VERSION,
       prospectoId: prospectoId ?? previo.prospectoId,
@@ -369,6 +377,19 @@ async function encolarVideoDeCorreccion(
   nueva: VersionGuion,
   profile: Profile,
 ): Promise<string | undefined> {
+  // La versión anterior era un proyecto por escenas: pasa a la nueva con todo lo
+  // aprobado. NO se regenera el video: solo hay que volver a armar (sin costo) o
+  // marcar en «Corregir» la escena que deba cambiar.
+  if (anterior?.proyecto) {
+    const h = heredarProyecto(anterior.proyecto, anterior.guion, nueva.guion, {
+      ...anterior.proyecto.contexto,
+      producto: g.producto,
+      pais: g.pais,
+      cierre: { oferta: g.oferta, llamadoALaAccion: g.llamado },
+    });
+    g.versiones = g.versiones.map((v) => (v.n === nueva.n ? { ...v, proyecto: h.proyecto } : v));
+    return `El proyecto por escenas pasó a la v${nueva.n} con todo lo aprobado. ${h.avisos.join(" ")}`;
+  }
   if (!servidorVideoActivo() || !anterior || (!anterior.videoUrl && !anterior.videoTrabajoId)) return undefined;
   const previo = anterior.videoTrabajoId ? await buscarTrabajo(anterior.videoTrabajoId) : null;
   const pedido: PedidoVideo | undefined = previo
@@ -523,6 +544,7 @@ export async function solicitarVideo(id: string, pedido?: PedidoVideo): Promise<
     if ("error" in x) return x;
     const version = versionVigente(x.g);
     if (!version) return { error: "Este guion no tiene versiones." };
+    if (version.proyecto) return { error: "Esta versión ya es un proyecto por escenas: genera sus imágenes y clips y usa «Armar video», que no cuesta." };
     const r = await crearTrabajoVideo(x.admin, x.g, version, { id: x.profile.id, nombre: x.profile.name }, pedido, "manual");
     if ("error" in r) return r;
     // Regenerar: el video anterior de esta versión deja de contar hasta que llegue el nuevo.
@@ -571,9 +593,18 @@ export async function aprobarVideo(id: string, n: number): Promise<ConGuion> {
       if (t && trabajoActivo(t.trabajo.estado)) return { error: "Se está generando un video nuevo para esa versión: espera a que termine." };
     }
     if (v.videoAprobado) return { guardado: x.g };
+    if (v.proyecto && (v.proyecto.final.estado !== "por-aprobar" || v.proyecto.final.url !== v.videoUrl)) {
+      return { error: "Ese video ya no es el vigente del proyecto: hay cambios por armar. Arma de nuevo y aprueba el resultado." };
+    }
     const ahora = new Date().toISOString();
     x.g.versiones = x.g.versiones.map((y) =>
-      y.n === n ? { ...y, videoAprobado: { porId: x.profile.id, por: x.profile.name, fecha: ahora } } : y,
+      y.n === n
+        ? {
+            ...y,
+            videoAprobado: { porId: x.profile.id, por: x.profile.name, fecha: ahora },
+            proyecto: y.proyecto ? { ...y.proyecto, final: { ...y.proyecto.final, estado: "aprobada" as const } } : null,
+          }
+        : y,
     );
     x.g.actualizadoAt = ahora;
     return guardar(x.admin, x.g);

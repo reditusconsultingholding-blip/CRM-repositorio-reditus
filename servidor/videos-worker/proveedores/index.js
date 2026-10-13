@@ -26,6 +26,8 @@
 //     memoria,                      lo que este proveedor guardó de esta escena en un intento anterior
 //     recordar(obj),                guarda datos de la escena en disco (p. ej. el id de la petición, para no pagarla dos veces)
 //     latir(detalle),               avisa al CRM que el trabajo sigue vivo (llamar en esperas largas)
+//     primerFotograma,              true en la etapa «clips» del proyecto por escenas: trabajo.imagenesProducto[0] es la
+//                                   imagen base YA aprobada y debe ser el primer fotograma del clip (imagen a video)
 //   }
 const fs = require("fs");
 const path = require("path");

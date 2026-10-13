@@ -4,6 +4,7 @@
 // (bucket `chat-files`, carpeta `videos/`), escrito y leído solo por acciones
 // del servidor. Ver `src/app/(protected)/videos/actions.ts`.
 import { leerAnuncios, leerFuentes, type AnuncioVideo, type FuenteConsultada } from "@/lib/investigacion-video/tipos";
+import { MAX_FOTOS_PROYECTO, leerFicha, leerProyecto, type FichaProducto, type ProyectoVideo } from "@/lib/proyecto-video";
 
 export { VIDEOS_ROLES } from "@/lib/roles";
 
@@ -146,6 +147,10 @@ export type DatosVideo = {
   fuentesInvestigacion: FuenteConsultada[];
   /** Fecha ISO si los anuncios salieron de una consulta guardada; vacío si son frescos. */
   investigacionCache: string;
+  /** Fotos reales del producto (https). Se animan tal cual en las escenas de producto y en el cierre. */
+  fotosProducto: string[];
+  /** Ficha del producto: lo que la IA vio en las fotos y lo que se preguntó, confirmado por una persona. */
+  fichaProducto: FichaProducto;
 };
 
 /** Rótulo honesto de la investigación: dice de dónde salió lo que se lee. */
@@ -224,6 +229,8 @@ export type VersionGuion = {
   videoTrabajoId: string | null;
   /** Quién aprobó el video. Sin esto está «Por aprobar» y no puede salir hacia el cliente. */
   videoAprobado: AprobacionVideo | null;
+  /** Proyecto por escenas de esta versión (`lib/proyecto-video.ts`). Null en los guiones de antes: se pueden convertir. */
+  proyecto: ProyectoVideo | null;
 };
 
 export type AprobacionVideo = { porId: string; por: string; fecha: string };
@@ -289,6 +296,7 @@ function leerVersiones(raw: unknown): VersionGuion[] {
       videoUrl: txt(x.videoUrl, 600) || null,
       videoTrabajoId: txt(x.videoTrabajoId, 40) || null,
       videoAprobado: leerAprobacion(x.videoAprobado),
+      proyecto: leerProyecto(x.proyecto),
     };
   });
 }
@@ -379,6 +387,11 @@ export function leerDatosVideo(raw: unknown): DatosVideo {
     anunciosHallados: leerAnuncios(o.anunciosHallados),
     fuentesInvestigacion: leerFuentes(o.fuentesInvestigacion),
     investigacionCache: txt(o.investigacionCache, 40),
+    fotosProducto: (Array.isArray(o.fotosProducto) ? o.fotosProducto : [])
+      .filter((x): x is string => typeof x === "string" && x.startsWith("https://"))
+      .map((x) => x.slice(0, 600))
+      .slice(0, MAX_FOTOS_PROYECTO),
+    fichaProducto: leerFicha(o.fichaProducto),
   };
 }
 
@@ -413,6 +426,7 @@ export function leerGuionGuardado(raw: unknown): GuionGuardado | null {
         videoUrl: null,
         videoTrabajoId: null,
         videoAprobado: null,
+        proyecto: null,
       },
     ];
   }

@@ -10,7 +10,20 @@ export const MODELO_IA = "claude-sonnet-5";
 
 export type ResultadoIA = { texto: string } | { error: string };
 
-export async function llamarClaude(system: string, user: string, maxTokens: number): Promise<ResultadoIA> {
+/**
+ * Igual que `llamarClaude`, pero la persona manda además imágenes. Van como
+ * bloques `image` con `source: { type: "url" }` de la API de mensajes: solo
+ * enlaces https públicos (los descarga Anthropic, no este servidor).
+ */
+export async function llamarClaudeConImagenes(system: string, user: string, imagenes: string[], maxTokens: number): Promise<ResultadoIA> {
+  const urls = imagenes.filter((u) => /^https:\/\//i.test(u)).slice(0, 4);
+  if (!urls.length) return { error: "No hay fotos con enlace https para analizar." };
+  return llamarClaude(system, [...urls.map((url) => ({ type: "image" as const, source: { type: "url" as const, url } })), { type: "text" as const, text: user }], maxTokens);
+}
+
+type BloqueIA = { type: "text"; text: string } | { type: "image"; source: { type: "url"; url: string } };
+
+export async function llamarClaude(system: string, user: string | BloqueIA[], maxTokens: number): Promise<ResultadoIA> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return {

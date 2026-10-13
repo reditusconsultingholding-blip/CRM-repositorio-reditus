@@ -30,9 +30,13 @@ function crearCrm(cfg) {
     progreso: (t, datos) => llamar(`${t.id}/progreso`, { toma: t.toma, ...datos }),
     fallo: (t, datos) => llamar(`${t.id}/fallo`, { toma: t.toma, ...datos }),
 
-    /** Sube el MP4 con la URL firmada que entrega el CRM y reporta el resultado. */
-    async entregar(t, archivo, datos) {
-      const { subida } = await llamar(`${t.id}/resultado`, { toma: t.toma, pedirSubida: true });
+    /**
+     * Pide una URL firmada y sube el archivo. Devuelve la ruta que hay que reportar.
+     * `que`: { tipo: "imagen" | "clip" | "final", escena?: n } (proyecto por escenas).
+     * Sin `que` es la subida de siempre (video completo de los de antes).
+     */
+    async subir(t, archivo, que = null) {
+      const { subida } = await llamar(`${t.id}/resultado`, { toma: t.toma, pedirSubida: true, ...(que || {}) });
       const cuerpo = fs.readFileSync(archivo);
       let ultimo;
       for (const espera of [0, 3000, 10000]) {
@@ -47,7 +51,16 @@ function crearCrm(cfg) {
         }
       }
       if (ultimo) throw ultimo;
-      return llamar(`${t.id}/resultado`, { toma: t.toma, ruta: subida.ruta, ...datos });
+      return subida.ruta;
+    },
+
+    /** Cierra un trabajo de etapa «imagenes» o «clips» (las escenas ya se reportaron por `progreso`). */
+    cerrar: (t, datos) => llamar(`${t.id}/resultado`, { toma: t.toma, ...datos }),
+
+    /** Sube el MP4 con la URL firmada que entrega el CRM y reporta el resultado. */
+    async entregar(t, archivo, datos, que = null) {
+      const ruta = await this.subir(t, archivo, que);
+      return llamar(`${t.id}/resultado`, { toma: t.toma, ruta, ...datos });
     },
   };
 }

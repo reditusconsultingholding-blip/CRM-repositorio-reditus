@@ -2,6 +2,7 @@
 
 import { FolderOpen } from "lucide-react";
 import { versionVigente, videoAprobado, type GuionGuardado } from "@/lib/videos";
+import { resumenProyecto } from "@/lib/proyecto-video";
 import type { TrabajoVista } from "@/lib/trabajos-video";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,11 @@ export type EstadoMiVideo = { etiqueta: string; tono: Tono; detalle: string };
 /** En qué va un guion, dicho en claro para quien lo pidió. */
 export function estadoMiVideo(g: GuionGuardado, t: TrabajoVista | undefined): EstadoMiVideo {
   const v = versionVigente(g);
+  // Proyecto por escenas: dice en qué etapa va y qué le toca a la persona.
+  if (v?.proyecto) {
+    const r = resumenProyecto(v.proyecto);
+    return { etiqueta: r.etiqueta, tono: r.tono, detalle: r.detalle };
+  }
   if (v?.videoUrl && videoAprobado(v)) return { etiqueta: "Aprobado", tono: "verde", detalle: "" };
   if (v?.videoUrl) return { etiqueta: "Por aprobar", tono: "azul", detalle: "El video está listo: ábrelo y revísalo." };
   // Solo cuenta el trabajo de la versión vigente.

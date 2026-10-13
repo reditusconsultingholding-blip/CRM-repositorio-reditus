@@ -127,7 +127,8 @@ function armarEntrada(cfg, ctx, modelo) {
   const kie = cfg.config.kie || {};
   const { escena, trabajo } = ctx;
   const conImagen = escena.usaImagenProducto && trabajo.imagenesProducto.length > 0;
-  const referencia = conImagen && kie.modoImagen === "referencia";
+  // `primerFotograma`: la etapa «clips» anima la imagen aprobada; ahí la imagen SIEMPRE es el primer fotograma.
+  const referencia = conImagen && kie.modoImagen === "referencia" && !ctx.primerFotograma;
   const relaciones = kie.relacionesPermitidas || ["16:9", "9:16"];
   if (!relaciones.includes(ctx.relacion)) throw new Error(`Veo (por Kie) no genera en ${ctx.relacion}; solo en ${relaciones.join(" o ")}.`);
   const resolucion = modelo.resolucion || kie.resolucion || "720p";
@@ -177,6 +178,8 @@ module.exports = {
   nombre: "kie",
   /** Los clips de Veo traen audio propio: el montaje puede usarlo en vez de ElevenLabs. */
   daAudio: true,
+  llamar,
+  ErrorKie,
   modeloPara,
   armarEntrada,
   segundosPara,

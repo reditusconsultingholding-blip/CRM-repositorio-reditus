@@ -1,11 +1,14 @@
 "use strict";
 // Trabajador de videos de Reditus. Proceso residente: cada minuto le pregunta
-// al CRM si hay un video pendiente y, si lo hay, lo genera, lo monta y lo sube.
+// al CRM si hay un trabajo pendiente y lo atiende. Hay dos clases de trabajo:
+//   · con `etapa` (proyecto por escenas): «imagenes», «clips» o «armado»  → lib/etapas.js
+//   · sin `etapa` (video completo, como antes): genera, monta y sube        → lib/trabajo.js
 //
 //   node trabajador.js              queda corriendo (así lo arranca la tarea de Windows)
 //   node trabajador.js --una-vez    atiende lo que haya en la cola y termina
 //   node trabajador.js --comprobar  revisa configuración, ffmpeg y conexión, y termina
 //   node trabajador.js --un-clip ["prompt"]   genera UN clip corto con el proveedor del .env (gasta lo mínimo) y termina
+//   node trabajador.js --una-imagen ["prompt"] [--foto https://…]   genera UNA imagen base con el proveedor de imagen (gasta lo mínimo) y termina
 const fs = require("fs");
 const path = require("path");
 const { cargar, secretos } = require("./lib/entorno");
@@ -14,9 +17,11 @@ const { crearCrm } = require("./lib/crm");
 const { crear: crearFf } = require("./lib/ffmpeg");
 const { esperar, ErrorHttp } = require("./lib/red");
 const { cargarProveedor } = require("./proveedores");
+const { cargarProveedorImagen } = require("./proveedores-imagen");
 const { procesar, pendientesEnDisco, limpiarRestos, unClip } = require("./lib/trabajo");
+const { unaImagen } = require("./lib/etapas");
 
-const modo = process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
+const modo = process.argv.includes("--una-imagen") ? "una-imagen" : process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
 
 function vivo(pid) {
   try {
@@ -40,17 +45,29 @@ async function principal() {
 
   // ------------------------------------------------- comprobaciones ----
   const faltas = [];
-  // La prueba de un clip no toca el CRM: no necesita su dirección ni el secreto.
-  if (modo !== "un-clip" && !/^https?:\/\//.test(cfg.crmUrl)) faltas.push("CRM_URL (la dirección del CRM, con https://)");
-  if (modo !== "un-clip" && !cfg.secreto) faltas.push("SERVIDOR_SECRET (el mismo valor que tiene el CRM en Vercel)");
+  // Las pruebas de un clip y de una imagen no tocan el CRM: no necesitan su dirección ni el secreto.
+  const suelto = modo === "un-clip" || modo === "una-imagen";
+  if (!suelto && !/^https?:\/\//.test(cfg.crmUrl)) faltas.push("CRM_URL (la dirección del CRM, con https://)");
+  if (!suelto && !cfg.secreto) faltas.push("SERVIDOR_SECRET (el mismo valor que tiene el CRM en Vercel)");
   let proveedor = null;
   try {
     proveedor = cargarProveedor(cfg.proveedor);
-    const falta = proveedor.comprobar(cfg);
+    const falta = modo === "una-imagen" ? null : proveedor.comprobar(cfg);
     if (falta) faltas.push(falta);
   } catch (e) {
     faltas.push(e.message);
   }
+  // Proveedor de imagen (etapa «imagenes»). Si le falta algo NO impide arrancar: los clips y el
+  // armado siguen funcionando; los trabajos de imágenes fallarán diciendo qué falta.
+  let proveedorImagen = null;
+  let faltaImagen = null;
+  try {
+    proveedorImagen = cargarProveedorImagen(cfg.proveedorImagen);
+    faltaImagen = proveedorImagen.comprobar(cfg);
+  } catch (e) {
+    faltaImagen = e.message;
+  }
+  if (modo === "una-imagen" && faltaImagen) faltas.push(faltaImagen);
   const ff = crearFf(cfg);
   let versionFf = "";
   try {
@@ -63,11 +80,33 @@ async function principal() {
     process.exit(1);
   }
   const voz = proveedor.daAudio ? "audio según config.json (el de Veo o ElevenLabs)" : cfg.elevenKey && cfg.elevenVoz ? "con voz (ElevenLabs)" : "SIN voz (no hay clave de ElevenLabs)";
-  registro.info(`Trabajador «${cfg.nombre}» · proveedor ${proveedor.nombre} · ${voz} · ${versionFf} · CRM ${cfg.crmUrl} · modo ${modo}`);
+  registro.info(`Trabajador «${cfg.nombre}» · proveedor ${proveedor.nombre} · imágenes ${proveedorImagen ? proveedorImagen.nombre : "sin proveedor"} · ${voz} · ${versionFf} · CRM ${cfg.crmUrl} · modo ${modo}`);
   if (proveedor.nombre === "simulado") registro.aviso("PROVEEDOR=simulado: los videos son de PRUEBA (clips de color con texto). Para videos reales, PROVEEDOR=kie.");
 
+  if (faltaImagen) registro.aviso(`Imágenes base: ${faltaImagen} Mientras tanto, los trabajos de la etapa «imagenes» fallarán con ese motivo.`);
+  else if (proveedorImagen.nombre === "simulado" && proveedor.nombre !== "simulado") registro.aviso("PROVEEDOR_IMAGEN=simulado: las imágenes base son de PRUEBA.");
+
   const crm = crearCrm(cfg);
-  const deps = { cfg, crm, ff, proveedor, registro };
+  const deps = { cfg, crm, ff, proveedor, proveedorImagen: faltaImagen && !proveedorImagen ? null : proveedorImagen, faltaImagen, registro };
+
+  if (modo === "una-imagen") {
+    const i = process.argv.indexOf("--una-imagen");
+    const dado = process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : "";
+    const fotos = process.argv.map((a, k) => (a === "--foto" ? process.argv[k + 1] : null)).filter((u) => u && /^https:\/\//.test(u));
+    const prompt = dado || "Una taza de café humeante sobre una mesa de madera, luz natural de la mañana, foto tomada con un celular, formato vertical.";
+    try {
+      // El saldo es de la cuenta de Kie, sea cual sea el proveedor de video del .env.
+      const saldo = proveedorImagen.nombre === "kie" ? () => require("./proveedores/kie").creditos(cfg) : null;
+      if (process.argv.includes("--foto") && !fotos.length) registro.aviso("La foto de --foto se ignoró: debe ser un enlace público que empiece por https://");
+      if (saldo) registro.info(`Créditos antes: ${await saldo()}`);
+      await unaImagen(deps, prompt, fotos);
+      if (saldo) registro.info(`Créditos después: ${await saldo()}`);
+      process.exit(0);
+    } catch (e) {
+      registro.error(`La prueba de una imagen falló: ${registro.limpiar(e.message)}`);
+      process.exit(1);
+    }
+  }
 
   if (modo === "un-clip") {
     const i = process.argv.indexOf("--un-clip");

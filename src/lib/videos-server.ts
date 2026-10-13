@@ -1,6 +1,7 @@
 import "server-only";
 import { llamarClaude } from "@/lib/ia-claude";
 import { lineaAnuncio } from "@/lib/investigacion-video/tipos";
+import { fichaConDatos, textoFicha } from "@/lib/proyecto-video";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { REGLAS_COMUNES, type FormatoVideo } from "@/lib/video-formatos";
 import {
@@ -125,7 +126,7 @@ export async function investigarMercado(datos: DatosVideo, formato: FormatoVideo
 
 // --------------------------------------------------------- guion ----
 
-function fichaFormato(f: FormatoVideo): string {
+export function fichaFormato(f: FormatoVideo): string {
   return [
     `FORMATO: ${f.nombre} · duración ${f.duracion} · ${f.relacion_aspecto} · etapa ${f.etapa_embudo || "(sin dato)"}`,
     f.estado === "por confirmar"
@@ -183,6 +184,9 @@ function fichaDatos(d: DatosVideo, resumenMercado: string): string {
     `Oferta: ${d.oferta || "(sin dato: deja [oferta] entre corchetes)"}`,
     `Llamado a la acción: ${d.llamado || "(sin dato: deja [llamado a la acción] entre corchetes)"}`,
     `Valores y datos que dio el cliente: ${d.valores || "(sin dato)"}`,
+    "",
+    `Ficha del producto (lo que se ve en sus fotos y lo que confirmó el equipo${d.fichaProducto.confirmado ? "" : "; SIN confirmar todavía: úsala con cautela"}). No digas del producto nada que contradiga esto ni des por cierto lo que figura como «no se sabe»:`,
+    fichaConDatos(d.fichaProducto) ? textoFicha(d.fichaProducto) : "Sin ficha.",
     "",
     "Investigación (hecha por IA con los datos del cliente y las fuentes consultadas):",
     d.analisisProducto.trim() || "Sin análisis.",

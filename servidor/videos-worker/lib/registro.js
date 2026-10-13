@@ -17,7 +17,7 @@ function crearRegistro(carpeta, secretos) {
     for (const s of secretos) t = t.split(s).join("[clave oculta]");
     return t
       .replace(/\b(Bearer|Key)\s+[A-Za-z0-9._:\-]{8,}/g, "$1 [clave oculta]")
-      .replace(/([?&](?:token|signature|sig|key|apikey)=)[^&\s"']+/gi, "$1[oculto]")
+      .replace(/([?&](?:token|signature|sig|key|apikey|x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|x-goog-credential)=)[^&\s"']+/gi, "$1[oculto]")
       .replace(/(x-goog-api-key["':\s]+)[A-Za-z0-9._\-]{8,}/gi, "$1[clave oculta]")
       .replace(/(xi-api-key["':\s]+)[A-Za-z0-9._\-]{8,}/gi, "$1[clave oculta]");
   }

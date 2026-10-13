@@ -3,8 +3,12 @@
 //   1) piezas sueltas (subtítulos, tamaños, elección de modelo de fal, tachado de claves)
 //   2) un trabajo completo con el proveedor simulado y un CRM de mentira:
 //      genera los clips, monta con subtítulos y deja el MP4 en datos\prueba-local\
+//   3) el proyecto por escenas completo (pruebas/etapas.js): imagenes → clips → armado →
+//      corrección de una escena → rearmado, con un CRM de mentira que habla el contrato
 //
-//   node pruebas/pruebas.js
+//   node pruebas/pruebas.js                 todo
+//   node pruebas/pruebas.js --sin-etapas    solo 1 y 2
+//   node pruebas/etapas.js [--hasta=imagenes|clips]   solo 3
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -218,6 +222,12 @@ const ok = (c, m) => {
   ok(r2.ok && Math.abs((await ff.duracion(final2)) - 8) < 0.3, "audio de Veo: cada escena conserva los 4 s de su clip (no se corta la frase) → 8 s");
   ok(volumen > -40, `audio de Veo: el audio del clip llega al video final (volumen medio ${volumen} dB) y no se llamó a ElevenLabs`);
   ok(e2.sinVoz === false && e2.costoEstimadoUsd === undefined && e2.segundosGenerados === 8 && e2.modelos[0] === "veo-de-mentira-rapido" && /generado por Veo/.test(e2.avisos.join(" ")), "reporta 8 s generados, la variante usada y costo desconocido (sin tarifa no se inventa)");
+
+  // ---- proyecto por escenas: imagenes → clips → armado → correcciones (pruebas/etapas.js) ----
+  if (!process.argv.includes("--sin-etapas")) {
+    console.log("\n     Proyecto por escenas (CRM de mentira que habla el contrato):");
+    await require("./etapas").correrPruebas({ ok });
+  }
 
   console.log(fallas ? `\n${fallas} FALLAS` : "\nTODO OK");
   process.exit(fallas ? 1 : 0);

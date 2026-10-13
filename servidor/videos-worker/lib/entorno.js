@@ -31,6 +31,8 @@ function cargar() {
     crmUrl: dato("CRM_URL").replace(/\/+$/, ""),
     secreto: dato("SERVIDOR_SECRET"),
     proveedor: (dato("PROVEEDOR") || "simulado").toLowerCase(),
+    // Quién hace las imágenes base. Vacío: el simulado si PROVEEDOR=simulado; si no, Kie.
+    proveedorImagen: (dato("PROVEEDOR_IMAGEN") || ((dato("PROVEEDOR") || "simulado").toLowerCase() === "simulado" ? "simulado" : "kie")).toLowerCase(),
     kieKey: dato("KIE_API_KEY"),
     geminiKey: dato("GEMINI_API_KEY"),
     falKey: dato("FAL_KEY"),
@@ -42,6 +44,7 @@ function cargar() {
     carpetas: {
       datos,
       trabajos: path.join(datos, "trabajos"),
+      proyectos: path.join(datos, "proyectos"),
       entregados: path.join(datos, "entregados"),
       registro: path.join(datos, "registro"),
     },

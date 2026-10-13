@@ -49,6 +49,17 @@ import type { RespuestaServidor } from "@/lib/trabajos-video-server";
 //          Vuelve a la cola con espera creciente; al tercer intento (o con
 //          `definitivo`) queda en `fallo` y se avisa a quien lo pidió.
 //
+//   PROYECTO POR ESCENAS (`servidor/CONTRATO-PROYECTO-VIDEO.md`): un trabajo con
+//   `etapa` ("imagenes" | "clips" | "armado") trae además `contexto`, `escenas`
+//   (solo las que faltan por procesar) y `todas` (armado). Cambia así:
+//     · resultado paso 1: { toma, pedirSubida: true, tipo: "imagen" | "clip" | "final", escena?: n }
+//     · progreso: acepta `escenas: [{ n, tipo, ruta | url, creditos?, segundos?, error? }]`
+//       y responde `escenas: [{ n, tipo, ok, error? }]`; cada una queda «por aprobar»
+//       (o en fallo) en cuanto llega, sin esperar a las demás.
+//     · resultado paso 2 en imagenes/clips: { toma, etapa, creditos?, segundosGenerados? }
+//       cierra el trabajo; en armado, como siempre, con la `ruta` del final.
+//   Un trabajo SIN `etapa` es un video completo de los de antes y no cambia en nada.
+//
 //   Errores: 400 { error } cuerpo inválido · 401 { error } secreto incorrecto ·
 //   409 { error, soltar: true } el trabajo ya no es de ese trabajador (debe
 //   abandonarlo) · 500 { error } fallo del almacenamiento (se puede reintentar) ·

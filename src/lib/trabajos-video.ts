@@ -14,6 +14,8 @@
 //
 // Lectura y escritura: `src/lib/trabajos-video-server.ts`.
 
+import { leerContexto, leerEscenas, type ContextoProyecto, type EscenaProyecto, type TipoPieza } from "@/lib/proyecto-video";
+
 /** Tope de videos que se pueden pedir por día (hora de Bogotá). Edítalo aquí. */
 export const TOPE_DIARIO_VIDEOS = 6;
 /** Veces que un trabajo puede tomarse antes de quedar en `fallo`. */
@@ -70,11 +72,34 @@ export type EscenaTrabajo = {
 export type OpcionesVideo = {
   subtitulos: boolean;
   voz: boolean;
+  /** Música de fondo del armado (enlace https o nombre de pista del servidor); null = sin música. */
+  musica: string | null;
   /** Identificador del modelo en el proveedor; null = el que diga la configuración del servidor. */
   modelo: string | null;
 };
 
-export const OPCIONES_VIDEO_BASE: OpcionesVideo = { subtitulos: true, voz: true, modelo: null };
+export const OPCIONES_VIDEO_BASE: OpcionesVideo = { subtitulos: true, voz: true, musica: null, modelo: null };
+
+/** Etapas del proyecto por escenas. Un trabajo sin etapa es un video completo de los de antes. */
+export const ETAPAS_TRABAJO = ["imagenes", "clips", "armado"] as const;
+export type EtapaTrabajo = (typeof ETAPAS_TRABAJO)[number];
+export const ETAPA_LABELS: Record<EtapaTrabajo, string> = { imagenes: "Imágenes base", clips: "Clips", armado: "Armado" };
+
+/** Lo que el trabajador reportó de UNA escena (llega por `progreso`, en cuanto la termina). */
+export type ReporteEscena = {
+  n: number;
+  tipo: TipoPieza;
+  /** Enlace público de la pieza; vacío si falló. */
+  url: string;
+  ruta: string | null;
+  creditos: number;
+  segundos: number;
+  error: string;
+  fecha: string;
+};
+export const MAX_REPORTES = 120;
+/** Extensiones de imagen base que puede subir el trabajador. */
+export const EXT_IMAGEN: Record<string, string> = { png: "image/png", jpg: "image/jpeg", webp: "image/webp" };
 export const MAX_IMAGENES_PRODUCTO = 4;
 /** Fotos del producto subidas desde «Crear video» (pegadas o arrastradas): carpeta dentro de `BUCKET_VIDEOS_GENERADOS`. */
 export const CARPETA_FOTOS_PRODUCTO = "videos-fotos";
@@ -125,6 +150,19 @@ export type TrabajoVideo = {
    */
   cierre: { oferta: string; llamadoALaAccion: string };
 
+  // ---- proyecto por escenas (servidor/CONTRATO-PROYECTO-VIDEO.md) ----
+  /** Null = video completo de los de antes. */
+  etapa: EtapaTrabajo | null;
+  contexto: ContextoProyecto | null;
+  /** SOLO las escenas que hay que procesar en esta etapa (al trabajador le llegan como `escenas`). */
+  escenasEtapa: EscenaProyecto[];
+  /** Etapa `armado`: todas las escenas en orden, con `clip.url` o `fotoUrl`. */
+  todas: EscenaProyecto[];
+  /** Escenas ya reportadas por el trabajador. Solo él escribe aquí. */
+  reportes: ReporteEscena[];
+  /** Créditos totales que el trabajador dijo haber gastado al cerrar. */
+  creditos: number;
+
   estado: EstadoTrabajo;
   motivo: string;
   intentos: number;
@@ -153,7 +191,55 @@ export type TrabajoVista = Omit<TrabajoVideo, "toma">;
 export function vistaTrabajo(t: TrabajoVideo): TrabajoVista {
   const copia: Partial<TrabajoVideo> = { ...t };
   delete copia.toma;
+  // A la pantalla no le hacen falta los prompts completos de cada escena del trabajo.
+  if (t.etapa) {
+    copia.todas = [];
+    copia.contexto = null;
+  }
   return copia as TrabajoVista;
+}
+
+/** Escenas de un trabajo por etapa que el trabajador todavía no reportó (ni bien ni mal). */
+export function escenasSinReportar(t: Pick<TrabajoVideo, "etapa" | "escenasEtapa" | "reportes">): EscenaProyecto[] {
+  if (t.etapa !== "imagenes" && t.etapa !== "clips") return [];
+  const tipo: TipoPieza = t.etapa === "imagenes" ? "imagen" : "clip";
+  return t.escenasEtapa.filter((e) => !t.reportes.some((r) => r.n === e.n && r.tipo === tipo));
+}
+
+const piezaFuera = (p: EscenaProyecto["imagen"]) => ({ estado: p.estado, url: p.url, intentos: p.intentos, nota: p.nota });
+const escenaFuera = (e: EscenaProyecto) => ({
+  n: e.n,
+  paso: e.paso,
+  tipo: e.tipo,
+  titulo: e.titulo,
+  nombre: e.titulo,
+  duracion: e.duracion,
+  voz: e.voz,
+  promptImagen: e.promptImagen,
+  promptVideo: e.promptVideo,
+  fotoUrl: e.fotoUrl,
+  movimiento: e.movimiento,
+  imagen: piezaFuera(e.imagen),
+  clip: piezaFuera(e.clip),
+});
+
+/**
+ * El trabajo tal como lo recibe el trabajador en `/tomar`. Uno de antes viaja
+ * igual que siempre. Uno por etapa lleva `etapa`, `contexto`, `escenas` (solo
+ * las que faltan: si se retoma tras una caída no se vuelve a pagar lo ya
+ * entregado) y `todas`.
+ */
+export function paraTrabajador(t: TrabajoVideo): Record<string, unknown> {
+  if (!t.etapa) {
+    const deAntes: Record<string, unknown> = { ...t };
+    for (const k of ["etapa", "contexto", "escenasEtapa", "todas", "reportes", "creditos"]) delete deAntes[k];
+    return deAntes;
+  }
+  const resto: Record<string, unknown> = { ...t };
+  delete resto.escenasEtapa;
+  delete resto.reportes;
+  const pendientes = t.etapa === "armado" ? t.escenasEtapa : escenasSinReportar(t);
+  return { ...resto, escenas: pendientes.map(escenaFuera), todas: t.todas.map(escenaFuera) };
 }
 
 const txt = (v: unknown, max: number) => (typeof v === "string" ? v : "").slice(0, max);
@@ -200,7 +286,27 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
       .map((u) => txt(u, 600))
       .filter(Boolean)
       .slice(0, MAX_IMAGENES_PRODUCTO),
-    opciones: { subtitulos: op.subtitulos !== false, voz: op.voz !== false, modelo: txt(op.modelo, 160) || null },
+    opciones: { subtitulos: op.subtitulos !== false, voz: op.voz !== false, musica: txt(op.musica, 600) || null, modelo: txt(op.modelo, 160) || null },
+    etapa: (ETAPAS_TRABAJO as readonly string[]).includes(txt(o.etapa, 12)) ? (txt(o.etapa, 12) as EtapaTrabajo) : null,
+    contexto: o.contexto ? leerContexto(o.contexto) : null,
+    escenasEtapa: leerEscenas(o.escenasEtapa),
+    todas: leerEscenas(o.todas),
+    reportes: lista(o.reportes)
+      .slice(-MAX_REPORTES)
+      .map((r) => {
+        const x = obj(r);
+        return {
+          n: Math.floor(num(x.n)),
+          tipo: x.tipo === "clip" ? ("clip" as const) : ("imagen" as const),
+          url: txt(x.url, 600),
+          ruta: txt(x.ruta, 400) || null,
+          creditos: Math.max(0, num(x.creditos)),
+          segundos: Math.max(0, num(x.segundos)),
+          error: txt(x.error, 600),
+          fecha: txt(x.fecha, 40),
+        };
+      }),
+    creditos: Math.max(0, num(o.creditos)),
     pedidoPor: { id: txt(por.id, 40), nombre: txt(por.nombre, 160) },
     origen: o.origen === "correccion" ? "correccion" : "manual",
     cierre: {
@@ -318,7 +424,7 @@ function pasosDeEscena(nombre: string): number[] {
 }
 
 /** «3–8 s» → 5. Devuelve 0 si no se entiende. */
-function segundosDeTramo(tiempo: string): number {
+export function segundosDeTramo(tiempo: string): number {
   const m = /(\d+(?:[.,]\d+)?)\s*[–—-]\s*(\d+(?:[.,]\d+)?)/.exec(tiempo);
   if (!m) return 0;
   const d = Number(m[2].replace(",", ".")) - Number(m[1].replace(",", "."));

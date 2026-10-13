@@ -1,8 +1,36 @@
 # Trabajador de videos de Reditus
 
-Proceso de Node que vive en el servidor. Cada minuto le pregunta al CRM si hay un video pendiente; si lo hay, genera cada escena con un proveedor por API, monta con ffmpeg (une escenas, normaliza a la relación de aspecto, mezcla la voz y quema subtítulos estilo anuncio), sube el MP4 al CRM y reporta. En el CRM el video queda **«Por aprobar»**: nada sale sin que alguien del equipo comercial lo apruebe.
+Proceso de Node que vive en el servidor. Cada minuto le pregunta al CRM si hay un trabajo pendiente y lo atiende. En el CRM todo queda **«Por aprobar»**: nada sale sin que alguien del equipo lo apruebe.
+
+Atiende dos clases de trabajo:
+
+- **Proyecto por escenas** (trabajos con `etapa`; es el camino nuevo, pensado para gastar menos y poder supervisar): primero **imágenes base** (centavos) que una persona aprueba, luego **clips** solo de las imágenes aprobadas, y al final el **armado** en el servidor, que no cuesta. Una corrección rehace solo la escena tocada. Ver la sección 0.
+- **Video completo** (trabajos sin `etapa`, como siempre): genera cada escena con el proveedor, monta con ffmpeg (une, normaliza, mezcla la voz, quema subtítulos) y sube el MP4. Sigue funcionando igual.
 
 No tiene dependencias de npm: solo Node 20+ y ffmpeg.
+
+## 0. Proyecto por escenas
+
+El acuerdo con el CRM está en `..\CONTRATO-PROYECTO-VIDEO.md` (léelo: ahí están los campos y, al final, las precisiones del trabajador).
+
+| Etapa | Qué hace | Cuesta |
+|---|---|---|
+| `imagenes` | Una imagen base por escena con el proveedor de imagen (`PROVEEDOR_IMAGEN`), usando las fotos reales del producto como referencia. La sube (JPG) y la reporta **en cuanto está**; el CRM la muestra para aprobar. | Créditos de imagen |
+| `clips` | Un clip por escena, **desde su imagen aprobada** (imagen a video, la imagen es el primer fotograma), con el proveedor de video de siempre (`PROVEEDOR`). Si la imagen no está aprobada, no se pide. | Créditos de video |
+| `armado` | Baja lo que falte, fabrica los clips de las escenas `foto-real` y `cierre` con la foto real del producto, une todo, subtitula, dibuja el rótulo de cierre, mezcla la música si el trabajo trae una pista, y sube el final. | Nada |
+
+Lo que conviene saber:
+
+- **Un fallo de una escena no tumba a las demás**: se reporta con su motivo y el trabajo sigue. Solo se cae el trabajo entero si no se puede hablar con el CRM o, en el armado, si falta un clip aprobado.
+- **Nada se paga dos veces.** Lo ya generado queda en `datos\trabajos\<id>\` y se retoma tras un reinicio. Si una imagen o un clip quedó «pendiente» en el proveedor, su tarea se guarda en `datos\proyectos\<guion>-v<versión>\tareas.json` y se retoma cuando el CRM vuelva a pedir esa misma escena, aunque sea en otro trabajo. Crear una tarea paga nunca se reintenta a ciegas.
+- **Duración**: el modelo de video solo hace 4, 6 u 8 s; se pide la menor que cubra la `duracion` de la escena y el armado **recorta lo que sobre**.
+- **Escenas `foto-real`** (costo cero, producto idéntico): la foto real con un movimiento suave (`acercar`, `alejar`, `paneo-izq`, `paneo-der`, `quieto`). La foto nunca se deforma: si no llena el cuadro, va entera sobre un fondo difuminado de ella misma. Ajustes en `config.json` → `armado.fotoReal`.
+- **Rótulo de cierre**: en la escena `cierre` se dibujan la oferta (grande, sobre un panel oscuro) y el llamado a la acción (botón) durante toda la escena, **tal cual llegan** del CRM. El cuadro se reparte para que nada se pise: en vertical, oferta arriba · producto · botón · subtítulos; en horizontal, producto a la izquierda y textos a la derecha. Si un texto es muy largo se achica (y se avisa), no se recorta. Colores y fuente en `config.json` → `rotulo`.
+- **Música**: solo si el trabajo trae una pista (`opciones.musica`, un enlace). Se repite hasta el final, baja sola mientras hay voz y se apaga al cierre. Sin pista no se inventa una. Niveles en `config.json` → `musica`.
+- **Voz**: igual que antes (audio del clip / ElevenLabs / ninguno, según `config.json` → `audio`). Las escenas `foto-real` y `cierre` con texto se narran con ElevenLabs si hay clave; si no, salen sin voz y queda en los avisos del resultado. Una narración ya hecha no se vuelve a pedir.
+- **Armado rápido y repetible**: cada proyecto guarda en `datos\proyectos\` lo que descargó y cada escena ya codificada. Volver a armar sin cambios no baja ni codifica nada; cambiar un texto (la oferta, un subtítulo) recodifica solo esa escena; poner o quitar música solo rehace el audio. El mismo proyecto da siempre el mismo archivo. La carpeta de un proyecto se borra sola a los 30 días sin uso (`diasParaBorrarProyectos`).
+- **Imágenes base con Kie**: `config.json` → `kieImagen` (modelo por defecto «GPT Image 2.5 Sunburst» a 1K; alternativas Nano Banana 2 y Pro). Qué se verificó contra docs.kie.ai y qué falta por verificar: al inicio de `proveedores-imagen\kie.js`. **El precio en créditos no está en la documentación**: sale de la primera prueba real (`.\probar.ps1 -UnaImagen`).
+- Otro proveedor de imagen: copia `proveedores-imagen\simulado.js`, respeta la interfaz descrita en `proveedores-imagen\index.js` y pon su nombre en `PROVEEDOR_IMAGEN`.
 
 ## 1. Instalar
 
@@ -15,7 +43,8 @@ No tiene dependencias de npm: solo Node 20+ y ffmpeg.
 | `CRM_URL` | Dirección del CRM, sin barra final |
 | `SERVIDOR_SECRET` | Secreto compartido con el CRM (igual en los dos lados) |
 | `PROVEEDOR` | `simulado` (pruebas, no gasta), `kie` (el recomendado), `veo` o `fal` (alternativas) |
-| `KIE_API_KEY` | Clave de Kie (solo con `PROVEEDOR=kie`) |
+| `PROVEEDOR_IMAGEN` | Quién hace las imágenes base: vacío (lo normal: `simulado` si `PROVEEDOR=simulado`; si no, `kie`), `simulado` o `kie` |
+| `KIE_API_KEY` | Clave de Kie (clips con `PROVEEDOR=kie` e imágenes base con Kie) |
 | `GEMINI_API_KEY` | Clave de la API de Gemini, para Veo directo (solo con `PROVEEDOR=veo`) |
 | `FAL_KEY` | Clave de fal.ai (solo con `PROVEEDOR=fal`) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Voz de ElevenLabs, para los formatos con audio `elevenlabs`. Vacías = esos videos salen sin voz (lo reporta) |
@@ -24,11 +53,26 @@ No tiene dependencias de npm: solo Node 20+ y ffmpeg.
 ## 2. Probar con el simulado (no gasta)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\probar.ps1          # local, sin CRM ni claves
-powershell -ExecutionPolicy Bypass -File .\probar.ps1 -ConCrm  # atiende la cola del CRM una vez
+powershell -ExecutionPolicy Bypass -File .\probar.ps1                  # todo, local, sin CRM ni claves
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -Etapa imagenes  # solo el proyecto por escenas, hasta esa etapa
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -Etapa clips     #   (imagenes | clips | armado; armado = recorrido completo)
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -Etapa armado
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -ConCrm          # atiende la cola del CRM una vez
 ```
 
-La primera hace un video de mentira (clips de color con el nombre de cada escena, con subtítulos) en `datos\prueba-local\entregados\`. La segunda necesita el `.env` con `PROVEEDOR=simulado`: pide un video en `/videos` del CRM, córrela, y el video debe aparecer allá como «Por aprobar».
+La primera corre todas las pruebas: el video completo de siempre (queda en `datos\prueba-local\entregados\`) y el proyecto por escenas con un CRM de mentira que habla el contrato: imágenes → corrección de una imagen → clips → armado → rearmado → cambio de un texto → corrección de un clip → música → voz, en vertical y en horizontal. Los videos quedan en `datos\prueba-etapas\entregados\` y los **fotogramas del cierre** (para mirar que el rótulo y los subtítulos no se pisan) en `..\..\qa-capturas\trabajador-etapas\`. Al final imprime cuánto tardó cada armado en ese equipo.
+
+`-ConCrm` necesita el `.env` con `PROVEEDOR=simulado` (y `PROVEEDOR_IMAGEN` vacío o `simulado`): encola algo en el CRM, córrela, y debe aparecer allá como «Por aprobar».
+
+Para el día de la clave real, dos pruebas que gastan lo mínimo y no tocan el CRM:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -UnaImagen                       # UNA imagen base
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -UnaImagen -Foto "https://…"     #   …con una foto real del producto como referencia
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -UnClip                          # UN clip de 4 s
+```
+
+Las dos aceptan `-Prompt "texto"`, escriben los créditos de antes y después, y si se cortan a la mitad retoman la misma tarea al repetirlas (no pagan otra). La imagen queda en `datos\una-imagen\` y el clip en `datos\un-clip\`.
 
 Otros comandos: `node trabajador.js --comprobar` (configuración, ffmpeg y secreto), `node trabajador.js --una-vez`, `node trabajador.js` (residente).
 
@@ -70,7 +114,7 @@ Lo que hay que saber:
 
 Qué se verificó contra la documentación de Kie y qué no: al inicio de `proveedores/kie.js`. **No se ha ejecutado con una clave real**; las pruebas locales usan un servidor de mentira que imita su contrato.
 
-Kie también ofrece generación de imagen, música y voz; el trabajador todavía no las usa (ver `CAMBIOS.md`, «Siguiente paso»).
+La **imagen base** del proyecto por escenas también sale de Kie (sección 0; `config.json` → `kieImagen`). Kie ofrece además música y voz; el trabajador todavía no las usa: la música llega como pista desde el CRM y la voz es ElevenLabs.
 
 ## 4b. Alternativa: Veo directo con Google
 
@@ -101,7 +145,7 @@ Otro proveedor: copia `proveedores/simulado.js`, respeta la interfaz descrita en
 
 ## 5. Costos
 
-- `datos\registro\costos.csv`: una línea por trabajo con los **segundos generados** (lo que cobra el proveedor), los modelos y el costo estimado. Costo del mes ≈ suma de segundos × tarifa del modelo.
+- `datos\registro\costos.csv`: una línea por trabajo con su **etapa** (`completo`, `imagenes`, `clips`, `armado`, `un-clip`, `una-imagen`), las **imágenes** generadas, los **segundos generados**, los **créditos** que cobró el proveedor, los modelos y el costo estimado. Con eso se ve cuánto se va en imágenes y cuánto en video. El armado siempre sale en cero. Si el archivo viene de una versión anterior (otras columnas), el trabajador lo aparta como `costos-hasta-<fecha>.csv` y empieza uno nuevo.
 - El CRM muestra lo mismo por trabajo en «Cola de videos» (solo CEO) y tiene un tope diario (`TOPE_DIARIO_VIDEOS`, 6 por defecto, en `src/lib/trabajos-video.ts`).
 - Es un estimado, no la factura: una petición que el proveedor cobró pero cuyo clip no llegó a descargarse no queda contada.
 
@@ -121,5 +165,9 @@ Otro proveedor: copia `proveedores/simulado.js`, respeta la interfaz descrita en
 - Con audio de Veo, los subtítulos se reparten sobre la duración de la escena: no hay forma de saber en qué instante exacto dice cada palabra.
 - Los prompts salen de los del formato más lo que dice el guion en cada paso; los campos genéricos entre [corchetes] del formato llegan al modelo sin completar (el CRM lo avisa en el trabajo).
 - Un trabajo a la vez por servidor.
+- Rótulo de cierre: el ancho del texto se calcula con las medidas de Arial Bold (no hay librería de fuentes). Con otra fuente en `rotulo.fuente` el ajuste es aproximado: mira un fotograma antes de dejarla.
+- Fotos reales: PNG con fondo transparente salen con el fondo negro (conviene JPG o PNG con fondo). De un GIF o WebP animado se usa el primer cuadro.
+- En el armado, un clip rehecho debe llegar con otra dirección o con otro número de intento; si no, se usa el que ya estaba descargado (ver el contrato, «Cambios», punto 3).
+- Si con el audio del clip se recorta una escena, puede cortarse la frase: el resultado lo avisa y se arregla subiendo la duración de esa escena y volviendo a armar (gratis).
 
-Contrato de la API con el CRM: `src/lib/servidor-api.ts` en el repositorio del CRM.
+Contrato de la API con el CRM: `src/lib/servidor-api.ts` en el repositorio del CRM y, para el proyecto por escenas, `..\CONTRATO-PROYECTO-VIDEO.md`.

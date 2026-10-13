@@ -3,6 +3,8 @@
   "intervaloSegundos": 60,
   "conservarEntregados": 30,
   "diasParaBorrarRestos": 3,
+  "diasParaBorrarProyectos": 30,
+  "_diasParaBorrarProyectos": "Cada proyecto por escenas guarda en datos\\proyectos\\ lo que ya descargó y armó, para que un rearmado sea rápido. Se borra cuando pasa este número de días sin tocarse.",
   "salida": {
     "_nota": "ladoCorto 1080 = 1080x1920 en 9:16. crf más bajo = más calidad y más peso (18–23 es lo normal).",
     "ladoCorto": 1080,
@@ -13,6 +15,36 @@
     "fuente": "Arial",
     "resaltado": "FFE600",
     "maxPalabras": 3
+  },
+  "armado": {
+    "_nota": "Etapa «armado» del proyecto por escenas (no cuesta: todo lo hace ffmpeg en el servidor).",
+    "preset": "veryfast",
+    "_preset": "Velocidad de codificación de cada escena (ultrafast, veryfast, faster, medium…). Más lento = archivo algo más liviano.",
+    "cierreMinSegundos": 5,
+    "_cierreMinSegundos": "La escena de cierre dura al menos esto, para que el rótulo se alcance a leer.",
+    "fotoReal": {
+      "_nota": "Escenas «foto-real»: la foto real del producto con un movimiento suave. amplitud = cuánto acerca o recorre (0.10 = 10 %). recorteMaximo = cuánto de la foto se puede perder para llenar el cuadro; si habría que recortar más, la foto va entera sobre un fondo difuminado de ella misma.",
+      "amplitud": 0.1,
+      "amplitudCierre": 0.03,
+      "recorteMaximo": 0.12,
+      "movimientoPorDefecto": "acercar"
+    }
+  },
+  "rotulo": {
+    "_nota": "Rótulo de la escena de cierre: la oferta (grande, sobre un panel oscuro) y el llamado a la acción (botón). Los textos se escriben tal cual llegan del CRM. Colores en RRGGBB.",
+    "fuente": "Arial",
+    "colorOferta": "FFFFFF",
+    "fondoOferta": "000000",
+    "opacidadFondo": 0.62,
+    "colorLlamado": "111111",
+    "fondoLlamado": "FFE600"
+  },
+  "musica": {
+    "_nota": "Solo se mezcla si el trabajo trae una pista (opciones.musica = URL). volumen = nivel de la música cuando hay voz (además baja sola mientras alguien habla); volumenSinVoz = nivel cuando el video no tiene voz.",
+    "volumen": 0.22,
+    "volumenSinVoz": 0.6,
+    "entradaSegundos": 0.4,
+    "salidaSegundos": 1.2
   },
   "voz": {
     "_nota": "ElevenLabs. Solo se usa si en el .env están ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID.",
@@ -83,6 +115,91 @@
     "maxLetrasPrompt": 4000,
     "consultarCadaSegundos": 10,
     "limiteMinutosPorEscena": 25
+  },
+  "kieImagen": {
+    "_VERIFICAR": "Imagen base por Kie. Revisado el 12-oct-2026 contra docs.kie.ai (GPT Image 2.5 Sunburst texto e imagen, Nano Banana 2, Nano Banana Pro, Get Task Details), SIN hacer ninguna llamada real. POR VERIFICAR con  .\\probar.ps1 -UnaImagen : el precio en créditos (la documentación no lo publica), que las fotos del producto sirvan como enlace público, y si 1K alcanza.",
+    "porDefecto": "gpt-sunburst",
+    "porFormato": {
+      "_nota": "Opcional. Ejemplo: \"crochet\": \"nano-banana-2\". Valores: los alias de «modelos»."
+    },
+    "modelos": {
+      "gpt-sunburst": {
+        "_verificar": "verificar precio en kie.ai/pricing · GPT Image 2.5 Sunburst. Identificadores, campos y relaciones tomados de docs.kie.ai. Con fotos de referencia el campo input_urls es obligatorio (hasta 16).",
+        "modeloSinReferencias": "gpt-image-2-5-sunburst-text-to-image",
+        "modeloConReferencias": "gpt-image-2-5-sunburst-image-to-image",
+        "campoReferencias": "input_urls",
+        "maxReferencias": 16,
+        "relaciones": [
+          "1:1",
+          "3:2",
+          "2:3",
+          "4:3",
+          "3:4",
+          "16:9",
+          "9:16",
+          "21:9"
+        ],
+        "entrada": {
+          "resolution": "1K",
+          "background": "opaque"
+        }
+      },
+      "nano-banana-2": {
+        "_verificar": "verificar antes de usar · Nano Banana 2. La documentación dice que image_input deben ser URL de archivos subidos (JPG/PNG/WebP, 30 MB): confirmar que acepta el enlace público de la foto del producto.",
+        "modeloSinReferencias": "nano-banana-2",
+        "modeloConReferencias": "nano-banana-2",
+        "campoReferencias": "image_input",
+        "maxReferencias": 14,
+        "relaciones": [
+          "1:1",
+          "2:3",
+          "3:2",
+          "3:4",
+          "4:3",
+          "4:5",
+          "5:4",
+          "9:16",
+          "16:9",
+          "21:9"
+        ],
+        "entrada": {
+          "resolution": "1K",
+          "output_format": "jpg"
+        }
+      },
+      "nano-banana-pro": {
+        "_verificar": "verificar antes de usar · Nano Banana Pro (más caro). Misma duda con image_input (hasta 8).",
+        "modeloSinReferencias": "nano-banana-pro",
+        "modeloConReferencias": "nano-banana-pro",
+        "campoReferencias": "image_input",
+        "maxReferencias": 8,
+        "relaciones": [
+          "1:1",
+          "2:3",
+          "3:2",
+          "3:4",
+          "4:3",
+          "4:5",
+          "5:4",
+          "9:16",
+          "16:9",
+          "21:9"
+        ],
+        "entrada": {
+          "resolution": "1K",
+          "output_format": "png"
+        }
+      }
+    },
+    "maxReferencias": 4,
+    "_maxReferencias": "Cuántas fotos reales del producto se mandan como referencia (las primeras de contexto.fotos).",
+    "instruccionReferencia": "Las fotos adjuntas son el producto real: debe verse idéntico (misma forma, colores, etiqueta y proporciones). No inventes otro empaque ni cambies el texto de la etiqueta.",
+    "incluirAnalisis": true,
+    "prefijoAnalisis": "Sobre el producto:",
+    "sufijoPrompt": "",
+    "maxLetrasPrompt": 8000,
+    "consultarCadaSegundos": 4,
+    "limiteMinutosPorImagen": 10
   },
   "veo": {
     "_VERIFICAR": "ALTERNATIVA (el proveedor recomendado es Kie). Revisado el 12-oct-2026 contra ai.google.dev/gemini-api/docs/veo, SIN hacer ninguna llamada real. Antes de usar con dinero: confirma los identificadores (son «preview» y Google los cambia), haz UN video de prueba y llena usdPorSegundo con la tarifa de ai.google.dev/gemini-api/docs/pricing.",

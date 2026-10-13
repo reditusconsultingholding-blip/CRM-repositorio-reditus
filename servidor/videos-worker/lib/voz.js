@@ -21,7 +21,8 @@ async function generar(cfg, texto, destino) {
   for (const espera of [0, 3000, 12000]) {
     if (espera) await esperar(espera);
     try {
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(cfg.elevenVoz)}`, {
+      // `elevenBase` solo lo ponen las pruebas locales (nunca el .env ni config.json).
+      const res = await fetch(`${cfg.elevenBase || "https://api.elevenlabs.io"}/v1/text-to-speech/${encodeURIComponent(cfg.elevenVoz)}`, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "audio/mpeg", "xi-api-key": cfg.elevenKey },
         body: JSON.stringify({

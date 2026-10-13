@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { atender } from "@/lib/servidor-api";
+import { paraTrabajador } from "@/lib/trabajos-video";
 import { tomarTrabajo } from "@/lib/trabajos-video-server";
 
 export const runtime = "nodejs";
@@ -14,6 +15,6 @@ export async function POST(request: NextRequest) {
     const trabajador = typeof cuerpo.trabajador === "string" ? cuerpo.trabajador : "servidor";
     const r = await tomarTrabajo(createAdminClient(), trabajador);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.estado });
-    return NextResponse.json({ ok: true, trabajo: r.dato });
+    return NextResponse.json({ ok: true, trabajo: r.dato ? paraTrabajador(r.dato) : null });
   });
 }

@@ -5,6 +5,7 @@ import { ORIGEN_PROSPECCION, leerProspeccion } from "@/lib/prospeccion";
 import { tarjetas } from "@/lib/video-formatos";
 import { VIDEOS_ROLES, codigoDePais, type DatosVideo } from "@/lib/videos";
 import { ID_VALIDO, listarGuiones } from "@/lib/videos-server";
+import { ponerAlDiaProyecto } from "@/lib/proyecto-video-server";
 import { vistaTrabajo } from "@/lib/trabajos-video";
 import { listarTrabajos, servidorVideoActivo, topeDeHoy } from "@/lib/trabajos-video-server";
 import { CrearVideo, type ProspectoOrigen } from "@/components/videos/crear-video";
@@ -67,7 +68,9 @@ export default async function VideosPage({
     }
   }
 
-  const { guiones, error } = await listarGuiones(admin);
+  const { guiones: leidos, error } = await listarGuiones(admin);
+  // Los proyectos por escenas recogen aquí lo que el servidor de videos ya entregó.
+  const guiones = await Promise.all(leidos.map(async (g) => (await ponerAlDiaProyecto(admin, g, false)).g));
 
   // El paso «Generar video» existe solo si el servidor externo está conectado
   // (variable SERVIDOR_SECRET). La cola completa la ve únicamente el CEO.
@@ -96,6 +99,7 @@ export default async function VideosPage({
       puedeUsarEnProspecto={esIngresos}
       videoActivo={videoActivo}
       puedeAprobarVideo={esIngresos}
+      esCeo={profile.role === "ceo"}
       abrirGuionId={abrirGuionId}
       userId={profile.id}
       misTrabajos={misTrabajos}

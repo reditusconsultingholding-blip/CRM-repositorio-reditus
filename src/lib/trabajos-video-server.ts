@@ -2,13 +2,19 @@ import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notify";
-import { buscarFormato } from "@/lib/video-formatos";
+import { buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
+import { duracionTotal, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
 import { corchetes, escenasParaVideo, pasosDelGuion } from "@/lib/trabajos-video";
 import {
   BUCKET_TRABAJOS,
   BUCKET_VIDEOS_GENERADOS,
   CARPETA_VIDEOS_GENERADOS,
   ESPERA_REINTENTO_MS,
+  ETAPA_LABELS,
+  EXT_IMAGEN,
+  MAX_REPORTES,
+  escenasSinReportar,
+  type EtapaTrabajo,
   ID_TRABAJO,
   MAX_IMAGENES_PRODUCTO,
   MAX_INTENTOS_VIDEO,
@@ -37,10 +43,23 @@ import { escribirGuionArchivo, leerGuionArchivo } from "@/lib/videos-server";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-const CARPETAS = { pendientes: "videos/pendientes", enCurso: "videos/en-curso", listos: "videos/listos", fallos: "videos/fallos" } as const;
+// Carpeta raíz de la cola dentro del bucket. En producción es siempre «videos». Solo las pruebas la
+// cambian (COLA_VIDEOS_CARPETA) para que un trabajo de prueba jamás lo tome el servidor real.
+const RAIZ_COLA = /^[a-z0-9-]{1,40}$/.test(process.env.COLA_VIDEOS_CARPETA ?? "") ? (process.env.COLA_VIDEOS_CARPETA as string) : "videos";
+const CARPETAS = { pendientes: `${RAIZ_COLA}/pendientes`, enCurso: `${RAIZ_COLA}/en-curso`, listos: `${RAIZ_COLA}/listos`, fallos: `${RAIZ_COLA}/fallos` } as const;
 type Carpeta = (typeof CARPETAS)[keyof typeof CARPETAS];
 const ORDEN_BUSQUEDA: Carpeta[] = [CARPETAS.enCurso, CARPETAS.pendientes, CARPETAS.listos, CARPETAS.fallos];
 const ruta = (carpeta: Carpeta, id: string) => `${carpeta}/${id}.json`;
+
+/** Aviso a una persona (campana y push). Mejor esfuerzo; `AVISOS_VIDEO_APAGADOS=1` lo apaga (pruebas). */
+async function avisar(admin: Admin, userId: string, titulo: string, enlace: string) {
+  if (!userId || process.env.AVISOS_VIDEO_APAGADOS === "1") return;
+  try {
+    await notify(admin, userId, "terminado", titulo.slice(0, 240), enlace);
+  } catch {
+    /* el aviso es mejor esfuerzo */
+  }
+}
 
 /** El paso «Generar video» existe solo si el servidor externo tiene con qué autenticarse. */
 export function servidorVideoActivo(): boolean {
@@ -148,16 +167,42 @@ function enFila<T>(fn: () => Promise<T>): Promise<T> {
 
 export type TopeDiario = { usados: number; max: number };
 
-/** Videos pedidos hoy (hora de Bogotá). Un trabajo que falló sin gastar segundos no cuenta. */
-export async function topeDeHoy(admin: Admin): Promise<TopeDiario> {
+// Qué cuenta cada trabajo para el tope diario. La etapa y el guion de un
+// trabajo no cambian nunca, así que se recuerda (por proceso) para no releerlo.
+//   · video completo de los de antes → cuenta 1;
+//   · etapa `clips` → cuenta 1 por PROYECTO y día (regenerar un clip no gasta otro cupo:
+//     para eso está el tope de intentos por escena);
+//   · etapas `imagenes` y `armado` → no cuentan.
+const claveTope = new Map<string, string | null>();
+
+async function claveDeTope(carpeta: Carpeta, id: string): Promise<string | null> {
+  const k = carpeta === CARPETAS.fallos ? `f:${id}` : id;
+  const sabida = claveTope.get(k);
+  if (sabida !== undefined) return sabida;
+  const t = await leerEn(carpeta, id);
+  if (!t) return `v:${id}`; // se está moviendo: cuenta como siempre y no se recuerda
+  let clave: string | null;
+  if (t.etapa === "imagenes" || t.etapa === "armado") clave = null;
+  // Un trabajo que falló sin gastar no cuenta.
+  else if (carpeta === CARPETAS.fallos && t.segundosGenerados <= 0 && !t.reportes.length) clave = null;
+  else clave = t.etapa === "clips" ? `p:${t.guionId}` : `v:${id}`;
+  if (claveTope.size > 2000) claveTope.clear();
+  claveTope.set(k, clave);
+  return clave;
+}
+
+async function clavesDeHoy(admin: Admin): Promise<Set<string>> {
   const { dia } = selloBogota(new Date());
-  const [p, c, l, f] = await Promise.all(
-    [CARPETAS.pendientes, CARPETAS.enCurso, CARPETAS.listos, CARPETAS.fallos].map((x) => nombres(admin, x, { busca: `${dia}-` })),
-  );
-  const deHoy = (ids: string[]) => ids.filter((id) => id.startsWith(`${dia}-`));
-  const fallidos = await Promise.all(deHoy(f.ids).map((id) => leerEn(CARPETAS.fallos, id)));
-  const fallosConGasto = fallidos.filter((t) => t && t.segundosGenerados > 0).length;
-  return { usados: deHoy(p.ids).length + deHoy(c.ids).length + deHoy(l.ids).length + fallosConGasto, max: TOPE_DIARIO_VIDEOS };
+  const carpetas = [CARPETAS.pendientes, CARPETAS.enCurso, CARPETAS.listos, CARPETAS.fallos];
+  const listas = await Promise.all(carpetas.map((x) => nombres(admin, x, { busca: `${dia}-` })));
+  const pares = listas.flatMap((l, i) => l.ids.filter((id) => id.startsWith(`${dia}-`)).map((id) => ({ carpeta: carpetas[i], id })));
+  const claves = await Promise.all(pares.map((x) => claveDeTope(x.carpeta, x.id)));
+  return new Set(claves.filter((c): c is string => !!c));
+}
+
+/** Videos pedidos hoy (hora de Bogotá). Imágenes base y armados no cuentan; un proyecto cuenta una vez. */
+export async function topeDeHoy(admin: Admin): Promise<TopeDiario> {
+  return { usados: (await clavesDeHoy(admin)).size, max: TOPE_DIARIO_VIDEOS };
 }
 
 // ------------------------------------------------------------------ crear ----
@@ -176,17 +221,17 @@ function leerPedido(p: PedidoVideo | undefined): { imagenes: string[]; opciones:
     if (typeof c !== "string" || !c.trim()) continue;
     const u = enlaceSeguro(c);
     if (!u || !u.startsWith("https://")) {
-      return { imagenes: [], opciones: { subtitulos: true, voz: true, modelo: null }, error: `Esta foto del producto no es un enlace https válido: ${c.slice(0, 80)}` };
+      return { imagenes: [], opciones: { subtitulos: true, voz: true, musica: null, modelo: null }, error: `Esta foto del producto no es un enlace https válido: ${c.slice(0, 80)}` };
     }
     imagenes.push(u.slice(0, 600));
   }
   const modelo = typeof p?.modelo === "string" ? p.modelo.trim().slice(0, 160) : "";
   if (modelo && !/^[\w.\-/]+$/.test(modelo)) {
-    return { imagenes: [], opciones: { subtitulos: true, voz: true, modelo: null }, error: "El modelo solo puede llevar letras, números, puntos, guiones y barras." };
+    return { imagenes: [], opciones: { subtitulos: true, voz: true, musica: null, modelo: null }, error: "El modelo solo puede llevar letras, números, puntos, guiones y barras." };
   }
   return {
     imagenes: imagenes.slice(0, MAX_IMAGENES_PRODUCTO),
-    opciones: { subtitulos: p?.subtitulos !== false, voz: p?.voz !== false, modelo: modelo || null },
+    opciones: { subtitulos: p?.subtitulos !== false, voz: p?.voz !== false, musica: null, modelo: modelo || null },
   };
 }
 
@@ -267,6 +312,12 @@ export async function crearTrabajoVideo(
     origen,
     cierre: { oferta: g.oferta, llamadoALaAccion: g.llamado },
     avisos,
+    etapa: null,
+    contexto: null,
+    escenasEtapa: [],
+    todas: [],
+    reportes: [],
+    creditos: 0,
     estado: "pendiente",
     motivo: "",
     intentos: 0,
@@ -287,6 +338,116 @@ export async function crearTrabajoVideo(
   const w = await escribir(admin, CARPETAS.pendientes, trabajo, true);
   if (w.error) return { error: w.error };
   return { trabajo };
+}
+
+// ------------------------------------------ proyecto por escenas: etapas ----
+
+export type PedidoEtapa = {
+  g: GuionGuardado;
+  /** Número de la versión del guion dueña del proyecto. */
+  version: number;
+  formato: FormatoVideo;
+  proyecto: ProyectoVideo;
+  etapa: EtapaTrabajo;
+  /** SOLO las escenas que hay que procesar (imágenes o clips). En `armado` se ignora. */
+  escenas: EscenaProyecto[];
+  quien: { id: string; nombre: string };
+};
+
+const conNota = (prompt: string, nota: string) => (nota.trim() ? `${prompt.trim()}\n\nCORRECCIÓN PEDIDA POR QUIEN REVISÓ EL INTENTO ANTERIOR: ${nota.trim()}` : prompt);
+
+/**
+ * Encola UNA etapa del proyecto (`imagenes`, `clips` o `armado`) para un
+ * subconjunto de escenas. No escribe el guion: quien llama marca las piezas
+ * `en-cola` con el id del trabajo y guarda. Las reglas de qué se puede pedir
+ * (imagen aprobada antes del clip, tope de intentos) las aplica quien llama;
+ * aquí se vuelven a comprobar las que cuestan dinero.
+ */
+export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{ trabajo: TrabajoVideo } | { error: string }> {
+  if (!servidorVideoActivo()) return { error: "La generación no está conectada: falta SERVIDOR_SECRET. El plan queda guardado y se podrá generar cuando el servidor de videos esté conectado." };
+  const b = await asegurarBucketTrabajos(admin);
+  if (b.error) return { error: b.error };
+  const { proyecto, etapa } = p;
+  let escenas = p.escenas;
+  if (etapa === "armado") escenas = [];
+  else {
+    if (!escenas.length) return { error: "No hay escenas para generar." };
+    if (escenas.some((e) => e.tipo !== "generada")) return { error: "Las escenas de foto real y el cierre no se generan: se fabrican al armar, sin costo." };
+    if (etapa === "clips") {
+      const sinImagen = escenas.filter((e) => e.imagen.estado !== "aprobada" || !e.imagen.url);
+      if (sinImagen.length) return { error: `No se genera ningún clip sin su imagen aprobada. Falta aprobar la imagen de la escena ${sinImagen.map((e) => e.n).join(", ")}.` };
+      const claves = await clavesDeHoy(admin);
+      if (!claves.has(`p:${p.g.id}`) && claves.size >= TOPE_DIARIO_VIDEOS) {
+        return { error: `Hoy ya se pidieron ${claves.size} de ${TOPE_DIARIO_VIDEOS} videos, que es el tope diario. Mañana se libera; si hace falta subirlo, lo cambia el CEO (TOPE_DIARIO_VIDEOS).` };
+      }
+    }
+  }
+  const ahora = new Date();
+  const sello = selloBogota(ahora);
+  const iso = ahora.toISOString();
+  // El trabajo lleva el número de ESTE intento (el que quien llama anota en el proyecto al encolar).
+  const paraEtapa = escenas.map((e) =>
+    etapa === "imagenes"
+      ? { ...e, promptImagen: conNota(e.promptImagen, e.imagen.nota), imagen: { ...e.imagen, intentos: e.imagen.intentos + 1 } }
+      : { ...e, promptVideo: conNota(e.promptVideo, e.clip.nota), clip: { ...e.clip, intentos: e.clip.intentos + 1 } },
+  );
+  const trabajo: TrabajoVideo = {
+    id: `${sello.dia}-${sello.hora}-${randomBytes(6).toString("hex")}`,
+    tipo: "video",
+    guionId: p.g.id,
+    version: p.version,
+    formato: p.formato.slug,
+    formatoNombre: p.formato.nombre,
+    producto: p.g.producto,
+    cliente: p.g.cliente,
+    pais: p.g.pais,
+    relacionAspecto: p.formato.relacion_aspecto || "9:16",
+    duracionObjetivo: etapa === "armado" ? duracionTotal(proyecto) : escenas.reduce((x, e) => x + e.duracion, 0),
+    escenas: [],
+    imagenesProducto: proyecto.contexto.fotos.slice(0, MAX_IMAGENES_PRODUCTO),
+    opciones: { ...proyecto.opciones },
+    pedidoPor: p.quien,
+    origen: "manual",
+    cierre: { ...proyecto.contexto.cierre },
+    avisos: [],
+    etapa,
+    contexto: proyecto.contexto,
+    escenasEtapa: paraEtapa,
+    todas: etapa === "armado" ? proyecto.escenas : [],
+    reportes: [],
+    creditos: 0,
+    estado: "pendiente",
+    motivo: "",
+    intentos: 0,
+    maxIntentos: MAX_INTENTOS_VIDEO,
+    creadoAt: iso,
+    tomadoAt: null,
+    latidoAt: null,
+    terminadoAt: null,
+    noAntesDe: null,
+    toma: null,
+    trabajador: null,
+    progreso: null,
+    segundosGenerados: 0,
+    costoEstimadoUsd: null,
+    resultado: null,
+    historial: [
+      {
+        fecha: iso,
+        estado: "pendiente",
+        nota: `${ETAPA_LABELS[etapa]}${etapa === "armado" ? "" : ` · ${escenas.length === 1 ? `escena ${escenas[0].n}` : `${escenas.length} escenas`}`} · pedido por ${p.quien.nombre}`,
+      },
+    ],
+  };
+  const w = await escribir(admin, CARPETAS.pendientes, trabajo, true);
+  if (w.error) return { error: w.error };
+  return { trabajo };
+}
+
+/** Varios trabajos por id, en paralelo (los que ya no existan se saltan). */
+export async function leerTrabajos(ids: string[]): Promise<TrabajoVideo[]> {
+  const leidos = await Promise.all([...new Set(ids)].filter((id) => ID_TRABAJO.test(id)).map((id) => buscarTrabajo(id)));
+  return leidos.filter((x): x is NonNullable<typeof x> => !!x).map((x) => x.trabajo);
 }
 
 /** Cancela un trabajo que todavía nadie tomó. */
@@ -358,12 +519,8 @@ async function soltar(admin: Admin, t: TrabajoVideo, motivo: string, definitivo:
 }
 
 async function avisarFallo(admin: Admin, t: TrabajoVideo) {
-  if (!t.pedidoPor.id) return;
-  try {
-    await notify(admin, t.pedidoPor.id, "terminado", `No se pudo generar el video de «${t.producto}» (v${t.version}): ${t.motivo}`.slice(0, 240), `/videos?guion=${t.guionId}`);
-  } catch {
-    /* el aviso es mejor esfuerzo */
-  }
+  const que = t.etapa ? `${ETAPA_LABELS[t.etapa].toLowerCase()} del video` : "el video";
+  await avisar(admin, t.pedidoPor.id, `No se pudo generar ${que} de «${t.producto}» (v${t.version}): ${t.motivo}`, `/videos?guion=${t.guionId}`);
 }
 
 /** Trabajos en curso cuyo trabajador dejó de reportar: vuelven a la cola o quedan en fallo. */
@@ -403,6 +560,16 @@ export async function tomarTrabajo(admin: Admin, trabajador: string): Promise<Re
       t.noAntesDe = null;
       t.motivo = "";
       t.progreso = null;
+      // Un trabajo de imágenes o clips que se retoma tras una caída y ya entregó
+      // todas sus escenas no se vuelve a repartir: se cierra solo, sin gastar.
+      if ((t.etapa === "imagenes" || t.etapa === "clips") && !escenasSinReportar(t).length) {
+        t.toma = null;
+        t.terminadoAt = iso;
+        anotar(t, "listo", "Todas sus escenas ya estaban entregadas: se cerró sin repetir nada", iso);
+        await escribir(admin, CARPETAS.enCurso, t);
+        await mover(admin, id, CARPETAS.enCurso, CARPETAS.listos);
+        continue;
+      }
       anotar(t, "tomado", `Tomado por ${t.trabajador} (intento ${t.intentos} de ${t.maxIntentos})`, iso);
       const w = await escribir(admin, CARPETAS.enCurso, t);
       if (w.error) return no(500, w.error);
@@ -431,31 +598,127 @@ function anotarGasto(t: TrabajoVideo, cuerpo: Record<string, unknown>) {
   if (costo !== null) t.costoEstimadoUsd = Math.round(costo * 1000) / 1000;
 }
 
-export async function reportarProgreso(admin: Admin, id: string, cuerpo: Record<string, unknown>): Promise<RespuestaServidor<{ estado: EstadoTrabajo }>> {
+// ---- archivos del proyecto: una carpeta por trabajo, así una regeneración nunca pisa lo aprobado ----
+const carpetaProyecto = (t: Pick<TrabajoVideo, "guionId" | "id">) => `${CARPETA_VIDEOS_GENERADOS}/${t.guionId}/proyecto/${t.id}`;
+const rutaPieza = (t: Pick<TrabajoVideo, "guionId" | "id">, n: number, tipo: TipoPieza, ext: string) => `${carpetaProyecto(t)}/e${n}-${tipo}.${ext}`;
+
+export type EscenaRecibida = { n: number; tipo: TipoPieza; ok: boolean; error?: string };
+
+/**
+ * Anota en el TRABAJO las escenas que el trabajador reporta (`escenas: [{ n, tipo,
+ * ruta | url, creditos?, segundos?, error? }]`). El proyecto del guion las recoge
+ * en la siguiente consulta de la pantalla (`plegarTrabajos`): aquí no se toca el
+ * guion, para que el trabajador y la persona que revisa nunca se pisen.
+ */
+async function anotarEscenas(admin: Admin, t: TrabajoVideo, crudas: unknown[], iso: string): Promise<EscenaRecibida[]> {
+  const esperado: TipoPieza = t.etapa === "imagenes" ? "imagen" : "clip";
+  const almacen = admin.storage.from(BUCKET_VIDEOS_GENERADOS);
+  let subidos: Map<string, number> | null = null;
+  const pesoDe = async (rutaArchivo: string) => {
+    if (!subidos) {
+      const { data } = await almacen.list(carpetaProyecto(t), { limit: 200 });
+      subidos = new Map((data ?? []).map((o) => [o.name, Number((o.metadata as { size?: number } | null)?.size ?? 0)]));
+    }
+    return subidos.get(rutaArchivo.slice(rutaArchivo.lastIndexOf("/") + 1)) ?? -1;
+  };
+  const salida: EscenaRecibida[] = [];
+  for (const cruda of crudas.slice(0, 40)) {
+    const x = cruda && typeof cruda === "object" ? (cruda as Record<string, unknown>) : {};
+    const n = typeof x.n === "number" ? Math.floor(x.n) : NaN;
+    const tipo: TipoPieza = x.tipo === "clip" ? "clip" : x.tipo === "imagen" ? "imagen" : esperado;
+    const mal = (error: string) => salida.push({ n, tipo, ok: false, error });
+    if (!t.escenasEtapa.some((e) => e.n === n)) {
+      mal("Esa escena no es de este trabajo.");
+      continue;
+    }
+    if (tipo !== esperado) {
+      mal(`Este trabajo es de ${ETAPA_LABELS[t.etapa as EtapaTrabajo].toLowerCase()}: no admite «${tipo}».`);
+      continue;
+    }
+    const base = { n, tipo, creditos: numero(x.creditos) ?? 0, segundos: numero(x.segundos) ?? 0, fecha: iso };
+    const error = typeof x.error === "string" ? x.error.trim().slice(0, 600) : "";
+    if (error) {
+      t.reportes.push({ ...base, url: "", ruta: null, error });
+      salida.push({ n, tipo, ok: true });
+      continue;
+    }
+    // Repetir el aviso de una escena ya entregada no la duplica ni la vuelve a cobrar.
+    if (t.reportes.some((r) => r.n === n && r.tipo === tipo && !r.error && (r.ruta === x.ruta || r.url === x.url))) {
+      salida.push({ n, tipo, ok: true });
+      continue;
+    }
+    if (typeof x.ruta === "string" && x.ruta) {
+      const exts = tipo === "clip" ? ["mp4"] : Object.keys(EXT_IMAGEN);
+      if (!exts.some((ext) => x.ruta === rutaPieza(t, n, tipo, ext))) {
+        mal("`ruta` no es la que entregó este trabajo al pedir la subida de esa escena.");
+        continue;
+      }
+      const peso = await pesoDe(x.ruta);
+      if (peso < 0) {
+        mal("El archivo todavía no está en Storage: la subida no terminó.");
+        continue;
+      }
+      if (peso < 200) {
+        mal("El archivo subido está vacío. Súbelo de nuevo.");
+        continue;
+      }
+      t.reportes.push({ ...base, url: almacen.getPublicUrl(x.ruta).data.publicUrl, ruta: x.ruta, error: "" });
+      salida.push({ n, tipo, ok: true });
+      continue;
+    }
+    const u = typeof x.url === "string" ? enlaceSeguro(x.url) : null;
+    if (!u || !u.startsWith("https://")) {
+      mal("Manda `ruta` (archivo subido con la URL firmada), `url` (https) o `error`.");
+      continue;
+    }
+    t.reportes.push({ ...base, url: u.slice(0, 600), ruta: null, error: "" });
+    salida.push({ n, tipo, ok: true });
+  }
+  t.reportes = t.reportes.slice(-MAX_REPORTES);
+  return salida;
+}
+
+export async function reportarProgreso(
+  admin: Admin,
+  id: string,
+  cuerpo: Record<string, unknown>,
+): Promise<RespuestaServidor<{ estado: EstadoTrabajo; escenas?: EscenaRecibida[] }>> {
   const r = await enCursoDe(id, cuerpo.toma);
   if (!r.ok) return r;
   const t = r.dato;
-  const estado = cuerpo.estado === "montando" ? "montando" : cuerpo.estado === "generando" ? "generando" : null;
+  const crudas = Array.isArray(cuerpo.escenas) ? cuerpo.escenas : [];
+  if (crudas.length && t.etapa !== "imagenes" && t.etapa !== "clips") {
+    return no(400, "Este trabajo no es de imágenes ni de clips: no admite `escenas`.");
+  }
+  // Un reporte de escenas sin `estado` se entiende como «generando».
+  const estado = cuerpo.estado === "montando" ? "montando" : cuerpo.estado === "generando" || crudas.length ? "generando" : null;
   if (!estado) return no(400, "`estado` debe ser «generando» o «montando».");
   const iso = new Date().toISOString();
+  const recibidas = crudas.length ? await anotarEscenas(admin, t, crudas, iso) : undefined;
   const p = cuerpo.progreso && typeof cuerpo.progreso === "object" ? (cuerpo.progreso as Record<string, unknown>) : null;
   const progreso: ProgresoTrabajo | null = p
     ? { hecho: numero(p.hecho) ?? 0, total: numero(p.total) ?? 0, detalle: typeof p.detalle === "string" ? p.detalle.slice(0, 200) : "" }
     : t.progreso;
   t.latidoAt = iso;
   t.progreso = progreso;
+  if (!p && recibidas) {
+    // Sin barra propia del trabajador, el avance es cuántas escenas ya reportó.
+    const total = t.escenasEtapa.length;
+    const hecho = total - escenasSinReportar(t).length;
+    t.progreso = { hecho, total, detalle: `${hecho} de ${total} ${t.etapa === "imagenes" ? "imágenes" : "clips"}` };
+  }
   anotarGasto(t, cuerpo);
   if (t.estado !== estado) anotar(t, estado, estado === "generando" ? "Empezó a generar las escenas" : "Empezó el montaje", iso);
   const w = await escribir(admin, CARPETAS.enCurso, t);
   if (w.error) return no(500, w.error);
-  return { ok: true, dato: { estado } };
+  return { ok: true, dato: recibidas ? { estado, escenas: recibidas } : { estado } };
 }
 
 export const rutaVideoGenerado = (t: Pick<TrabajoVideo, "guionId" | "version" | "id">) =>
   `${CARPETA_VIDEOS_GENERADOS}/${t.guionId}/v${t.version}-${t.id}.mp4`;
 
 export type SubidaFirmada = { url: string; metodo: "PUT"; cabeceras: Record<string, string>; bucket: string; ruta: string };
-export type ResultadoRecibido = { estado: "listo"; videoUrl: string; version: number; guionId: string };
+export type ResultadoRecibido = { estado: "listo"; videoUrl: string; version: number; guionId: string; etapa?: EtapaTrabajo; faltaron?: number[] };
 
 /**
  * Dos usos, con el mismo cuerpo `{ toma, … }`:
@@ -472,14 +735,77 @@ export async function recibirResultado(
   if (!r.ok) {
     // Reintento de un resultado que ya había entrado: se responde lo mismo.
     const hecho = r.estado === 409 ? await leerEn(CARPETAS.listos, id) : null;
-    if (hecho?.resultado && typeof cuerpo.toma === "string" && hecho.historial.some((h) => h.estado === "listo")) {
-      return { ok: true, dato: { estado: "listo", videoUrl: hecho.resultado.videoUrl, version: hecho.version, guionId: hecho.guionId } };
+    if (hecho && typeof cuerpo.toma === "string" && hecho.historial.some((h) => h.estado === "listo") && (hecho.resultado || hecho.etapa === "imagenes" || hecho.etapa === "clips")) {
+      return {
+        ok: true,
+        dato: { estado: "listo", videoUrl: hecho.resultado?.videoUrl ?? "", version: hecho.version, guionId: hecho.guionId, ...(hecho.etapa ? { etapa: hecho.etapa } : {}) },
+      };
     }
     return r;
   }
   const t = r.dato;
   const esperada = rutaVideoGenerado(t);
   const almacen = admin.storage.from(BUCKET_VIDEOS_GENERADOS);
+  const porEscenas = t.etapa === "imagenes" || t.etapa === "clips";
+
+  // Subida por tipo (proyecto por escenas): la imagen base o el clip de UNA escena.
+  if (cuerpo.pedirSubida === true && (cuerpo.tipo === "imagen" || cuerpo.tipo === "clip")) {
+    const tipo: TipoPieza = cuerpo.tipo;
+    if (!porEscenas || (tipo === "imagen") !== (t.etapa === "imagenes")) {
+      return no(400, `Este trabajo ${t.etapa ? `es de ${ETAPA_LABELS[t.etapa].toLowerCase()}` : "es un video completo"}: no admite la subida de «${tipo}».`);
+    }
+    const n = typeof cuerpo.escena === "number" ? Math.floor(cuerpo.escena) : NaN;
+    if (!t.escenasEtapa.some((e) => e.n === n)) return no(400, "`escena` debe ser el número de una escena de este trabajo.");
+    const ext = tipo === "clip" ? "mp4" : typeof cuerpo.extension === "string" && EXT_IMAGEN[cuerpo.extension] ? cuerpo.extension : "jpg";
+    const destino = rutaPieza(t, n, tipo, ext);
+    const { data, error } = await almacen.createSignedUploadUrl(destino, { upsert: true });
+    if (error || !data) return no(500, `No se pudo preparar la subida: ${error?.message ?? "sin respuesta"}`);
+    t.latidoAt = new Date().toISOString();
+    await escribir(admin, CARPETAS.enCurso, t);
+    return {
+      ok: true,
+      dato: {
+        subida: {
+          url: data.signedUrl,
+          metodo: "PUT",
+          cabeceras: { "content-type": tipo === "clip" ? "video/mp4" : EXT_IMAGEN[ext], "x-upsert": "true", "cache-control": "max-age=3600" },
+          bucket: BUCKET_VIDEOS_GENERADOS,
+          ruta: destino,
+        },
+      },
+    };
+  }
+  if (porEscenas && cuerpo.pedirSubida === true) {
+    return no(400, "En esta etapa cada archivo se sube por escena: manda `tipo` («imagen» o «clip») y `escena`.");
+  }
+
+  // Cierre de un trabajo de imágenes o de clips: las escenas ya llegaron por `progreso`.
+  if (porEscenas) {
+    const iso = new Date().toISOString();
+    const creditos = numero(cuerpo.creditos);
+    if (creditos !== null) t.creditos = Math.max(t.creditos, Math.round(creditos * 100) / 100);
+    anotarGasto(t, cuerpo);
+    const faltaron = escenasSinReportar(t).map((e) => e.n);
+    const bien = t.reportes.filter((x) => !x.error).length;
+    t.terminadoAt = iso;
+    t.latidoAt = iso;
+    t.toma = null;
+    t.progreso = null;
+    t.motivo = "";
+    anotar(t, "listo", `${ETAPA_LABELS[t.etapa as EtapaTrabajo]}: ${bien} entregadas${faltaron.length ? `, ${faltaron.length} sin entregar` : ""}. Quedan por aprobar`, iso);
+    const w = await escribir(admin, CARPETAS.enCurso, t);
+    if (w.error) return no(500, w.error);
+    await mover(admin, t.id, CARPETAS.enCurso, CARPETAS.listos);
+    await avisar(
+      admin,
+      t.pedidoPor.id,
+      t.etapa === "imagenes"
+        ? `Las imágenes de «${t.producto}» están listas: revísalas y aprueba las que sirven`
+        : `Los clips de «${t.producto}» están listos: revísalos antes de armar el video`,
+      `/videos?guion=${t.guionId}`,
+    );
+    return { ok: true, dato: { estado: "listo", videoUrl: "", version: t.version, guionId: t.guionId, etapa: t.etapa as EtapaTrabajo, faltaron } };
+  }
 
   if (cuerpo.pedirSubida === true) {
     const { data, error } = await almacen.createSignedUploadUrl(esperada, { upsert: true });
@@ -527,10 +853,14 @@ export async function recibirResultado(
   if (!g) return no(409, "El guion de este trabajo ya no existe.", true);
   if (!g.versiones.some((v) => v.n === t.version)) return no(409, "La versión del guion de este trabajo ya no existe.", true);
   const iso = new Date().toISOString();
-  g.versiones = g.versiones.map((v) => (v.n === t.version ? { ...v, videoUrl, videoTrabajoId: t.id, videoAprobado: null } : v));
-  g.actualizadoAt = iso;
-  const wg = await escribirGuionArchivo(admin, g);
-  if (wg.error) return no(500, wg.error);
+  // Un armado NO escribe el guion aquí: el proyecto lo recoge del trabajo ya
+  // terminado (`ponerAlDiaProyecto`), igual que las imágenes y los clips.
+  if (t.etapa !== "armado") {
+    g.versiones = g.versiones.map((v) => (v.n === t.version ? { ...v, videoUrl, videoTrabajoId: t.id, videoAprobado: null } : v));
+    g.actualizadoAt = iso;
+    const wg = await escribirGuionArchivo(admin, g);
+    if (wg.error) return no(500, wg.error);
+  }
 
   const lst = (v: unknown, max: number) =>
     (Array.isArray(v) ? v : [])
@@ -557,14 +887,8 @@ export async function recibirResultado(
   if (w.error) return no(500, w.error);
   await mover(admin, t.id, CARPETAS.enCurso, CARPETAS.listos);
 
-  if (t.pedidoPor.id) {
-    try {
-      await notify(admin, t.pedidoPor.id, "terminado", `El video de «${t.producto}» (v${t.version}) está listo: revísalo y apruébalo`, `/videos?guion=${t.guionId}`);
-    } catch {
-      /* el aviso es mejor esfuerzo */
-    }
-  }
-  return { ok: true, dato: { estado: "listo", videoUrl, version: t.version, guionId: t.guionId } };
+  await avisar(admin, t.pedidoPor.id, `El video de «${t.producto}» (v${t.version}) está listo: revísalo y apruébalo`, `/videos?guion=${t.guionId}`);
+  return { ok: true, dato: { estado: "listo", videoUrl, version: t.version, guionId: t.guionId, ...(t.etapa ? { etapa: t.etapa } : {}) } };
 }
 
 export async function reportarFallo(

@@ -18,7 +18,9 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { analizarProducto, consultarFuentesVideo, escribirGuion, regenerarCierre, guardarGuionVideo, misVideos, resumirMercado, solicitarVideo } from "@/app/(protected)/videos/actions";
+import { analizarProducto, consultarFuentesVideo, escribirGuion, regenerarCierre, guardarGuionVideo, misVideos, resumirMercado } from "@/app/(protected)/videos/actions";
+import { analizarFotos, crearProyecto, pedirEtapa } from "@/app/(protected)/videos/proyecto-actions";
+import { FICHA_VACIA, fichaConDatos, hayTrabajoEnCurso } from "@/lib/proyecto-video";
 import { guardarGuion as guardarGuionProspecto } from "@/app/(protected)/prospectos/prospeccion-actions";
 import type { FormatoTarjeta } from "@/lib/video-formatos";
 import {
@@ -59,7 +61,9 @@ import { GenerarVideo } from "./generar-video";
 import { MisVideos } from "./mis-videos";
 import type { EstadoFuente } from "@/lib/investigacion-video/tipos";
 import { corchetes, trabajoActivo, type TrabajoVista } from "@/lib/trabajos-video";
-import { FotosProducto } from "./fotos-producto";
+import { FotosProducto, enlacesDeFotos } from "./fotos-producto";
+import { FichaProductoBloque } from "./ficha-producto";
+import { ConvertirEnProyecto, ProyectoVideoPanel } from "./proyecto-video";
 
 export type ProspectoOrigen = { id: string; nombre: string };
 
@@ -75,6 +79,8 @@ type Props = {
   videoActivo: boolean;
   /** Puede dar el sí a un video generado (equipo comercial). */
   puedeAprobarVideo: boolean;
+  /** El CEO puede reabrir los intentos de una escena que llegó al tope. */
+  esCeo: boolean;
   /** Guion que se abre al entrar (`/videos?guion=<id>`, el enlace de los avisos). */
   abrirGuionId: string | null;
   /** Lo que va debajo de «Guiones guardados» (la cola de videos del CEO). */
@@ -123,6 +129,8 @@ const VACIO: DatosVideo = {
   anunciosHallados: [],
   fuentesInvestigacion: [],
   investigacionCache: "",
+  fotosProducto: [],
+  fichaProducto: FICHA_VACIA,
 };
 
 /** Los campos del formulario tal como quedaron en un guion guardado. */
@@ -148,6 +156,8 @@ function datosDe(g: GuionGuardado): DatosVideo {
     anunciosHallados: g.anunciosHallados,
     fuentesInvestigacion: g.fuentesInvestigacion,
     investigacionCache: g.investigacionCache,
+    fotosProducto: g.fotosProducto,
+    fichaProducto: g.fichaProducto,
   };
 }
 
@@ -225,8 +235,15 @@ export function CrearVideo(props: Props) {
   const [avisoMercado, setAvisoMercado] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | "todo" | null>(null);
   const [guiones, setGuiones] = useState(props.guiones);
-  // Fotos del producto (enlaces https, uno por línea): se suben en el paso 02 y las usa el paso 07.
-  const [fotos, setFotos] = useState("");
+  // Fotos reales del producto (enlaces https, uno por línea). Se guardan con el guion (`fotosProducto`).
+  const [fotos, setFotos] = useState(deEnlace ? deEnlace.fotosProducto.join("\n") : "");
+  const fotosRef = useRef(fotos);
+  useEffect(() => {
+    fotosRef.current = fotos;
+  });
+  const listaFotos = useMemo(() => enlacesDeFotos(fotos), [fotos]);
+  /** Los datos tal como se guardan y viajan al servidor: con las fotos puestas. */
+  const datosCompletos = useMemo<DatosVideo>(() => ({ ...datos, fotosProducto: listaFotos }), [datos, listaFotos]);
   const arriba = useRef<HTMLDivElement>(null);
 
   const formato = useMemo(() => formatos.find((f) => f.slug === datos.formato) ?? null, [formatos, datos.formato]);
@@ -247,7 +264,10 @@ export function CrearVideo(props: Props) {
   const misGuiones = useMemo(() => guiones.filter((g) => g.autorId === props.userId).slice(0, 6), [guiones, props.userId]);
   // El cierre del guion que hay en el editor: qué le falta para traer oferta + llamado a la acción.
   const cierreFalta = useMemo(() => (guion.trim() ? faltaEnElCierre(guion, datos) : []), [guion, datos]);
-  const hayVideoEnMarcha = Object.values(misTrabajos).some((t) => trabajoActivo(t.estado));
+  const hayVideoEnMarcha =
+    Object.values(misTrabajos).some((t) => trabajoActivo(t.estado)) ||
+    misGuiones.some((g) => g.id !== idGuardado && g.versiones.some((v) => v.proyecto && hayTrabajoEnCurso(v.proyecto)));
+  const vigenteActual = actual ? versionVigente(actual) : null;
 
   // Mientras haya un video en proceso, «Mis videos» se pone al día solo.
   useEffect(() => {
@@ -255,10 +275,13 @@ export function CrearVideo(props: Props) {
     const reloj = window.setInterval(async () => {
       if (document.hidden) return;
       const r = await misVideos();
-      if (!("error" in r)) setMisTrabajos(r.trabajos);
+      if ("error" in r) return;
+      setMisTrabajos(r.trabajos);
+      // Los proyectos por escenas de los guiones que no están abiertos también avanzan.
+      setGuiones((lista) => lista.map((g) => (g.id === idGuardado ? g : (r.guiones.find((x) => x.id === g.id) ?? g))));
     }, 15000);
     return () => window.clearInterval(reloj);
-  }, [hayVideoEnMarcha]);
+  }, [hayVideoEnMarcha, idGuardado]);
 
   /** Análisis del producto. Devuelve los datos ya actualizados (el estado tarda un render). */
   async function investigar(base: DatosVideo, forzar = false): Promise<DatosVideo | null> {
@@ -285,7 +308,10 @@ export function CrearVideo(props: Props) {
     };
     setDatos((d) => ({ ...d, anunciosHallados: f.anuncios, fuentesInvestigacion: f.fuentes, investigacionCache: f.deCache ?? "", analisisLeyoPagina: f.leyoPagina }));
     // Las imágenes públicas de la página se proponen como fotos del producto, si no hay ninguna.
-    if (f.imagenes.length) setFotos((x) => (x.trim() ? x : f.imagenes.join("\n")));
+    if (f.imagenes.length && !fotosRef.current.trim()) {
+      fotosRef.current = f.imagenes.join("\n");
+      setFotos(fotosRef.current);
+    }
     // Paso 2: el análisis, que cita cada anuncio.
     setFase("Investigando");
     const r = await analizarProducto(conFuentes);
@@ -300,35 +326,57 @@ export function CrearVideo(props: Props) {
     return { ...conFuentes, ...cambio };
   }
 
-  /** Tras el guion: guarda y, si hay servidor, manda el video a la cola. */
+  /**
+   * Tras el guion: lo guarda, propone el plan de escenas y, si hay servidor,
+   * manda a la cola SOLO las imágenes base. De ahí en adelante decide una
+   * persona: aprobar imágenes, pedir clips, aprobar clips, armar.
+   */
   async function terminarTodo(d: DatosVideo, texto: string, origenTexto: OrigenGuion) {
+    const lista = enlacesDeFotos(fotosRef.current);
     setFase("Guardando el guion");
-    const g = await guardarGuionVideo({ id: idGuardado, datos: d, guion: texto, origen: origenTexto, prospectoId });
+    const g = await guardarGuionVideo({ id: idGuardado, datos: { ...d, fotosProducto: lista }, guion: texto, origen: origenTexto, prospectoId });
     if ("error" in g) {
       setFase(null);
       return void toast.error(g.error, { duration: 9000 });
     }
     alGuardar(g.guardado, true);
-    if (!props.videoActivo) {
+    setDatos((x) => ({ ...x, fichaProducto: g.guardado.fichaProducto }));
+    const alProyecto = () => window.setTimeout(() => document.getElementById("generar-video")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    if (!lista.length) {
       setFase(null);
-      setAvisoRapido("Investigación y guion listos y guardados. El video todavía no se puede generar: el servidor de videos no está conectado. Cuando lo esté, abre este guion y pídelo en el paso «Generar video».");
+      setAvisoRapido("Investigación y guion listos y guardados. Para el video por escenas falta al menos una foto real del producto: súbela aquí arriba y pulsa «Convertir en proyecto por escenas» en el paso 07.");
       return void toast.success("Guion listo y guardado");
     }
-    setFase("Enviando a la cola de video");
-    const imagenesProducto = fotos.split(/\s+/).map((x) => x.trim()).filter(Boolean);
-    const v = await solicitarVideo(g.guardado.id, { imagenesProducto });
-    setFase(null);
-    if ("error" in v) {
-      setAvisoRapido(`El guion quedó guardado, pero el video no se pudo pedir: ${v.error}`);
+    if (versionVigente(g.guardado)?.proyecto) {
+      setFase(null);
+      setAvisoRapido("El guion no cambió y ya tiene su proyecto por escenas: continúa en el paso 07.");
+      return void alProyecto();
+    }
+    setFase("Proponiendo el plan de escenas");
+    const p = await crearProyecto(g.guardado.id, { fotos: lista, ficha: g.guardado.fichaProducto });
+    if ("error" in p) {
+      setFase(null);
+      setAvisoRapido(`El guion quedó guardado, pero el plan de escenas no se pudo armar: ${p.error}`);
       return;
     }
+    alGuardar(p.guardado, false);
+    if (!props.videoActivo) {
+      setFase(null);
+      setAvisoRapido("Investigación, guion y plan de escenas listos y guardados. La generación de imágenes y clips se activa al conectar el servidor de videos; mientras tanto puedes revisar y editar el plan en el paso 07.");
+      toast.success("Plan de escenas listo");
+      return void alProyecto();
+    }
+    setFase("Enviando las imágenes a la cola");
+    const v = await pedirEtapa(p.guardado.id, "imagenes");
+    setFase(null);
+    if ("error" in v) {
+      setAvisoRapido(`El plan de escenas quedó listo, pero las imágenes no se pudieron pedir: ${v.error}`);
+      return void alProyecto();
+    }
     alGuardar(v.guardado, false);
-    setMisTrabajos((m) => {
-      const t = v.trabajos.find((x) => x.guionId === v.guardado.id && x.version === versionVigente(v.guardado)?.n);
-      return t ? { ...m, [v.guardado.id]: t } : m;
-    });
-    setAvisoRapido(null);
-    toast.success("Video en cola. Te avisamos cuando esté por aprobar.");
+    setAvisoRapido("Plan de escenas listo e imágenes base en cola. Cuando lleguen, revísalas una por una en el paso 07: solo de las que apruebes se generan los clips.");
+    toast.success("Imágenes en cola. Te avisamos cuando estén para revisar.");
+    alProyecto();
   }
 
   /** El único OK: encadena todo lo que falte. */
@@ -337,6 +385,23 @@ export function CrearVideo(props: Props) {
     if (!datos.oferta.trim() || !datos.llamado.trim()) {
       setAvisoRapido("Antes de generar, escribe la oferta y el llamado a la acción: todo video cierra con los dos y no se inventan.");
       return;
+    }
+    // La ficha del producto se confirma antes de seguir: lo que diga es lo que saldrá en pantalla.
+    const lista = enlacesDeFotos(fotosRef.current);
+    if (lista.length && !datos.fichaProducto.confirmado) {
+      const irALaFicha = () => document.getElementById("ficha-producto")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (!fichaConDatos(datos.fichaProducto)) {
+        setOcupado("todo");
+        setFase("Mirando las fotos del producto");
+        const r = await analizarFotos({ ...datos, fotosProducto: lista });
+        setFase(null);
+        setOcupado(null);
+        if (!("error" in r)) set("fichaProducto", r.ficha);
+        setAvisoRapido(
+          `${"error" in r ? r.error : (r.aviso ?? "La IA miró las fotos y propuso la ficha del producto.")} Revísala, corrige lo que no sea cierto, llena lo que hay que preguntar y pulsa «Confirmar». Después vuelve a pulsar «Generar todo».`,
+        );
+      } else setAvisoRapido("Antes de generar, confirma la ficha del producto (o corrígela): lo que diga es lo que el video muestra y dice.");
+      return void irALaFicha();
     }
     if (guion.trim() && sinGuardar && !window.confirm("Hay un guion sin guardar en el editor. «Generar todo» escribe uno nuevo. ¿Continuar?")) return;
     setOcupado("todo");
@@ -460,10 +525,11 @@ export function CrearVideo(props: Props) {
 
   async function guardar(comoNuevo: boolean) {
     setOcupado("guardar");
-    const r = await guardarGuionVideo({ id: comoNuevo ? null : idGuardado, datos, guion, origen, prospectoId });
+    const r = await guardarGuionVideo({ id: comoNuevo ? null : idGuardado, datos: datosCompletos, guion, origen, prospectoId });
     setOcupado(null);
     if ("error" in r) return void toast.error(r.error, { duration: 9000 });
     const g = r.guardado;
+    setDatos((x) => ({ ...x, fichaProducto: g.fichaProducto }));
     setIdGuardado(g.id);
     setGuardadoTexto(g.guion);
     setGuiones((lista) => [g, ...lista.filter((x) => x.id !== g.id)]);
@@ -483,6 +549,7 @@ export function CrearVideo(props: Props) {
   function abrir(g: GuionGuardado, duplicar: boolean) {
     if (sinGuardar && !window.confirm("Tienes un guion sin guardar. ¿Descartarlo y abrir este?")) return;
     setDatos(datosDe(g));
+    setFotos(g.fotosProducto.join("\n"));
     setGuion(g.guion);
     setOrigen(g.origen);
     setIdGuardado(duplicar ? null : g.id);
@@ -598,16 +665,45 @@ export function CrearVideo(props: Props) {
                 aria-label="Llamado a la acción (flujo rápido)"
               />
             </Campo>
+            <Campo etiqueta="País del video (acento y oferta)">
+              <Select
+                items={ITEMS_PAIS}
+                value={datos.pais}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  setDatos((d) => ({ ...d, pais: v as string, paisBusqueda: d.paisBusqueda === d.pais ? (v as string) : d.paisBusqueda }));
+                }}
+              >
+                <SelectTrigger className="w-full" aria-label="País del video (flujo rápido)">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAISES.map((p) => (
+                    <SelectItem key={p.codigo} value={p.codigo}>
+                      {p.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Campo>
+            <Campo etiqueta="Lo que dio el cliente">
+              <Textarea
+                value={datos.valores}
+                onChange={(e) => set("valores", e.target.value)}
+                maxLength={4000}
+                rows={1}
+                className="min-h-8"
+                aria-label="Lo que dio el cliente (flujo rápido)"
+              />
+            </Campo>
             <div className="md:col-span-2">
-              <Campo etiqueta="Lo que dio el cliente" ayuda={`País del video: ${nombrePais(datos.pais)} (se cambia en el paso 02, junto con la oferta y las fotos).`}>
-                <Textarea
-                  value={datos.valores}
-                  onChange={(e) => set("valores", e.target.value)}
-                  maxLength={4000}
-                  rows={2}
-                  aria-label="Lo que dio el cliente (flujo rápido)"
-                />
-              </Campo>
+              <FotosProducto fotos={fotos} onChange={setFotos} />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Sube dos fotos buenas (frente y otra vista). Con ellas se hacen, sin generar nada, las escenas del producto y el cierre: el producto sale idéntico y esas escenas no cuestan.
+              </p>
+            </div>
+            <div id="ficha-producto" className="scroll-mt-24 md:col-span-2">
+              <FichaProductoBloque datos={datosCompletos} ficha={datos.fichaProducto} onChange={(f) => set("fichaProducto", f)} bloqueado={!!ocupado} />
             </div>
           </div>
 
@@ -746,8 +842,8 @@ export function CrearVideo(props: Props) {
             </Button>
             <span className="text-xs text-muted-foreground">
               {props.videoActivo
-                ? "Escribe el guion, lo guarda y manda el video a la cola. Llega como «Por aprobar», con aviso."
-                : "Genera la investigación y el guion. El video se podrá pedir cuando el servidor de videos esté conectado."}
+                ? "Escribe el guion, lo guarda, propone el plan de escenas y manda a la cola solo las imágenes base. Tú apruebas antes de cada gasto."
+                : "Genera la investigación, el guion y el plan de escenas. Las imágenes y clips se podrán pedir cuando el servidor de videos esté conectado."}
             </span>
           </div>
         </CardContent>
@@ -954,9 +1050,10 @@ export function CrearVideo(props: Props) {
               <Textarea value={datos.valores} onChange={(e) => set("valores", e.target.value)} maxLength={4000} rows={4} />
             </Campo>
           </div>
-          <div className="md:col-span-2">
-            <FotosProducto fotos={fotos} onChange={setFotos} />
-          </div>
+          <p className="text-xs text-muted-foreground md:col-span-2">
+            Las fotos reales del producto y su ficha están arriba, en «Todo en un solo OK» ({listaFotos.length} {listaFotos.length === 1 ? "foto" : "fotos"}
+            {datos.fichaProducto.confirmado ? ", ficha confirmada" : ", ficha sin confirmar"}).
+          </p>
         </CardContent>
       </Card>
 
@@ -1312,7 +1409,7 @@ export function CrearVideo(props: Props) {
         key={idGuardado ?? "nuevo"}
         guardado={actual}
         guionActual={guion}
-        datos={datos}
+        datos={datosCompletos}
         prospectoId={prospectoId}
         sinGuardar={sinGuardar}
         bloqueado={!!ocupado}
@@ -1324,12 +1421,11 @@ export function CrearVideo(props: Props) {
       <Card id="generar-video" className="scroll-mt-20">
         <CardHeader>
           <CardTitle>
-            <Paso n="07">Generar video</Paso>
+            <Paso n="07">Video por escenas</Paso>
           </CardTitle>
           <CardDescription>
-            {props.videoActivo
-              ? "El servidor de videos genera cada escena de la versión vigente del guion, las monta con voz y subtítulos y deja el video ligado a esa versión, por aprobar. Tarda varios minutos; puedes cerrar la página y volver."
-              : "El video se genera en un servidor aparte, que todavía no está conectado."}
+            El guion se produce por etapas y tú apruebas antes de cada gasto: imágenes base, clips solo de lo aprobado y armado sin costo. Una corrección rehace solo la escena afectada.
+            {props.videoActivo ? " Puedes cerrar la página y volver: el servidor sigue trabajando." : " El servidor de videos todavía no está conectado: el plan se puede preparar desde ya."}
           </CardDescription>
           {actual && (
             <CardAction>
@@ -1337,18 +1433,52 @@ export function CrearVideo(props: Props) {
             </CardAction>
           )}
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <GenerarVideo
-            activo={props.videoActivo}
-            fotos={fotos}
-            onFotos={setFotos}
-            guardado={actual}
-            sinGuardar={sinGuardar}
-            bloqueado={!!ocupado}
-            puedeAprobar={props.puedeAprobarVideo}
-            puedeUsarEnProspecto={props.puedeUsarEnProspecto}
-            onGuardado={alGuardar}
-          />
+        <CardContent className="flex flex-col gap-3">
+          {actual && vigenteActual?.proyecto ? (
+            <ProyectoVideoPanel
+              key={`${actual.id}:${vigenteActual.n}`}
+              guardado={actual}
+              activo={props.videoActivo}
+              puedeAprobar={props.puedeAprobarVideo}
+              esCeo={props.esCeo}
+              puedeUsarEnProspecto={props.puedeUsarEnProspecto}
+              fotos={listaFotos}
+              ficha={datos.fichaProducto}
+              bloqueado={!!ocupado}
+              onGuardado={alGuardar}
+            />
+          ) : (
+            <ConvertirEnProyecto
+              guardado={actual}
+              sinGuardar={sinGuardar}
+              activo={props.videoActivo}
+              fotos={listaFotos}
+              ficha={datos.fichaProducto}
+              bloqueado={!!ocupado}
+              onGuardado={(g, cargar) => {
+                alGuardar(g, cargar);
+                setDatos((x) => ({ ...x, fichaProducto: g.fichaProducto }));
+              }}
+            />
+          )}
+          <details open={!vigenteActual?.proyecto && !!actual?.versiones.some((v) => v.videoUrl && !v.proyecto)} className="rounded-xl border border-border bg-muted/30">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+              Modo anterior: el video completo de una vez (sin revisión por escena; cuesta más)
+            </summary>
+            <div className="border-t border-border p-3">
+              <GenerarVideo
+                activo={props.videoActivo}
+                fotos={fotos}
+                onFotos={setFotos}
+                guardado={actual}
+                sinGuardar={sinGuardar}
+                bloqueado={!!ocupado}
+                puedeAprobar={props.puedeAprobarVideo}
+                puedeUsarEnProspecto={props.puedeUsarEnProspecto}
+                onGuardado={alGuardar}
+              />
+            </div>
+          </details>
           {formato && <span className={ETIQUETA}>Prompts por escena del formato (para generar a mano)</span>}
           {!formato && <p className="text-sm text-muted-foreground">Elige un formato para ver sus prompts por escena.</p>}
           {formato?.prompts.map((p) => {

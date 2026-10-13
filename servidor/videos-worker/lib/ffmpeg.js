@@ -49,6 +49,17 @@ function crear(cfg) {
     }
   }
 
+  /** Ancho y alto del primer flujo de video o imagen ({ ancho: 0, alto: 0 } si no se puede leer). */
+  async function dimensiones(archivo, cwd) {
+    try {
+      const s = await correr(cfg.ffprobe, ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", archivo], cwd, 60000);
+      const m = /(\d+)x(\d+)/.exec(String(s));
+      return m ? { ancho: Number(m[1]), alto: Number(m[2]) } : { ancho: 0, alto: 0 };
+    } catch {
+      return { ancho: 0, alto: 0 };
+    }
+  }
+
   /** Comprueba que ffmpeg y ffprobe responden. Devuelve la versión o lanza. */
   async function comprobar() {
     const v = await correr(cfg.ffmpeg, ["-version"], undefined, 20000);
@@ -56,7 +67,7 @@ function crear(cfg) {
     return v.split(/\r?\n/)[0];
   }
 
-  return { ffmpeg, duracion, tieneAudio, comprobar };
+  return { ffmpeg, duracion, tieneAudio, dimensiones, comprobar };
 }
 
 /** Ancho y alto de salida para una relación de aspecto («9:16», «16:9», «1:1»…). */
