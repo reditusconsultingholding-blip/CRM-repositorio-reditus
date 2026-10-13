@@ -1,0 +1,21 @@
+{
+  "name": "reditus-prospeccion-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trabajador de prospección por correo de Reditus: envía de uno en uno lo que el CRM autoriza y le reporta respuestas y rebotes.",
+  "main": "trabajador.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node trabajador.js",
+    "comprobar": "node trabajador.js --comprobar",
+    "test": "node pruebas/pruebas.js"
+  },
+  "dependencies": {
+    "imapflow": "^2.4.0",
+    "mailparser": "^3.9.38",
+    "nodemailer": "^10.1.0"
+  }
+}

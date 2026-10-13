@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Trae al CRM la biblioteca de formatos de video (sección «Crear video»).
 //
-// Fuente:  repositorio `reditus-video-formatos` (un .md por formato).
+// Fuente:  carpeta `formatos-video/` de este repositorio (un .md por formato).
 // Destino: src/lib/video-formatos/formatos.json  (NO se edita a mano).
 //
 // Uso, desde la carpeta del CRM:
-//   node scripts/sincronizar-video-formatos.mjs [ruta-del-repo]
+//   node scripts/sincronizar-video-formatos.mjs [ruta-de-la-carpeta]
 //
 // La ruta del repositorio se toma, en este orden, del primer argumento, de la
-// variable VIDEO_FORMATOS_DIR o de ../Projects/reditus-video-formatos.
+// variable VIDEO_FORMATOS_DIR o de ./formatos-video. Si esa carpeta todavía no
+// existe, usa la ubicación anterior (../Projects/reditus-video-formatos).
 //
 // Qué hace: ejecuta `construir.cjs` en ese repositorio (valida los formatos y
 // regenera formatos/index.json) y copia el índice aquí. Si la validación
@@ -21,7 +22,11 @@ import { fileURLToPath } from "node:url";
 
 const crm = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repo = path.resolve(
-  process.argv[2] || process.env.VIDEO_FORMATOS_DIR || path.join(crm, "..", "Projects", "reditus-video-formatos"),
+  process.argv[2] ||
+    process.env.VIDEO_FORMATOS_DIR ||
+    (fs.existsSync(path.join(crm, "formatos-video", "construir.cjs"))
+      ? path.join(crm, "formatos-video")
+      : path.join(crm, "..", "Projects", "reditus-video-formatos")),
 );
 const constructor = path.join(repo, "construir.cjs");
 const origen = path.join(repo, "formatos", "index.json");

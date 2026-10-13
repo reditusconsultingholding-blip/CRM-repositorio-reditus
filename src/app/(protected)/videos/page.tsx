@@ -9,11 +9,15 @@ import { vistaTrabajo } from "@/lib/trabajos-video";
 import { listarTrabajos, servidorVideoActivo, topeDeHoy } from "@/lib/trabajos-video-server";
 import { CrearVideo, type ProspectoOrigen } from "@/components/videos/crear-video";
 import { ColaVideos } from "@/components/videos/cola-videos";
+import { misVideos } from "./actions";
 
 // «Crear video»: formato → datos del producto → investigación de mercado →
 // guion → guardar. La ven los roles de Ingresos y quien edita video. Los
 // guiones viven en Storage (no hay tabla), así que se leen con el cliente de
 // servicio DESPUÉS de validar el rol.
+// Las acciones de esta pantalla (investigación con anuncios, guion) pueden tardar más que el límite por defecto.
+export const maxDuration = 120;
+
 export default async function VideosPage({
   searchParams,
 }: {
@@ -77,6 +81,10 @@ export default async function VideosPage({
         }))
       : null;
 
+  // «Mis videos»: en qué va lo que pidió esta persona.
+  const mios = await misVideos();
+  const misTrabajos = "error" in mios ? {} : mios.trabajos;
+
   return (
     <CrearVideo
       formatos={tarjetas()}
@@ -89,6 +97,8 @@ export default async function VideosPage({
       videoActivo={videoActivo}
       puedeAprobarVideo={esIngresos}
       abrirGuionId={abrirGuionId}
+      userId={profile.id}
+      misTrabajos={misTrabajos}
     >
       {cola && <ColaVideos trabajos={cola.trabajos} tope={cola.tope} aviso={cola.aviso} />}
     </CrearVideo>

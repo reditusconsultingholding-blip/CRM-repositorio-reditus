@@ -18,11 +18,12 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { escribirGuion, guardarGuionVideo, resumirMercado } from "@/app/(protected)/videos/actions";
+import { analizarProducto, consultarFuentesVideo, escribirGuion, regenerarCierre, guardarGuionVideo, misVideos, resumirMercado, solicitarVideo } from "@/app/(protected)/videos/actions";
 import { guardarGuion as guardarGuionProspecto } from "@/app/(protected)/prospectos/prospeccion-actions";
 import type { FormatoTarjeta } from "@/lib/video-formatos";
 import {
   ESTADO_GUION_LABELS,
+  MAX_ANUNCIO_CLON,
   MAX_GUION,
   MAX_REFERENCIAS,
   ORIGEN_LABELS,
@@ -36,6 +37,8 @@ import {
   urlAdsLibrary,
   urlTikTokBusqueda,
   urlTikTokCreativeCenter,
+  rotuloInvestigacion,
+  faltaEnElCierre,
   versionVigente,
   type DatosVideo,
   type GuionGuardado,
@@ -53,6 +56,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Chip, ETIQUETA } from "@/components/prospectos/piezas";
 import { CorreccionesCliente, TONO_ESTADO } from "./correcciones";
 import { GenerarVideo } from "./generar-video";
+import { MisVideos } from "./mis-videos";
+import type { EstadoFuente } from "@/lib/investigacion-video/tipos";
+import { corchetes, trabajoActivo, type TrabajoVista } from "@/lib/trabajos-video";
 import { FotosProducto } from "./fotos-producto";
 
 export type ProspectoOrigen = { id: string; nombre: string };
@@ -73,6 +79,27 @@ type Props = {
   abrirGuionId: string | null;
   /** Lo que va debajo de «Guiones guardados» (la cola de videos del CEO). */
   children?: React.ReactNode;
+  /** Quien está viendo la pantalla: «Mis videos» muestra lo que pidió. */
+  userId: string;
+  /** Último trabajo de video de cada guion suyo, por id de guion. */
+  misTrabajos: Record<string, TrabajoVista>;
+};
+
+const ETIQUETA_FUENTE: Record<EstadoFuente, string> = {
+  ok: "Consultada",
+  vacia: "Sin resultados",
+  sin_clave: "Sin conectar",
+  fallo: "Falló",
+  sin_tiempo: "Sin tiempo",
+  no_consultada: "No consultada",
+};
+const TONO_FUENTE: Record<EstadoFuente, "neutro" | "azul" | "ambar" | "verde" | "rojo"> = {
+  ok: "verde",
+  vacia: "neutro",
+  sin_clave: "ambar",
+  fallo: "rojo",
+  sin_tiempo: "ambar",
+  no_consultada: "neutro",
 };
 
 const VACIO: DatosVideo = {
@@ -82,11 +109,20 @@ const VACIO: DatosVideo = {
   cliente: "",
   enlace: "",
   oferta: "",
+  llamado: "",
   valores: "",
   paisBusqueda: "CO",
   palabraClave: "",
   referencias: [{ ...REFERENCIA_VACIA }],
   resumenMercado: "",
+  anuncioClon: "",
+  anuncioClonEnlace: "",
+  analisisProducto: "",
+  analisisLeyoPagina: false,
+  formatosRecomendados: [],
+  anunciosHallados: [],
+  fuentesInvestigacion: [],
+  investigacionCache: "",
 };
 
 /** Los campos del formulario tal como quedaron en un guion guardado. */
@@ -98,11 +134,20 @@ function datosDe(g: GuionGuardado): DatosVideo {
     cliente: g.cliente,
     enlace: g.enlace,
     oferta: g.oferta,
+    llamado: g.llamado,
     valores: g.valores,
     paisBusqueda: g.paisBusqueda,
     palabraClave: g.palabraClave,
     referencias: g.referencias.length ? g.referencias : [{ ...REFERENCIA_VACIA }],
     resumenMercado: g.resumenMercado,
+    anuncioClon: g.anuncioClon,
+    anuncioClonEnlace: g.anuncioClonEnlace,
+    analisisProducto: g.analisisProducto,
+    analisisLeyoPagina: g.analisisLeyoPagina,
+    formatosRecomendados: g.formatosRecomendados,
+    anunciosHallados: g.anunciosHallados,
+    fuentesInvestigacion: g.fuentesInvestigacion,
+    investigacionCache: g.investigacionCache,
   };
 }
 
@@ -178,7 +223,7 @@ export function CrearVideo(props: Props) {
   const [indicacion, setIndicacion] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const [avisoMercado, setAvisoMercado] = useState<string | null>(null);
-  const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | null>(null);
+  const [ocupado, setOcupado] = useState<"mercado" | "guion" | "guardar" | "prospecto" | "todo" | null>(null);
   const [guiones, setGuiones] = useState(props.guiones);
   // Fotos del producto (enlaces https, uno por línea): se suben en el paso 02 y las usa el paso 07.
   const [fotos, setFotos] = useState("");
@@ -192,6 +237,169 @@ export function CrearVideo(props: Props) {
   const actual = useMemo(() => guiones.find((g) => g.id === idGuardado) ?? null, [guiones, idGuardado]);
   // Qué pasos de la estructura están rotulados en el guion que hay en el editor.
   const pasosRotulados = useMemo(() => [1, 2, 3, 4, 5].filter((n) => new RegExp(`^\\s*PASO ${n}\\b`, "mi").test(guion)), [guion]);
+
+  // ---- flujo de un solo OK: investigar → guion → datos que faltan → guardar → cola de video
+  const [fase, setFase] = useState<string | null>(null);
+  const [avisoRapido, setAvisoRapido] = useState<string | null>(null);
+  const [faltantes, setFaltantes] = useState<{ texto: string; origen: OrigenGuion; campos: string[]; valores: Record<string, string> } | null>(null);
+  const [misTrabajos, setMisTrabajos] = useState(props.misTrabajos);
+  const investigado = useRef<string>("");
+  const misGuiones = useMemo(() => guiones.filter((g) => g.autorId === props.userId).slice(0, 6), [guiones, props.userId]);
+  // El cierre del guion que hay en el editor: qué le falta para traer oferta + llamado a la acción.
+  const cierreFalta = useMemo(() => (guion.trim() ? faltaEnElCierre(guion, datos) : []), [guion, datos]);
+  const hayVideoEnMarcha = Object.values(misTrabajos).some((t) => trabajoActivo(t.estado));
+
+  // Mientras haya un video en proceso, «Mis videos» se pone al día solo.
+  useEffect(() => {
+    if (!hayVideoEnMarcha) return;
+    const reloj = window.setInterval(async () => {
+      if (document.hidden) return;
+      const r = await misVideos();
+      if (!("error" in r)) setMisTrabajos(r.trabajos);
+    }, 15000);
+    return () => window.clearInterval(reloj);
+  }, [hayVideoEnMarcha]);
+
+  /** Análisis del producto. Devuelve los datos ya actualizados (el estado tarda un render). */
+  async function investigar(base: DatosVideo, forzar = false): Promise<DatosVideo | null> {
+    if (!base.producto.trim()) {
+      toast.error("Escribe el producto para poder investigarlo.");
+      return null;
+    }
+    investigado.current = base.producto.trim();
+    setAvisoRapido(null);
+    // Paso 1: las fuentes (anuncios activos y página del producto). Sin IA.
+    setFase("Consultando fuentes");
+    const f = await consultarFuentesVideo(base, forzar);
+    if ("error" in f) {
+      setFase(null);
+      toast.error(f.error, { duration: 9000 });
+      return null;
+    }
+    const conFuentes: DatosVideo = {
+      ...base,
+      anunciosHallados: f.anuncios,
+      fuentesInvestigacion: f.fuentes,
+      investigacionCache: f.deCache ?? "",
+      analisisLeyoPagina: f.leyoPagina,
+    };
+    setDatos((d) => ({ ...d, anunciosHallados: f.anuncios, fuentesInvestigacion: f.fuentes, investigacionCache: f.deCache ?? "", analisisLeyoPagina: f.leyoPagina }));
+    // Las imágenes públicas de la página se proponen como fotos del producto, si no hay ninguna.
+    if (f.imagenes.length) setFotos((x) => (x.trim() ? x : f.imagenes.join("\n")));
+    // Paso 2: el análisis, que cita cada anuncio.
+    setFase("Investigando");
+    const r = await analizarProducto(conFuentes);
+    setFase(null);
+    if ("error" in r) {
+      toast.error(r.error, { duration: 9000 });
+      return conFuentes;
+    }
+    const cambio = { analisisProducto: r.texto, formatosRecomendados: r.formatos };
+    setDatos((d) => ({ ...d, ...cambio }));
+    setAvisoRapido(r.aviso ?? null);
+    return { ...conFuentes, ...cambio };
+  }
+
+  /** Tras el guion: guarda y, si hay servidor, manda el video a la cola. */
+  async function terminarTodo(d: DatosVideo, texto: string, origenTexto: OrigenGuion) {
+    setFase("Guardando el guion");
+    const g = await guardarGuionVideo({ id: idGuardado, datos: d, guion: texto, origen: origenTexto, prospectoId });
+    if ("error" in g) {
+      setFase(null);
+      return void toast.error(g.error, { duration: 9000 });
+    }
+    alGuardar(g.guardado, true);
+    if (!props.videoActivo) {
+      setFase(null);
+      setAvisoRapido("Investigación y guion listos y guardados. El video todavía no se puede generar: el servidor de videos no está conectado. Cuando lo esté, abre este guion y pídelo en el paso «Generar video».");
+      return void toast.success("Guion listo y guardado");
+    }
+    setFase("Enviando a la cola de video");
+    const imagenesProducto = fotos.split(/\s+/).map((x) => x.trim()).filter(Boolean);
+    const v = await solicitarVideo(g.guardado.id, { imagenesProducto });
+    setFase(null);
+    if ("error" in v) {
+      setAvisoRapido(`El guion quedó guardado, pero el video no se pudo pedir: ${v.error}`);
+      return;
+    }
+    alGuardar(v.guardado, false);
+    setMisTrabajos((m) => {
+      const t = v.trabajos.find((x) => x.guionId === v.guardado.id && x.version === versionVigente(v.guardado)?.n);
+      return t ? { ...m, [v.guardado.id]: t } : m;
+    });
+    setAvisoRapido(null);
+    toast.success("Video en cola. Te avisamos cuando esté por aprobar.");
+  }
+
+  /** El único OK: encadena todo lo que falte. */
+  async function generarTodo() {
+    if (!formato) return void toast.error("Elige un formato.");
+    if (!datos.oferta.trim() || !datos.llamado.trim()) {
+      setAvisoRapido("Antes de generar, escribe la oferta y el llamado a la acción: todo video cierra con los dos y no se inventan.");
+      return;
+    }
+    if (guion.trim() && sinGuardar && !window.confirm("Hay un guion sin guardar en el editor. «Generar todo» escribe uno nuevo. ¿Continuar?")) return;
+    setOcupado("todo");
+    setFaltantes(null);
+    let d: DatosVideo | null = datos;
+    if (!d.analisisProducto.trim()) d = await investigar(d);
+    if (!d) return void setOcupado(null);
+    setFase("Escribiendo el guion");
+    const r = await escribirGuion(d, "");
+    if ("error" in r) {
+      setFase(null);
+      setOcupado(null);
+      return void toast.error(r.error, { duration: 9000 });
+    }
+    setGuion(r.texto);
+    setOrigen(r.origen);
+    setAviso(r.aviso ?? null);
+    if (r.origen !== "ia") {
+      // Sin IA solo hay plantilla: no tiene sentido mandarla a video. Se deja en el editor.
+      setFase(null);
+      setOcupado(null);
+      setAvisoRapido(`${r.aviso ?? "La IA no escribió el guion."} «Generar todo» se detuvo aquí: completa el guion en el paso 04 y sigue a mano.`);
+      return;
+    }
+    let texto = r.texto;
+    // El cierre no se negocia: si el paso 5 no trae la oferta y el llamado, se reescribe solo ese bloque.
+    if (faltaEnElCierre(texto, d).length) {
+      setFase("Ajustando el cierre");
+      const c = await regenerarCierre(d, texto);
+      if (!("error" in c)) {
+        texto = c.texto;
+        setGuion(texto);
+        setAviso(null);
+      }
+    }
+    const campos = corchetes(texto).slice(0, 14);
+    if (campos.length) {
+      setFase(null);
+      setOcupado(null);
+      setFaltantes({ texto, origen: r.origen, campos, valores: {} });
+      return;
+    }
+    await terminarTodo(d, texto, r.origen);
+    setOcupado(null);
+  }
+
+  /** Formulario corto de datos que faltan: reemplaza cada [campo] por lo que se escribió. */
+  async function completarFaltantes() {
+    if (!faltantes) return;
+    let texto = faltantes.texto;
+    for (const c of faltantes.campos) {
+      const v = (faltantes.valores[c] ?? "").trim();
+      if (v) texto = texto.split(c).join(v);
+    }
+    const quedan = corchetes(texto).length;
+    if (quedan && !window.confirm(`Quedan ${quedan} datos sin completar; van a salir entre corchetes en el guion y el video puede leerlos mal. ¿Seguir así?`)) return;
+    setGuion(texto);
+    setFaltantes(null);
+    setOcupado("todo");
+    await terminarTodo(datos, texto, faltantes.origen);
+    setOcupado(null);
+  }
+
 
   /** Una acción del servidor devolvió el guion guardado (corrección, estado, restaurar…). */
   function alGuardar(g: GuionGuardado, cargar: boolean) {
@@ -324,6 +532,227 @@ export function CrearVideo(props: Props) {
         )}
       </div>
 
+      <MisVideos
+        guiones={misGuiones}
+        trabajos={misTrabajos}
+        enCurso={fase ? { producto: datos.producto, etiqueta: fase } : null}
+        abiertoId={idGuardado}
+        onAbrir={(g) => abrir(g, false)}
+      />
+
+      {/* ------------------------------------------- todo en un solo OK */}
+      <Card
+        onBlur={(e) => {
+          // Al salir de la tarjeta con el producto escrito, la investigación corre sola (una vez por producto).
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          const p = datos.producto.trim();
+          if (p && !datos.analisisProducto.trim() && investigado.current !== p && !ocupado && !fase) void investigar(datos);
+        }}
+      >
+        <CardHeader>
+          <CardTitle>Todo en un solo OK</CardTitle>
+          <CardDescription>
+            Pon el producto, revisa la investigación, elige el formato y pulsa «Generar todo». Lo demás (guion, guardado
+            y envío del video) se hace solo. Los pasos de abajo siguen ahí si quieres editar algo a mano.
+          </CardDescription>
+          <CardAction>
+            <Chip tono={datos.analisisProducto.trim() ? "azul" : "neutro"}>{rotuloInvestigacion(datos)}</Chip>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Campo etiqueta="Producto">
+              <Input
+                value={datos.producto}
+                onChange={(e) => set("producto", e.target.value)}
+                maxLength={240}
+                placeholder="Nombre y qué es, en pocas palabras"
+                aria-label="Producto (flujo rápido)"
+              />
+            </Campo>
+            <Campo etiqueta="Enlace de la tienda o del producto" ayuda="Si la página se deja leer, se usa su título, descripción, precio e imágenes.">
+              <Input
+                value={datos.enlace}
+                onChange={(e) => set("enlace", e.target.value)}
+                maxLength={500}
+                inputMode="url"
+                placeholder="https://…"
+                aria-label="Enlace (flujo rápido)"
+              />
+            </Campo>
+            <Campo etiqueta="Oferta (cierra el video)" ayuda="Precio o promoción, qué incluye y condición. Solo lo que dio el cliente.">
+              <Input
+                value={datos.oferta}
+                onChange={(e) => set("oferta", e.target.value)}
+                maxLength={400}
+                placeholder="Ej.: 2 unidades por $89.900 con envío gratis y pago contra entrega"
+                aria-label="Oferta (flujo rápido)"
+              />
+            </Campo>
+            <Campo etiqueta="Llamado a la acción" ayuda="Qué debe hacer la persona y dónde.">
+              <Input
+                value={datos.llamado}
+                onChange={(e) => set("llamado", e.target.value)}
+                maxLength={200}
+                placeholder="Ej.: pide el tuyo en el botón de abajo"
+                aria-label="Llamado a la acción (flujo rápido)"
+              />
+            </Campo>
+            <div className="md:col-span-2">
+              <Campo etiqueta="Lo que dio el cliente" ayuda={`País del video: ${nombrePais(datos.pais)} (se cambia en el paso 02, junto con la oferta y las fotos).`}>
+                <Textarea
+                  value={datos.valores}
+                  onChange={(e) => set("valores", e.target.value)}
+                  maxLength={4000}
+                  rows={2}
+                  aria-label="Lo que dio el cliente (flujo rápido)"
+                />
+              </Campo>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" disabled={!datos.producto.trim() || !!ocupado || !!fase} onClick={() => void investigar(datos)}>
+              <Search className={cn(fase === "Investigando" && "animate-pulse")} />
+              {fase === "Investigando" ? "Investigando…" : datos.analisisProducto.trim() ? "Volver a investigar" : "Investigar"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Consulta anuncios activos de Meta y la página del producto, y la IA resume lo que se repite citando cada
+              anuncio. Lo que no se pueda consultar se dice aquí mismo. Las referencias que pegues en el paso 03 se suman.
+            </span>
+          </div>
+
+          {avisoRapido && <Aviso>{avisoRapido}</Aviso>}
+          {datos.fuentesInvestigacion.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className={ETIQUETA}>Fuentes consultadas</span>
+              <ul className="flex flex-col gap-1.5">
+                {datos.fuentesInvestigacion.map((f) => (
+                  <li key={f.id} className="flex flex-wrap items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed">
+                    <Chip tono={TONO_FUENTE[f.estado]}>{ETIQUETA_FUENTE[f.estado]}</Chip>
+                    <span className="min-w-0 flex-1 basis-56">
+                      <strong className="font-medium">{f.nombre}.</strong> {f.detalle}
+                      {f.faltan.length > 0 && (
+                        <span className="mt-1 block font-mono text-[11px] text-muted-foreground">Falta en Vercel: {f.faltan.join(" o ")}</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {datos.investigacionCache && (
+                <p className="text-xs text-muted-foreground">
+                  Los anuncios salen de una consulta guardada el {fecha(datos.investigacionCache)} (se guardan 7 días para no
+                  volver a pagar la misma búsqueda).
+                </p>
+              )}
+            </div>
+          )}
+          {datos.anunciosHallados.length > 0 && (
+            <details className="rounded-xl border border-border bg-muted/30">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                Anuncios activos encontrados ({datos.anunciosHallados.length}) · ordenados por días activos
+              </summary>
+              <ul className="flex flex-col gap-1.5 border-t border-border p-3">
+                {datos.anunciosHallados.map((a) => (
+                  <li key={a.ref} className="rounded-lg border border-border bg-card px-3 py-2 text-xs leading-relaxed">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono font-semibold text-primary">{a.ref}</span>
+                      <strong className="font-medium">{a.anunciante || "Anunciante sin nombre"}</strong>
+                      <Chip>{a.dias !== null ? `${a.dias} días activo` : "días activo: sin dato"}</Chip>
+                      {a.duplicados !== null && <Chip>{a.duplicados} con el mismo creativo</Chip>}
+                      {a.formato !== "desconocido" && <Chip>{a.formato}</Chip>}
+                      {a.pais && <Chip>{nombrePais(a.pais)}</Chip>}
+                      {a.enlace && (
+                        <a href={a.enlace} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                          <ExternalLink className="size-3" /> Ver en la biblioteca
+                        </a>
+                      )}
+                    </span>
+                    <span className="mt-1 block break-words text-muted-foreground">{[a.titular, a.texto].filter(Boolean).join(" — ").slice(0, 260)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          {datos.analisisProducto.trim() && (
+            <Campo etiqueta={rotuloInvestigacion(datos)} ayuda="Puedes corregirlo: el guion usa este texto.">
+              <Textarea
+                value={datos.analisisProducto}
+                onChange={(e) => set("analisisProducto", e.target.value)}
+                maxLength={6000}
+                rows={8}
+                className="max-h-80"
+                aria-label="Análisis del producto"
+              />
+            </Campo>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <span className={ETIQUETA}>
+              {datos.formatosRecomendados.length ? "Formatos recomendados para este producto" : "Formato"}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {(datos.formatosRecomendados.length ? datos.formatosRecomendados : formato ? [formato.slug] : [])
+                .map((slug) => formatos.find((f) => f.slug === slug))
+                .filter((f): f is FormatoTarjeta => !!f)
+                .map((f) => (
+                  <Button key={f.slug} variant={f.slug === datos.formato ? "default" : "outline"} onClick={() => set("formato", f.slug)}>
+                    {f.nombre}
+                  </Button>
+                ))}
+              {!formato && !datos.formatosRecomendados.length && (
+                <span className="text-xs text-muted-foreground">Investiga para ver recomendaciones, o elige cualquiera en el paso 01.</span>
+              )}
+              {formato && !datos.formatosRecomendados.includes(formato.slug) && datos.formatosRecomendados.length > 0 && (
+                <Chip>Elegido a mano: {formato.nombre}</Chip>
+              )}
+            </div>
+          </div>
+
+          {faltantes && (
+            <div className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+              <p className="text-sm font-medium">Faltan estos datos para terminar el guion</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                La IA no inventa precios, cifras ni testimonios: los dejó entre corchetes. Escribe lo que confirmó el
+                cliente; lo que dejes vacío queda entre corchetes.
+              </p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {faltantes.campos.map((c) => (
+                  <Campo key={c} etiqueta={c.slice(1, -1)}>
+                    <Input
+                      value={faltantes.valores[c] ?? ""}
+                      onChange={(e) => setFaltantes((f) => (f ? { ...f, valores: { ...f.valores, [c]: e.target.value } } : f))}
+                      maxLength={200}
+                    />
+                  </Campo>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={!!ocupado} onClick={() => void completarFaltantes()}>
+                  <Send /> Continuar
+                </Button>
+                <Button variant="ghost" disabled={!!ocupado} onClick={() => setFaltantes(null)}>
+                  Editar el guion a mano
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+            <Button size="lg" disabled={!datos.producto.trim() || !formato || !!ocupado || !!fase || !!faltantes} onClick={() => void generarTodo()}>
+              <Sparkles className={cn(ocupado === "todo" && "animate-pulse")} />
+              {ocupado === "todo" ? (fase ?? "Trabajando…") : "Generar todo"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {props.videoActivo
+                ? "Escribe el guion, lo guarda y manda el video a la cola. Llega como «Por aprobar», con aviso."
+                : "Genera la investigación y el guion. El video se podrá pedir cuando el servidor de videos esté conectado."}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ------------------------------------------------ 01 formato */}
       <Card>
         <CardHeader>
@@ -381,6 +810,27 @@ export function CrearVideo(props: Props) {
                 <Lista titulo="Cuándo usarlo" items={formato.cuando_si} />
                 <Lista titulo="Cuándo no" items={formato.cuando_no} />
                 <Lista titulo="Riesgos" items={formato.riesgos} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className={ETIQUETA}>Cómo se produce</span>
+                <dl className="grid gap-x-4 gap-y-1 text-xs leading-relaxed sm:grid-cols-[auto_minmax(0,1fr)]">
+                  {(
+                    [
+                      ["Imagen", formato.modelos_sugeridos.imagen],
+                      ["Video", formato.modelos_sugeridos.video],
+                      ["Voz", formato.modelos_sugeridos.voz],
+                      ["Música", formato.modelos_sugeridos.musica],
+                      ["Clip", [formato.duracion_clip, formato.audio_del_clip].filter(Boolean).join(" · ")],
+                    ] as const
+                  )
+                    .filter(([, v]) => v)
+                    .map(([k, v]) => (
+                      <div key={k} className="contents">
+                        <dt className="font-medium text-muted-foreground">{k}</dt>
+                        <dd>{v}</dd>
+                      </div>
+                    ))}
+                </dl>
               </div>
               <details className="group">
                 <summary className="cursor-pointer text-xs font-medium text-primary outline-none hover:underline focus-visible:underline">
@@ -473,13 +923,26 @@ export function CrearVideo(props: Props) {
           <div className="md:col-span-2">
             <Campo
               etiqueta="Oferta"
-              ayuda="Tal como la dio el cliente: precio, envío, forma de pago, promoción. Si no la tienes, déjala vacía."
+              ayuda="Obligatoria: todo video cierra con ella, dicha y escrita. Precio o promoción, qué incluye y su condición (envío, pago contra entrega, garantía), tal como la dio el cliente. No se inventa."
             >
               <Input
                 value={datos.oferta}
                 onChange={(e) => set("oferta", e.target.value)}
                 maxLength={400}
-                placeholder="Ej.: envío gratis a todo el país y pago contra entrega"
+                placeholder="Ej.: 2 unidades por $89.900 con envío gratis y pago contra entrega"
+              />
+            </Campo>
+          </div>
+          <div className="md:col-span-2">
+            <Campo
+              etiqueta="Llamado a la acción"
+              ayuda="Obligatorio: qué debe hacer la persona y dónde, según donde corra el anuncio."
+            >
+              <Input
+                value={datos.llamado}
+                onChange={(e) => set("llamado", e.target.value)}
+                maxLength={200}
+                placeholder="Ej.: pide el tuyo en el botón de abajo · escríbenos por WhatsApp"
               />
             </Campo>
           </div>
@@ -644,6 +1107,39 @@ export function CrearVideo(props: Props) {
           </div>
 
           {avisoMercado && <Aviso>{avisoMercado}</Aviso>}
+          <details open={!!datos.anuncioClon.trim()} className="rounded-xl border border-border bg-muted/30">
+            <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-2 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+              Clonar un anuncio ganador
+              {datos.anuncioClon.trim() ? <Chip tono="azul">Activo</Chip> : <Chip>Opcional</Chip>}
+            </summary>
+            <div className="flex flex-col gap-3 border-t border-border p-3">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Si ya hay un anuncio que está escalando, pega aquí lo que dice y lo que se ve, en orden (o su
+                transcripción). El guion seguirá su estructura bloque a bloque para tu producto, sin copiar su texto ni
+                su marca, y con personajes nuevos. La IA no ve el video: trabaja solo con lo que pegues.
+              </p>
+              <Campo etiqueta="Enlace del anuncio de referencia (opcional)">
+                <Input
+                  value={datos.anuncioClonEnlace}
+                  onChange={(e) => set("anuncioClonEnlace", e.target.value)}
+                  maxLength={500}
+                  inputMode="url"
+                  placeholder="https://…"
+                />
+              </Campo>
+              <Campo
+                etiqueta="Transcripción o descripción del anuncio"
+                ayuda="Sirve así: «0–3 s: mujer en la cocina dice…; 3–8 s: muestra…; cierre: oferta de…». El análisis automático del video llegará con el servidor."
+              >
+                <Textarea
+                  value={datos.anuncioClon}
+                  onChange={(e) => set("anuncioClon", e.target.value)}
+                  maxLength={MAX_ANUNCIO_CLON}
+                  rows={5}
+                />
+              </Campo>
+            </div>
+          </details>
           {(datos.resumenMercado || refsUtiles.length > 0) && (
             <Campo
               etiqueta="Patrones del mercado"
@@ -673,6 +1169,7 @@ export function CrearVideo(props: Props) {
               : "Elige un formato y escribe el producto para poder generarlo."}
           </CardDescription>
           <CardAction className="flex items-center gap-1">
+            {datos.anuncioClon.trim() && <Chip tono="azul">Sigue la estructura del anuncio de referencia</Chip>}
             {guion.trim() && <Chip>{ORIGEN_LABELS[origen]}</Chip>}
             <Button variant="ghost" size="sm" disabled={!guion.trim()} onClick={() => copiar(guion, "Guion copiado")}>
               <Copy /> Copiar
@@ -722,6 +1219,29 @@ export function CrearVideo(props: Props) {
             </details>
           )}
           {aviso && <Aviso>{aviso}</Aviso>}
+          {guion.trim() && cierreFalta.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed">
+              <Chip tono="rojo">Cierre incompleto</Chip>
+              <span className="min-w-0 flex-1 basis-56">
+                Todo video cierra con la oferta y el llamado a la acción. Falta {cierreFalta.join(" y ")}.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!datos.oferta.trim() || !datos.llamado.trim() || !formato || !!ocupado}
+                onClick={async () => {
+                  setOcupado("guion");
+                  const c = await regenerarCierre(datos, guion);
+                  setOcupado(null);
+                  if ("error" in c) return void toast.error(c.error, { duration: 9000 });
+                  setGuion(c.texto);
+                  toast.success(c.conIA ? "Cierre regenerado" : "Cierre puesto con las palabras del cliente (la IA no está activa)");
+                }}
+              >
+                <RefreshCw /> Regenerar solo el cierre
+              </Button>
+            </div>
+          )}
           <Textarea
             value={guion}
             onChange={(e) => {

@@ -117,6 +117,13 @@ export type TrabajoVideo = {
   origen: "manual" | "correccion";
   /** Cosas que quien revise debe saber (campos sin completar en los prompts, etc.). */
   avisos: string[];
+  /**
+   * Cierre obligatorio del video. El trabajador lo dibuja como RÓTULO FINAL en
+   * pantalla (texto grande, legible en celular, encima del producto real),
+   * además de los subtítulos. Son las palabras del cliente: no se reescriben.
+   * Vacíos si el guion se guardó sin esos datos.
+   */
+  cierre: { oferta: string; llamadoALaAccion: string };
 
   estado: EstadoTrabajo;
   motivo: string;
@@ -196,6 +203,10 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
     opciones: { subtitulos: op.subtitulos !== false, voz: op.voz !== false, modelo: txt(op.modelo, 160) || null },
     pedidoPor: { id: txt(por.id, 40), nombre: txt(por.nombre, 160) },
     origen: o.origen === "correccion" ? "correccion" : "manual",
+    cierre: {
+      oferta: txt((o.cierre as Record<string, unknown> | undefined)?.oferta, 400),
+      llamadoALaAccion: txt((o.cierre as Record<string, unknown> | undefined)?.llamadoALaAccion, 200),
+    },
     avisos: lista(o.avisos)
       .map((a) => txt(a, 400))
       .filter(Boolean)

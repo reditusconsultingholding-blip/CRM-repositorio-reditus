@@ -30,7 +30,10 @@ import {
   generarGuionVideo,
   investigarMercado,
   leerGuionArchivo,
+  listarGuiones,
+  regenerarCierreGuion,
 } from "@/lib/videos-server";
+import { consultarFuentes, investigarProducto, type AnalisisProducto, type FuentesConsultadas } from "@/lib/videos-investigacion";
 import { ORIGEN_PROSPECCION, leerProspeccion } from "@/lib/prospeccion";
 import { guardarProspeccion, leerFila } from "@/lib/prospeccion-server";
 import {
@@ -170,6 +173,59 @@ export async function resumirMercado(
   });
 }
 
+// ------------------------------------------- investigación automática ----
+
+/**
+ * Paso 1 de la investigación: consulta las fuentes (anuncios activos de Meta y
+ * la página del producto). Sin IA. Puede tardar hasta ~80 s si hay que leer
+ * anuncios; por eso va aparte del análisis. `forzar` salta la caché de 7 días
+ * (vuelve a cobrar la consulta) y solo lo puede pedir el equipo de Ingresos.
+ */
+export async function consultarFuentesVideo(raw: unknown, forzar = false): Promise<FuentesConsultadas | { error: string }> {
+  return seguro(async () => {
+    const a = await entrar();
+    if ("error" in a) return a;
+    const datos = leerDatosVideo(raw);
+    if (!datos.producto) return { error: "Escribe el producto para poder investigarlo." };
+    return consultarFuentes(datos, forzar === true && INGRESOS_ROLES.includes(a.profile.role));
+  });
+}
+
+/**
+ * Paso 2: panorama, comprador, ganchos y formatos recomendados, a partir de lo
+ * que trajo el paso 1 (viene dentro de los datos). Solo necesita el producto.
+ */
+export async function analizarProducto(raw: unknown): Promise<AnalisisProducto | { error: string }> {
+  return seguro(async () => {
+    const a = await entrar();
+    if ("error" in a) return a;
+    const datos = leerDatosVideo(raw);
+    if (!datos.producto) return { error: "Escribe el producto para poder investigarlo." };
+    return investigarProducto(datos);
+  });
+}
+
+/** «Mis videos»: el último trabajo de video de cada guion que pidió quien llama (hasta 8). */
+export async function misVideos(): Promise<{ trabajos: Record<string, TrabajoVista> } | { error: string }> {
+  return seguro(async () => {
+    const a = await entrar();
+    if ("error" in a) return a;
+    const { guiones } = await listarGuiones(createAdminClient());
+    const pares = guiones
+      .filter((g) => g.autorId === a.profile.id)
+      .slice(0, 8)
+      .map((g) => ({ id: g.id, trabajo: versionVigente(g)?.videoTrabajoId ?? null }))
+      .filter((x): x is { id: string; trabajo: string } => !!x.trabajo && ID_TRABAJO.test(x.trabajo));
+    const leidos = await Promise.all(pares.map((p) => buscarTrabajo(p.trabajo)));
+    const trabajos: Record<string, TrabajoVista> = {};
+    pares.forEach((p, i) => {
+      const t = leidos[i];
+      if (t) trabajos[p.id] = vistaTrabajo(t.trabajo);
+    });
+    return { trabajos };
+  });
+}
+
 // ------------------------------------------------------------ guion ----
 
 export async function escribirGuion(
@@ -182,6 +238,18 @@ export async function escribirGuion(
     const p = preparar(raw);
     if ("error" in p) return p;
     return generarGuionVideo(p.datos, p.formato, typeof indicacion === "string" ? indicacion : undefined);
+  });
+}
+
+/** Reescribe solo el cierre (paso 5) con la oferta y el llamado a la acción que dio el cliente. */
+export async function regenerarCierre(raw: unknown, guion: string): Promise<{ texto: string; conIA: boolean } | { error: string }> {
+  return seguro(async () => {
+    const a = await entrar();
+    if ("error" in a) return a;
+    const p = preparar(raw);
+    if ("error" in p) return p;
+    if (!p.datos.oferta || !p.datos.llamado) return { error: "Escribe la oferta y el llamado a la acción: el cierre no se inventa." };
+    return regenerarCierreGuion(p.datos, String(guion ?? "").slice(0, MAX_GUION));
   });
 }
 

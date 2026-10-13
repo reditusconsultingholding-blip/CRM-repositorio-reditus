@@ -137,8 +137,8 @@ export function Sidebar({
           <Link
             href="/perfil"
             aria-current={
-              // Usuarios y Panel CEO se abren desde Configuración.
-              ["/perfil", "/ceo", "/admin"].some((r) => pathname.startsWith(r)) ? "page" : undefined
+              // Usuarios, Panel CEO y la maestría se abren desde Configuración.
+              ["/perfil", "/ceo", "/admin", "/maestria"].some((r) => pathname.startsWith(r)) ? "page" : undefined
             }
             className="rd-lado-enlace"
           >

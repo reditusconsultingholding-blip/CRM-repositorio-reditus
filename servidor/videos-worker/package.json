@@ -1,0 +1,18 @@
+{
+  "name": "reditus-videos-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trabajador de videos de Reditus: toma trabajos del CRM, genera las escenas con un proveedor por API, monta con ffmpeg y devuelve el MP4.",
+  "main": "trabajador.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node trabajador.js",
+    "una-vez": "node trabajador.js --una-vez",
+    "comprobar": "node trabajador.js --comprobar",
+    "test": "node pruebas/pruebas.js"
+  },
+  "dependencies": {}
+}

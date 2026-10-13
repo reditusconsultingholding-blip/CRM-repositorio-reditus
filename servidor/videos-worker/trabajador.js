@@ -1,0 +1,174 @@
+"use strict";
+// Trabajador de videos de Reditus. Proceso residente: cada minuto le pregunta
+// al CRM si hay un video pendiente y, si lo hay, lo genera, lo monta y lo sube.
+//
+//   node trabajador.js              queda corriendo (así lo arranca la tarea de Windows)
+//   node trabajador.js --una-vez    atiende lo que haya en la cola y termina
+//   node trabajador.js --comprobar  revisa configuración, ffmpeg y conexión, y termina
+//   node trabajador.js --un-clip ["prompt"]   genera UN clip corto con el proveedor del .env (gasta lo mínimo) y termina
+const fs = require("fs");
+const path = require("path");
+const { cargar, secretos } = require("./lib/entorno");
+const { crearRegistro } = require("./lib/registro");
+const { crearCrm } = require("./lib/crm");
+const { crear: crearFf } = require("./lib/ffmpeg");
+const { esperar, ErrorHttp } = require("./lib/red");
+const { cargarProveedor } = require("./proveedores");
+const { procesar, pendientesEnDisco, limpiarRestos, unClip } = require("./lib/trabajo");
+
+const modo = process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
+
+function vivo(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+
+async function principal() {
+  let cfg;
+  try {
+    cfg = cargar();
+  } catch (e) {
+    console.error(`No se pudo leer la configuración: ${e.message}`);
+    process.exit(1);
+  }
+  for (const c of Object.values(cfg.carpetas)) fs.mkdirSync(c, { recursive: true });
+  const registro = crearRegistro(cfg.carpetas.registro, secretos(cfg));
+
+  // ------------------------------------------------- comprobaciones ----
+  const faltas = [];
+  // La prueba de un clip no toca el CRM: no necesita su dirección ni el secreto.
+  if (modo !== "un-clip" && !/^https?:\/\//.test(cfg.crmUrl)) faltas.push("CRM_URL (la dirección del CRM, con https://)");
+  if (modo !== "un-clip" && !cfg.secreto) faltas.push("SERVIDOR_SECRET (el mismo valor que tiene el CRM en Vercel)");
+  let proveedor = null;
+  try {
+    proveedor = cargarProveedor(cfg.proveedor);
+    const falta = proveedor.comprobar(cfg);
+    if (falta) faltas.push(falta);
+  } catch (e) {
+    faltas.push(e.message);
+  }
+  const ff = crearFf(cfg);
+  let versionFf = "";
+  try {
+    versionFf = await ff.comprobar();
+  } catch (e) {
+    faltas.push(e.message);
+  }
+  if (faltas.length) {
+    registro.error(`No se puede arrancar. Falta en el .env o en el equipo: ${faltas.join(" · ")}`);
+    process.exit(1);
+  }
+  const voz = proveedor.daAudio ? "audio según config.json (el de Veo o ElevenLabs)" : cfg.elevenKey && cfg.elevenVoz ? "con voz (ElevenLabs)" : "SIN voz (no hay clave de ElevenLabs)";
+  registro.info(`Trabajador «${cfg.nombre}» · proveedor ${proveedor.nombre} · ${voz} · ${versionFf} · CRM ${cfg.crmUrl} · modo ${modo}`);
+  if (proveedor.nombre === "simulado") registro.aviso("PROVEEDOR=simulado: los videos son de PRUEBA (clips de color con texto). Para videos reales, PROVEEDOR=kie.");
+
+  const crm = crearCrm(cfg);
+  const deps = { cfg, crm, ff, proveedor, registro };
+
+  if (modo === "un-clip") {
+    const i = process.argv.indexOf("--un-clip");
+    const dado = process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : "";
+    const prompt = dado || "Plano fijo de una taza de café humeante sobre una mesa de madera, luz natural de la mañana, grabado con un celular, formato vertical.";
+    try {
+      if (typeof proveedor.creditos === "function") registro.info(`Créditos antes: ${await proveedor.creditos(cfg)}`);
+      await unClip(deps, prompt);
+      if (typeof proveedor.creditos === "function") registro.info(`Créditos después: ${await proveedor.creditos(cfg)}`);
+      process.exit(0);
+    } catch (e) {
+      registro.error(`La prueba de un clip falló: ${registro.limpiar(e.message)}`);
+      process.exit(1);
+    }
+  }
+
+  /** Una vuelta: pide trabajo. Devuelve true si atendió uno (para pedir el siguiente enseguida). */
+  async function vuelta() {
+    let trabajo;
+    try {
+      trabajo = await crm.tomar();
+    } catch (e) {
+      if (e instanceof ErrorHttp && e.estado === 401) registro.error("El CRM rechazó el secreto (401): SERVIDOR_SECRET no coincide con el de Vercel.");
+      else if (e instanceof ErrorHttp && e.estado === 503) registro.error("El CRM responde 503: allá no está configurado SERVIDOR_SECRET.");
+      else registro.error(`No se pudo consultar la cola: ${e.message}`);
+      return false;
+    }
+    if (!trabajo) return false;
+    await procesar(trabajo, deps);
+    return true;
+  }
+
+  if (modo === "comprobar") {
+    try {
+      // Con un trabajador ya corriendo esta llamada no estorba: si hubiera algo pendiente NO se toma aquí.
+      const res = await fetch(`${cfg.crmUrl}/api/servidor/trabajos/00000000-000000-000000000000/progreso`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${cfg.secreto}`, "content-type": "application/json" },
+        body: JSON.stringify({ toma: "comprobacion", estado: "generando" }),
+        signal: AbortSignal.timeout(30000),
+      });
+      // 409 = el secreto sirve (el trabajo de mentira no existe). 401/503 = problema de secreto.
+      if (res.status === 409) registro.info("Conexión con el CRM: correcta (el secreto coincide).");
+      else if (res.status === 401) registro.error("Conexión con el CRM: el secreto NO coincide (401).");
+      else if (res.status === 503) registro.error("Conexión con el CRM: allá falta SERVIDOR_SECRET (503).");
+      else registro.aviso(`Conexión con el CRM: respuesta inesperada ${res.status}. ¿CRM_URL es la dirección correcta?`);
+      process.exit(res.status === 409 ? 0 : 1);
+    } catch (e) {
+      registro.error(`No se pudo llegar al CRM en ${cfg.crmUrl}: ${e.message}`);
+      process.exit(1);
+    }
+  }
+
+  // Un solo trabajador por carpeta: dos a la vez se pisarían los archivos.
+  const cerrojo = path.join(cfg.carpetas.datos, "trabajador.pid");
+  if (fs.existsSync(cerrojo)) {
+    const otro = Number(fs.readFileSync(cerrojo, "utf8").trim());
+    if (otro && otro !== process.pid && vivo(otro)) {
+      registro.aviso(`Ya hay un trabajador corriendo aquí (proceso ${otro}). Este se cierra.`);
+      process.exit(0);
+    }
+  }
+  fs.writeFileSync(cerrojo, String(process.pid));
+  const soltarCerrojo = () => {
+    try {
+      if (fs.readFileSync(cerrojo, "utf8").trim() === String(process.pid)) fs.unlinkSync(cerrojo);
+    } catch {
+      /* ya no estaba */
+    }
+  };
+  process.on("exit", soltarCerrojo);
+  for (const s of ["SIGINT", "SIGTERM", "SIGBREAK"]) process.on(s, () => process.exit(0));
+  process.on("unhandledRejection", (e) => registro.error("Error no atendido:", e instanceof Error ? e : String(e)));
+
+  // ------------------------------------ retomar lo que quedó a medias ----
+  for (const t of pendientesEnDisco(cfg)) {
+    registro.info(`Retomando el trabajo ${t.id}, que quedó a medias cuando se cerró el proceso.`);
+    await procesar(t, deps);
+  }
+  limpiarRestos(cfg);
+
+  // ------------------------------------------------------- el ciclo ----
+  const intervalo = Math.max(10, cfg.config.intervaloSegundos || 60) * 1000;
+  let vueltas = 0;
+  for (;;) {
+    let atendio = false;
+    try {
+      atendio = await vuelta();
+    } catch (e) {
+      registro.error("Error inesperado en la vuelta:", e instanceof Error ? e : String(e));
+    }
+    if (atendio) continue; // puede haber más en la cola
+    if (modo === "una-vez") break;
+    if (++vueltas % 60 === 0) limpiarRestos(cfg);
+    await esperar(intervalo);
+  }
+  registro.info("Cola atendida. Fin (--una-vez).");
+  process.exit(0);
+}
+
+principal().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

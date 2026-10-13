@@ -1,0 +1,182 @@
+{
+  "_leeme": "Ajustes del trabajador de videos. Las claves NO van aquí: van en el archivo .env. Los campos que empiezan por _ son notas.",
+  "intervaloSegundos": 60,
+  "conservarEntregados": 30,
+  "diasParaBorrarRestos": 3,
+  "salida": {
+    "_nota": "ladoCorto 1080 = 1080x1920 en 9:16. crf más bajo = más calidad y más peso (18–23 es lo normal).",
+    "ladoCorto": 1080,
+    "fps": 30,
+    "crf": 21
+  },
+  "subtitulos": {
+    "fuente": "Arial",
+    "resaltado": "FFE600",
+    "maxPalabras": 3
+  },
+  "voz": {
+    "_nota": "ElevenLabs. Solo se usa si en el .env están ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID.",
+    "modelo": "eleven_turbo_v2_5",
+    "estabilidad": 0.5,
+    "similitud": 0.75
+  },
+  "simulado": {
+    "_nota": "Segundos de espera falsa por escena, para ver el estado «Generando» en el CRM durante las pruebas.",
+    "demoraSegundos": 2
+  },
+  "audio": {
+    "_nota": "De dónde sale el audio de cada video: \"veo\" = el que Veo genera dentro del clip (dice la frase del guion; no se le pone otra voz encima), \"elevenlabs\" = voz de ElevenLabs sobre el video (el audio del clip se descarta), \"ninguno\" = mudo. Los subtítulos salen siempre del texto hablado del guion. Con Kie el audio del clip es el de Veo, igual que con Veo directo. Con un proveedor sin audio propio (simulado, fal), \"veo\" equivale a \"elevenlabs\".",
+    "porDefecto": "veo",
+    "porFormato": {
+      "_nota": "Formatos narrados por una voz aparte (no habla nadie en cámara): mejor ElevenLabs. Ajusta a gusto.",
+      "historia": "elevenlabs",
+      "crochet": "elevenlabs",
+      "esqueleto": "elevenlabs",
+      "plastilina": "elevenlabs",
+      "musica": "ninguno"
+    }
+  },
+  "kie": {
+    "_VERIFICAR": "Revisado el 12-oct-2026 contra docs.kie.ai (Veo 3.1 Generate Video, Get Task Details, Get Account Credits), SIN hacer ninguna llamada real. Antes de generar videos completos corre  .\\probar.ps1 -UnClip  y mira el clip y los créditos gastados.",
+    "modeloApi": "veo-3-1",
+    "porDefecto": {
+      "textoAVideo": "rapido",
+      "imagenAVideo": "rapido"
+    },
+    "porFormato": {
+      "_nota": "Opcional. Ejemplo: \"ugc\": { \"textoAVideo\": \"calidad\", \"imagenAVideo\": \"rapido\" }."
+    },
+    "modelos": {
+      "rapido": {
+        "variante": "veo3_fast",
+        "_verificar": "verificar en docs.kie.ai y kie.ai/pricing antes de usar · Veo 3.1 Fast, con audio"
+      },
+      "lite": {
+        "variante": "veo3_lite",
+        "_verificar": "verificar antes de usar · Veo 3.1 Lite, la más barata, con audio"
+      },
+      "calidad": {
+        "variante": "veo3",
+        "_verificar": "verificar antes de usar · Veo 3.1 Quality, la más cara; NO sirve con modoImagen \"referencia\""
+      }
+    },
+    "modoImagen": "primer-fotograma",
+    "_modoImagen": "VERIFICAR con una prueba cuál se ve mejor. \"primer-fotograma\" = FIRST_AND_LAST_FRAMES_2_VIDEO con la primera foto del producto como primer fotograma (cualquier duración y variante). \"referencia\" = REFERENCE_2_VIDEO con hasta 3 fotos como referencia (solo 8 s por escena y solo variantes rapido/lite).",
+    "resolucion": "720p",
+    "_resolucion": "1080p y 4k cuestan más (precio de 720p + mejora) y aquí se piden siempre a 8 s.",
+    "duracionesPermitidas": [
+      4,
+      6,
+      8
+    ],
+    "relacionesPermitidas": [
+      "16:9",
+      "9:16"
+    ],
+    "entradaExtra": {},
+    "_entradaExtra": "Campos adicionales tal cual para «input» (p. ej. \"enable_translation\": false, \"watermark\": \"\"). Vacío = los de Kie por defecto.",
+    "usdPorCredito": null,
+    "_usdPorCredito": "VERIFICAR en kie.ai/pricing cuánto vale un crédito en dólares. Kie reporta los créditos reales de cada tarea; con este valor el CRM muestra además el costo en dólares. En null se reportan solo créditos y segundos.",
+    "instruccionVoz": "La persona dice, en español latino, con voz natural, exactamente:",
+    "instruccionSinVoz": "Sin diálogo ni voz en off.",
+    "sufijoPrompt": "Sin texto ni subtítulos en pantalla.",
+    "maxLetrasPrompt": 4000,
+    "consultarCadaSegundos": 10,
+    "limiteMinutosPorEscena": 25
+  },
+  "veo": {
+    "_VERIFICAR": "ALTERNATIVA (el proveedor recomendado es Kie). Revisado el 12-oct-2026 contra ai.google.dev/gemini-api/docs/veo, SIN hacer ninguna llamada real. Antes de usar con dinero: confirma los identificadores (son «preview» y Google los cambia), haz UN video de prueba y llena usdPorSegundo con la tarifa de ai.google.dev/gemini-api/docs/pricing.",
+    "porDefecto": "rapido",
+    "porFormato": {
+      "_nota": "Opcional. Ejemplo: \"ugc\": \"estandar\". Valores: los alias de «modelos»."
+    },
+    "modelos": {
+      "estandar": {
+        "id": "veo-3.1-generate-preview",
+        "_verificar": "verificar en ai.google.dev antes de usar · variante estándar, con audio",
+        "usdPorSegundo": null
+      },
+      "rapido": {
+        "id": "veo-3.1-fast-generate-preview",
+        "_verificar": "verificar en ai.google.dev antes de usar · variante rápida, con audio",
+        "usdPorSegundo": null
+      },
+      "lite": {
+        "id": "veo-3.1-lite-generate-preview",
+        "_verificar": "verificar en ai.google.dev antes de usar · variante lite, con audio; no admite 4k",
+        "usdPorSegundo": null
+      }
+    },
+    "resolucion": "720p",
+    "_resolucion": "720p admite 4, 6 u 8 s. 1080p y 4k obligan a 8 s por escena (más costo).",
+    "duracionesPermitidas": [
+      4,
+      6,
+      8
+    ],
+    "relacionesPermitidas": [
+      "16:9",
+      "9:16"
+    ],
+    "duracionComoTexto": false,
+    "_duracionComoTexto": "VERIFICAR: la documentación lista \"4\", \"6\", \"8\" sin aclarar si va como número o texto. Si Veo responde 400 por durationSeconds, cambia a true.",
+    "formatoImagen": "inlineData",
+    "_formatoImagen": "VERIFICAR: cómo va la foto del producto. \"inlineData\" = { inlineData: { mimeType, data } } (el que muestra la documentación para primer fotograma). Si responde 400 por la imagen, prueba \"bytesBase64Encoded\".",
+    "maxMbImagen": 15,
+    "parametrosExtra": {},
+    "_parametrosExtra": "Parámetros adicionales tal cual para «parameters» (p. ej. personGeneration). Vacío = los de Google por defecto.",
+    "instruccionVoz": "La persona dice, en español latino, con voz natural, exactamente:",
+    "instruccionSinVoz": "Sin diálogo ni voz en off.",
+    "sufijoPrompt": "Sin texto ni subtítulos en pantalla.",
+    "maxLetrasPrompt": 4000,
+    "consultarCadaSegundos": 10,
+    "limiteMinutosPorEscena": 20
+  },
+  "fal": {
+    "_VERIFICAR": "ALTERNATIVA (el proveedor elegido es Veo). ANTES DE USAR CON DINERO: abre cada modelo en fal.ai (pestaña API) y confirma su identificador, los nombres de sus campos, las duraciones que acepta y su precio. Los modelos de fal cambian seguido; lo de abajo se revisó el 11-oct-2026 solo contra las páginas públicas, sin hacer ninguna llamada real.",
+    "consultarCadaSegundos": 5,
+    "limiteMinutosPorEscena": 20,
+    "maxLetrasPrompt": 2000,
+    "permitirModelosFueraDelCatalogo": false,
+    "porDefecto": {
+      "imagenAVideo": "seedance-rapido-imagen",
+      "textoAVideo": "seedance-rapido-texto"
+    },
+    "porFormato": {
+      "_nota": "Opcional. Ejemplo: \"ugc\": { \"imagenAVideo\": \"otro-alias\", \"textoAVideo\": \"otro-alias\" }. Los formatos son los del CRM: claymation, entrevista, historia, objeto-parlante, podcast, ugc, crochet, esqueleto, musica, pizza, plastilina."
+    },
+    "modelos": {
+      "seedance-rapido-imagen": {
+        "_verificar": "verificar en fal.ai antes de usar · https://fal.ai/models/bytedance/seedance-2.0/fast/image-to-video/api · campos vistos el 11-oct-2026: prompt, image_url, end_image_url, resolution (480p|720p), duration (auto|4..15), aspect_ratio (auto|21:9|16:9|4:3|1:1|3:4|9:16), generate_audio. NO confirmado: si duration va como texto o número, y el precio.",
+        "id": "bytedance/seedance-2.0/fast/image-to-video",
+        "tipo": "imagenAVideo",
+        "campoImagen": "image_url",
+        "campoDuracion": "duration",
+        "duracionComoTexto": true,
+        "duracionMin": 4,
+        "duracionMax": 15,
+        "campoRelacion": "aspect_ratio",
+        "extra": {
+          "resolution": "720p",
+          "generate_audio": false
+        },
+        "usdPorSegundo": null
+      },
+      "seedance-rapido-texto": {
+        "_verificar": "verificar en fal.ai antes de usar · https://fal.ai/models/bytedance/seedance-2.0/fast/text-to-video/api · mismos campos que el de imagen, sin image_url. NO confirmado: tipo de duration y precio.",
+        "id": "bytedance/seedance-2.0/fast/text-to-video",
+        "tipo": "textoAVideo",
+        "campoDuracion": "duration",
+        "duracionComoTexto": true,
+        "duracionMin": 4,
+        "duracionMax": 15,
+        "campoRelacion": "aspect_ratio",
+        "extra": {
+          "resolution": "720p",
+          "generate_audio": false
+        },
+        "usdPorSegundo": null
+      }
+    }
+  }
+}

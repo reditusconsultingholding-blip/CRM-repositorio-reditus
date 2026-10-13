@@ -265,6 +265,7 @@ export async function crearTrabajoVideo(
     opciones: p.opciones,
     pedidoPor: quien,
     origen,
+    cierre: { oferta: g.oferta, llamadoALaAccion: g.llamado },
     avisos,
     estado: "pendiente",
     motivo: "",

@@ -31,6 +31,12 @@ export type FormatoVideo = {
   necesita: string[];
   /** En qué paso se ve el producto real (en mano o demostración). */
   producto_en_pantalla: string;
+  /** Otros nombres o slugs antiguos que ahora apuntan a este formato. */
+  alias: string[];
+  /** Qué modelo conviene por tipo. El detalle técnico está en MODELOS-KIE.md del repo de formatos. */
+  modelos_sugeridos: { imagen: string; video: string; voz: string; musica: string };
+  duracion_clip: string;
+  audio_del_clip: string;
   riesgos: string[];
   fuentes: string[];
   que_es: string;
@@ -55,6 +61,10 @@ export type FormatoTarjeta = Pick<
   | "etapa_embudo"
   | "necesita"
   | "producto_en_pantalla"
+  | "alias"
+  | "modelos_sugeridos"
+  | "duracion_clip"
+  | "audio_del_clip"
   | "riesgos"
   | "cuando_si"
   | "cuando_no"
@@ -68,7 +78,8 @@ export const REGLAS_COMUNES: string = datos.reglas_comunes;
 export const FORMATOS: FormatoVideo[] = datos.formatos as FormatoVideo[];
 
 export function buscarFormato(slug: string): FormatoVideo | null {
-  return FORMATOS.find((f) => f.slug === slug) ?? null;
+  // Un guion guardado con un slug que se fusionó (p. ej. «plastilina») abre el formato que lo absorbió.
+  return FORMATOS.find((f) => f.slug === slug) ?? FORMATOS.find((f) => f.alias.includes(slug)) ?? null;
 }
 
 export function tarjetas(): FormatoTarjeta[] {
@@ -83,6 +94,10 @@ export function tarjetas(): FormatoTarjeta[] {
     etapa_embudo: f.etapa_embudo,
     necesita: f.necesita,
     producto_en_pantalla: f.producto_en_pantalla,
+    alias: f.alias,
+    modelos_sugeridos: f.modelos_sugeridos,
+    duracion_clip: f.duracion_clip,
+    audio_del_clip: f.audio_del_clip,
     riesgos: f.riesgos,
     cuando_si: f.cuando_si,
     cuando_no: f.cuando_no,

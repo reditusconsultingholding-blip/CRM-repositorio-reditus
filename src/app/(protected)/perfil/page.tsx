@@ -1,6 +1,6 @@
 import { requireProfile } from "@/lib/auth";
 import Link from "next/link";
-import { ArrowRight, Crown, Users } from "lucide-react";
+import { ArrowRight, Crown, GraduationCap, Users } from "lucide-react";
 import { ROLE_LABELS } from "@/lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChangePasswordForm } from "@/components/perfil/change-password-form";
@@ -23,6 +23,8 @@ export default async function PerfilPage() {
           {[
             { href: "/ceo", icono: Crown, titulo: "Panel CEO", texto: "Rentabilidad, reportes y estado de las plataformas." },
             { href: "/admin/usuarios", icono: Users, titulo: "Usuarios", texto: "Personas del equipo, roles y accesos." },
+            // Privada: no aparece en el menú lateral, solo aquí.
+            { href: "/maestria", icono: GraduationCap, titulo: "Maestría en negociación", texto: "Clases, juego de rol con IA y tu progreso. Solo tú la ves." },
           ].map((a) => {
             const Icono = a.icono;
             return (

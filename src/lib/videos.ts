@@ -3,6 +3,8 @@
 // No hay tabla propia: cada guion es un archivo JSON en Supabase Storage
 // (bucket `chat-files`, carpeta `videos/`), escrito y leído solo por acciones
 // del servidor. Ver `src/app/(protected)/videos/actions.ts`.
+import { leerAnuncios, leerFuentes, type AnuncioVideo, type FuenteConsultada } from "@/lib/investigacion-video/tipos";
+
 export { VIDEOS_ROLES } from "@/lib/roles";
 
 export const BUCKET_GUIONES = "chat-files";
@@ -112,13 +114,63 @@ export type DatosVideo = {
   pais: string;
   cliente: string;
   enlace: string;
+  /** Precio o promoción, qué incluye y su condición, tal como la dio el cliente. */
   oferta: string;
+  /** Llamado a la acción: qué debe hacer la persona y dónde («pide el tuyo en el botón de abajo»). */
+  llamado: string;
   valores: string;
   paisBusqueda: string;
   palabraClave: string;
   referencias: Referencia[];
   resumenMercado: string;
+  /**
+   * Modo «clonar un anuncio ganador»: transcripción o descripción del anuncio
+   * de referencia, pegada por la persona. Si viene, el guion sigue su
+   * estructura bloque a bloque (sin copiar su texto ni su marca).
+   */
+  anuncioClon: string;
+  /** Enlace del anuncio de referencia (solo para volver a verlo). */
+  anuncioClonEnlace: string;
+  /**
+   * Investigación automática: análisis del PRODUCTO hecho por la IA con lo que
+   * dio el cliente (y su página, si se pudo leer). No incluye anuncios vistos.
+   */
+  analisisProducto: string;
+  /** El análisis usó lo que publica la página del producto. */
+  analisisLeyoPagina: boolean;
+  /** Slugs que recomendó el análisis, del más al menos conveniente. */
+  formatosRecomendados: string[];
+  /** Anuncios activos de Meta que trajo la investigación (hasta 12), con su enlace. */
+  anunciosHallados: AnuncioVideo[];
+  /** Qué fuentes se consultaron y qué dio cada una (o por qué no). */
+  fuentesInvestigacion: FuenteConsultada[];
+  /** Fecha ISO si los anuncios salieron de una consulta guardada; vacío si son frescos. */
+  investigacionCache: string;
 };
+
+/** Rótulo honesto de la investigación: dice de dónde salió lo que se lee. */
+export function rotuloInvestigacion(
+  d: Pick<DatosVideo, "analisisProducto" | "analisisLeyoPagina" | "referencias" | "anunciosHallados" | "fuentesInvestigacion" | "investigacionCache">,
+): string {
+  const n = referenciasUtiles(d.referencias).length;
+  const refs = n ? `${n} ${n === 1 ? "referencia pegada" : "referencias pegadas"} por el equipo` : "";
+  if (!d.analisisProducto.trim() && !d.fuentesInvestigacion.length) return refs || "Sin investigación todavía";
+  const partes: string[] = [];
+  const a = d.anunciosHallados.length;
+  if (a) partes.push(`${a} ${a === 1 ? "anuncio activo" : "anuncios activos"} de Meta${d.investigacionCache ? " (consulta guardada)" : ""}`);
+  if (d.analisisLeyoPagina) partes.push("página del producto");
+  if (refs) partes.push(refs);
+  const meta = d.fuentesInvestigacion.find((f) => f.id === "meta-anuncios");
+  const sinAnuncios = a
+    ? ""
+    : meta?.estado === "sin_clave"
+      ? `Sin anuncios consultados: falta conectar la fuente de anuncios (${meta.faltan.join(" o ")})`
+      : "Sin anuncios consultados";
+  const base = partes.length ? `Investigación con ${partes.join(" + ")}` : "Análisis del producto";
+  return sinAnuncios ? `${base} · ${sinAnuncios}` : base;
+}
+
+export const MAX_ANUNCIO_CLON = 6000;
 
 // ---- estado, correcciones del cliente y versiones ----
 
@@ -303,6 +355,7 @@ export function leerDatosVideo(raw: unknown): DatosVideo {
     cliente: txt(o.cliente, 160).trim(),
     enlace: txt(o.enlace, 500).trim(),
     oferta: txt(o.oferta, 400).trim(),
+    llamado: txt(o.llamado, 200).trim(),
     valores: txt(o.valores, 4000).trim(),
     paisBusqueda: esPais(paisBusqueda) ? paisBusqueda : esPais(pais) ? pais : "CO",
     palabraClave: txt(o.palabraClave, 120).trim(),
@@ -316,6 +369,16 @@ export function leerDatosVideo(raw: unknown): DatosVideo {
       };
     }),
     resumenMercado: txt(o.resumenMercado, 6000),
+    anuncioClon: txt(o.anuncioClon, MAX_ANUNCIO_CLON),
+    anuncioClonEnlace: txt(o.anuncioClonEnlace, 500).trim(),
+    analisisProducto: txt(o.analisisProducto, 6000),
+    analisisLeyoPagina: o.analisisLeyoPagina === true,
+    formatosRecomendados: (Array.isArray(o.formatosRecomendados) ? o.formatosRecomendados : [])
+      .filter((x): x is string => typeof x === "string" && /^[a-z0-9-]{1,60}$/.test(x))
+      .slice(0, 3),
+    anunciosHallados: leerAnuncios(o.anunciosHallados),
+    fuentesInvestigacion: leerFuentes(o.fuentesInvestigacion),
+    investigacionCache: txt(o.investigacionCache, 40),
   };
 }
 
@@ -378,16 +441,86 @@ export function leerGuionGuardado(raw: unknown): GuionGuardado | null {
  * los datos que sí se tienen. Lo que falta queda entre [corchetes] para que
  * alguien lo complete con información real del cliente: nunca se inventa.
  */
-export function rellenar(texto: string, d: Pick<DatosVideo, "producto" | "pais" | "cliente" | "oferta">): string {
+export function rellenar(texto: string, d: Pick<DatosVideo, "producto" | "pais" | "cliente" | "oferta" | "llamado">): string {
   const valores: Record<string, string> = {
     producto: d.producto || "[producto]",
     pais: nombrePais(d.pais),
     cliente: d.cliente || "[cliente]",
-    oferta: d.oferta || "[oferta del país: envío, forma de pago y precio que confirme el cliente]",
+    oferta: d.oferta || "[oferta: precio o promoción, qué incluye y condición que confirme el cliente]",
+    llamado: d.llamado || "[llamado a la acción: qué debe hacer la persona y dónde]",
     beneficio: "[beneficio principal, con las palabras del cliente]",
     dolor: "[dolor principal del comprador]",
   };
   return texto.replace(/\{\{(\w+)\}\}/g, (_, k: string) => valores[k] ?? `[${k}]`);
+}
+
+// ---- el cierre (paso 5): oferta + llamado a la acción, siempre ----
+
+/** El bloque del paso 5 dentro de un guion: desde su rótulo hasta la primera línea en blanco. */
+export function bloquePasoCinco(guion: string): { inicio: number; fin: number; texto: string } | null {
+  const lineas = guion.split("\n");
+  const i = lineas.findIndex((l) => /^\s*PASO 5\b/i.test(l));
+  if (i < 0) return null;
+  let j = i + 1;
+  while (j < lineas.length && lineas[j].trim() !== "") j++;
+  return { inicio: i, fin: j, texto: lineas.slice(i, j).join("\n") };
+}
+
+function palabrasClave(texto: string): string[] {
+  return [
+    ...new Set(
+      texto
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .split(/[^a-z0-9ñ$%]+/)
+        .filter((p) => p.length >= 4 || /\d/.test(p)),
+    ),
+  ];
+}
+
+function contiene(bloque: string, dato: string): boolean {
+  const claves = palabrasClave(dato);
+  if (!claves.length) return false;
+  const plano = palabrasClave(bloque).join(" ");
+  const halladas = claves.filter((c) => plano.includes(c)).length;
+  // Se acepta que la IA lo diga con otras palabras, pero deben estar casi todas las del cliente.
+  return halladas / claves.length >= 0.6;
+}
+
+/**
+ * ¿El paso 5 del guion trae la oferta y el llamado a la acción que dio el
+ * cliente? Devuelve lo que falta (vacío = cierre completo).
+ */
+export function faltaEnElCierre(guion: string, d: Pick<DatosVideo, "oferta" | "llamado">): string[] {
+  const falta: string[] = [];
+  if (!d.oferta.trim()) falta.push("la oferta (falta escribirla en los datos)");
+  if (!d.llamado.trim()) falta.push("el llamado a la acción (falta escribirlo en los datos)");
+  const b = bloquePasoCinco(guion);
+  if (!b) return ["el paso 5 (no está rotulado en el guion)", ...falta];
+  if (d.oferta.trim() && !contiene(b.texto, d.oferta)) falta.push("la oferta en el paso 5");
+  if (d.llamado.trim() && !contiene(b.texto, d.llamado)) falta.push("el llamado a la acción en el paso 5");
+  return falta;
+}
+
+/** Cierre escrito sin IA: exactamente lo que dio el cliente, sin agregar nada. */
+export function cierreLiteral(rotulo: string, d: Pick<DatosVideo, "producto" | "oferta" | "llamado">): string {
+  const oferta = d.oferta.trim() || "[oferta que confirme el cliente]";
+  const llamado = d.llamado.trim() || "[llamado a la acción]";
+  return [
+    `${rotulo}: "${oferta.replace(/[.\s]+$/, "")}. ${llamado.replace(/[.\s]+$/, "")}."`,
+    `   OFERTA EN VOZ Y EN PANTALLA: ${oferta}`,
+    `   LLAMADO A LA ACCIÓN: ${llamado}`,
+    `   CIERRE: ${d.producto || "[producto]"} real en pantalla con la oferta en texto grande, mínimo 5 s`,
+  ].join("\n");
+}
+
+/** Cambia solo el bloque del paso 5 de un guion; el resto queda idéntico. */
+export function reemplazarPasoCinco(guion: string, bloqueNuevo: string): string {
+  const b = bloquePasoCinco(guion);
+  if (!b) return `${guion.trimEnd()}\n\n${bloqueNuevo}\n`;
+  const lineas = guion.split("\n");
+  return [...lineas.slice(0, b.inicio), ...bloqueNuevo.split("\n"), ...lineas.slice(b.fin)].join("\n");
 }
 
 /** Primera línea de todo guion: deja escrito de dónde salió el mercado. */

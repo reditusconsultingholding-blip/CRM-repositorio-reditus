@@ -1,0 +1,21 @@
+{
+  "_leeme": "Ajustes del trabajador de prospección. Las claves NO van aquí: van en el archivo .env. Los campos que empiezan por _ son notas. El tope diario, el calentamiento y el horario los decide el CRM (src/lib/prospeccion-correo.ts), no este archivo.",
+  "esperaEntreEnviosSegundos": {
+    "_nota": "Pausa al azar entre un correo y el siguiente de la MISMA cuenta. 150–300 = de 2,5 a 5 minutos.",
+    "min": 150,
+    "max": 300
+  },
+  "consultaSinTrabajoSegundos": 120,
+  "_consultaSinTrabajoSegundos": "Cada cuánto vuelve a preguntarle al CRM cuando no había nada para enviar.",
+  "leerBandejaSegundos": 180,
+  "_leerBandejaSegundos": "Cada cuánto revisa la bandeja de entrada de cada cuenta.",
+  "cicloSegundos": 20,
+  "primeraLecturaDias": 2,
+  "_primeraLecturaDias": "La primera vez que lee una bandeja mira solo los mensajes de estos últimos días.",
+  "maxBytesMensaje": 2000000,
+  "maxMensajesPorLectura": 60,
+  "esperaTrasFalloCuentaSegundos": 900,
+  "_esperaTrasFalloCuentaSegundos": "Si Gmail rechaza la contraseña o no conecta, esa cuenta descansa este tiempo antes de reintentar.",
+  "smtp": { "host": "smtp.gmail.com", "port": 465, "secure": true },
+  "imap": { "host": "imap.gmail.com", "port": 993, "secure": true }
+}
