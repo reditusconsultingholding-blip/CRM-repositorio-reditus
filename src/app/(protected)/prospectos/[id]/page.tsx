@@ -8,6 +8,9 @@ import { videosDeProspectos } from "../video-actions";
 import { ROLES_ACTIVAN_ENVIO, leerCorreos } from "@/lib/prospeccion-correo";
 import { envioSinConfirmar, faltaParaEnviar } from "@/lib/prospeccion-correo-server";
 
+
+// Las etapas del video de un prospecto llaman a la IA varias veces seguidas.
+export const maxDuration = 300;
 // Ficha de un prospecto del embudo «video gratis»: datos, guion, producción
 // y mensaje de entrega. Solo roles de Ingresos (la RLS de `prospectos`
 // también lo impide); quien edita ve lo suyo en /prospectos/mis-videos.

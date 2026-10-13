@@ -14,6 +14,9 @@ import { LiveSync } from "@/components/live-sync";
 import { PestanasProspectos } from "@/components/prospectos/pestanas";
 import { VideosProspectos } from "@/components/prospectos/videos-prospectos";
 import { videosDeProspectos } from "./video-actions";
+
+// Las etapas del video de un prospecto llaman a la IA varias veces seguidas.
+export const maxDuration = 300;
 import {
   Table,
   TableBody,

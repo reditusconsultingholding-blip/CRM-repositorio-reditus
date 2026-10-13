@@ -200,7 +200,7 @@ export async function proponerPlan(d: DatosPlan, formato: FormatoVideo, pais: st
     "--- GUION ---",
     d.guion,
   ].join("\n");
-  const r = await llamarClaude(`${SISTEMA_PLAN}\n\n--- BASE DE CONOCIMIENTO DE REDITUS ---\n${REGLAS_COMUNES}\n\n--- FORMATO ---\n${fichaFormato(formato)}`, usuario, 3600);
+  const r = await llamarClaude(`${SISTEMA_PLAN}\n\n--- BASE DE CONOCIMIENTO DE REDITUS ---\n${REGLAS_COMUNES}\n\n--- FORMATO ---\n${fichaFormato(formato)}`, usuario, 9000);
   if ("error" in r) return respaldo(r.error.replace(" Mientras tanto puedes escribirlo a mano.", ""));
   const crudo = primerJson(r.texto) as { escenas?: unknown; voz?: unknown; tonoMusica?: unknown } | null;
   const lista = Array.isArray(crudo?.escenas) ? crudo.escenas : null;
@@ -265,7 +265,7 @@ export async function armarProyecto(d: PedidoArmar): Promise<ProyectoVideo> {
       armarDirecto: cfg.armarAlTerminarClips,
       parada:
         d.directo && !arranca
-          ? { codigo: "datos", texto: `El plan salió ${clonando ? "de la referencia, toma por toma," : "de la plantilla del formato"} sin IA (no está disponible): sus prompts son genéricos. Revísalos en «Plan» y pulsa «Seguir» para que el proyecto avance solo.`, fecha: ahora }
+          ? { codigo: "datos", texto: `El plan salió ${clonando ? "de la referencia, toma por toma," : "de la plantilla del formato"} sin IA (${(plan.origen !== "ia" && plan.avisos[0]) || "no está disponible"}): sus prompts son genéricos. Revísalos en «Plan» y pulsa «Seguir» para que el proyecto avance solo.`, fecha: ahora }
           : null,
     },
     variacionDe: null,
