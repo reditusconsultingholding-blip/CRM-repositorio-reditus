@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { atender } from "@/lib/servidor-api";
 import { paraTrabajador } from "@/lib/trabajos-video";
 import { retomarRezagados } from "@/lib/proyecto-video-server";
+import { correrProspectosAgendados } from "@/lib/videos-prospecto-server";
 import { tomarTrabajo } from "@/lib/trabajos-video-server";
 
 export const runtime = "nodejs";
@@ -19,6 +20,8 @@ export async function POST(request: NextRequest) {
     if (r.ok && !r.dato) {
       // Cola vacía: se aprovecha el latido para retomar proyectos en modo directo que se quedaron a medias.
       await retomarRezagados(admin);
+      // …y para avanzar UNA etapa del video de un prospecto que el dueño ya aprobó.
+      await correrProspectosAgendados(admin);
       r = await tomarTrabajo(admin, trabajador);
     }
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.estado });

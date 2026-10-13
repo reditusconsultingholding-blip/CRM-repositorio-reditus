@@ -3,6 +3,15 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Save, Trash2, Undo2 } from "lucide-react";
 import {
+  LOCUCIONES,
+  LOCUCION_LABELS,
+  TONOS_MUSICA,
+  TONO_MUSICA_LABELS,
+  contarPalabras,
+  palabrasQueCaben,
+  type Locucion,
+  type TonoMusica,
+  type VozProyecto,
   MAX_ESCENAS_PROYECTO,
   MOVIMIENTOS,
   MOVIMIENTO_LABELS,
@@ -33,14 +42,14 @@ const TIPO_CORTO: Record<TipoEscena, string> = { generada: "IA", "foto-real": "F
 type Borrador = EscenaProyecto & { clave: string };
 
 const aBorrador = (e: EscenaProyecto[]): Borrador[] => e.map((x) => ({ ...x, clave: `g${x.n}` }));
-const editable = (l: EscenaProyecto[]) => JSON.stringify(l.map((e) => [e.n, e.paso, e.tipo, e.titulo, e.duracion, e.voz, e.promptImagen, e.promptVideo, e.fotoUrl, e.movimiento]));
+const editable = (l: EscenaProyecto[]) => JSON.stringify(l.map((e) => [e.n, e.paso, e.tipo, e.titulo, e.duracion, e.voz, e.locucion, e.promptImagen, e.promptVideo, e.fotoUrl, e.movimiento]));
 
 type Props = {
   proyecto: ProyectoVideo;
   /** Hay algo generándose: el plan no se toca hasta que termine. */
   bloqueado: boolean;
   ocupado: boolean;
-  onGuardar: (escenas: EscenaProyecto[], opciones: OpcionesProyecto) => Promise<boolean>;
+  onGuardar: (escenas: EscenaProyecto[], opciones: OpcionesProyecto, extra: { vozProyecto: VozProyecto; tonoMusica: TonoMusica }) => Promise<boolean>;
   onRehacer: () => void;
 };
 
@@ -52,12 +61,18 @@ type Props = {
 export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer }: Props) {
   const [escenas, setEscenas] = useState<Borrador[]>(() => aBorrador(proyecto.escenas));
   const [opciones, setOpciones] = useState<OpcionesProyecto>(proyecto.opciones);
+  const [vozP, setVozP] = useState<VozProyecto>(proyecto.contexto.voz);
+  const [tono, setTono] = useState<TonoMusica>(proyecto.tonoMusica);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [nuevas, setNuevas] = useState(0);
   // «Sucio» mira solo lo que se edita aquí; las piezas (imagen, clip) cambian solas al llegar.
   const sucio = useMemo(
-    () => editable(escenas) !== editable(proyecto.escenas) || JSON.stringify(opciones) !== JSON.stringify(proyecto.opciones),
-    [escenas, opciones, proyecto.escenas, proyecto.opciones],
+    () =>
+      editable(escenas) !== editable(proyecto.escenas) ||
+      JSON.stringify(opciones) !== JSON.stringify(proyecto.opciones) ||
+      JSON.stringify(vozP) !== JSON.stringify(proyecto.contexto.voz) ||
+      tono !== proyecto.tonoMusica,
+    [escenas, opciones, vozP, tono, proyecto.escenas, proyecto.opciones, proyecto.contexto.voz, proyecto.tonoMusica],
   );
   // Llegó o se aprobó una pieza: si no hay edición a medias, el borrador se pone al día.
   // (Tras guardar, quien usa este componente lo vuelve a montar con otra `key`.)
@@ -104,6 +119,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
         titulo: "Producto",
         duracion: 3,
         voz: "",
+        locucion: "texto",
         promptImagen: "",
         promptVideo: "",
         fotoUrl: fotos[0] ?? null,
@@ -126,6 +142,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
         return copia as EscenaProyecto;
       }),
       opciones,
+      { vozProyecto: vozP, tonoMusica: tono },
     );
   }
 
@@ -219,10 +236,33 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                     </Label>
                   </div>
                   <Label className="flex flex-col items-stretch gap-1.5">
-                    <span>Lo que se dice (voz y subtítulo)</span>
+                    <span>Lo que se dice en esta escena</span>
                     <Textarea value={e.voz} maxLength={1200} rows={2} disabled={quieto} onChange={(ev) => cambiar(e.clave, { voz: ev.target.value })} />
-                    <span className="text-xs font-normal text-muted-foreground">Cambiar este texto después solo obliga a armar de nuevo: no cuesta.</span>
+                    {e.tipo === "generada" && vozP.motor === "clip" ? (
+                      <span className={cn("text-xs font-normal", contarPalabras(e.voz) > palabrasQueCaben(e.duracion) ? "text-destructive" : "text-muted-foreground")} data-palabras>
+                        {contarPalabras(e.voz)} de {palabrasQueCaben(e.duracion)} palabras que caben en {e.duracion} s. La voz sale del propio clip: cambiar esta frase después obliga a regenerar el clip.
+                      </span>
+                    ) : (
+                      <span className="text-xs font-normal text-muted-foreground">{e.tipo === "generada" ? "Narración aparte: cambiar el texto solo obliga a armar de nuevo." : "Una foto animada no habla: esta frase va escrita en pantalla (subtítulo)."}</span>
+                    )}
                   </Label>
+                  {e.tipo === "generada" && (
+                    <Label className="flex flex-col items-stretch gap-1.5 sm:max-w-xs">
+                      <span>Quién la dice</span>
+                      <Select items={LOCUCION_LABELS} value={e.locucion} disabled={quieto} onValueChange={(v) => v && cambiar(e.clave, { locucion: v as Locucion })}>
+                        <SelectTrigger className="w-full" aria-label={`Quién habla en la escena ${i + 1}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LOCUCIONES.filter((l) => l !== "texto").map((l) => (
+                            <SelectItem key={l} value={l}>
+                              {LOCUCION_LABELS[l]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Label>
+                  )}
 
                   {e.tipo === "generada" ? (
                     <div className="grid gap-3 md:grid-cols-2">
@@ -313,6 +353,48 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
         <Input value={opciones.modelo ?? ""} maxLength={160} disabled={quieto} placeholder="Modelo (opcional)" aria-label="Modelo de video" onChange={(e) => setOpciones((o) => ({ ...o, modelo: e.target.value || null }))} />
       </div>
 
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3" id="voz-del-proyecto">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">Voz y música del video</span>
+          <Chip tono={vozP.motor === "clip" ? "azul" : "neutro"}>{vozP.motor === "clip" ? "La voz sale de cada clip" : "Narración aparte (ElevenLabs)"}</Chip>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Label className="flex flex-col items-stretch gap-1.5">
+            <span>Idioma y acento (según el país del proyecto)</span>
+            <Input value={vozP.acento} maxLength={200} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, acento: e.target.value }))} />
+          </Label>
+          <Label className="flex flex-col items-stretch gap-1.5">
+            <span>Tono de la música</span>
+            <Select items={TONO_MUSICA_LABELS} value={tono} disabled={quieto} onValueChange={(v) => v && setTono(v as TonoMusica)}>
+              <SelectTrigger className="w-full" aria-label="Tono de la música">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TONOS_MUSICA.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {TONO_MUSICA_LABELS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Label>
+        </div>
+        <Label className="flex flex-col items-stretch gap-1.5">
+          <span>Descripción fija de la voz o del personaje</span>
+          <Textarea value={vozP.descripcion} maxLength={400} rows={2} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, descripcion: e.target.value }))} />
+          <span className="text-xs font-normal text-muted-foreground">
+            Va idéntica en todos los clips: es lo que sostiene que la voz no cambie de un clip a otro. Aun así puede variar un poco; si un clip suena distinto, se regenera solo ese.
+          </span>
+        </Label>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={vozP.motor === "narracion"} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, motor: e.target.checked ? "narracion" : "clip" }))} />
+          <span>
+            Usar narración aparte (ElevenLabs) en vez de la voz del clip
+            <span className="block text-xs text-muted-foreground">Apagado por decisión del dueño. Solo funciona si el servidor de videos tiene esa clave.</span>
+          </span>
+        </label>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={quieto || !sucio} onClick={() => void guardar()}>
           <Save /> {sucio ? "Guardar el plan" : "Plan guardado"}
@@ -327,6 +409,8 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
             onClick={() => {
               setEscenas(aBorrador(proyecto.escenas));
               setOpciones(proyecto.opciones);
+              setVozP(proyecto.contexto.voz);
+              setTono(proyecto.tonoMusica);
             }}
           >
             <Undo2 /> Descartar cambios

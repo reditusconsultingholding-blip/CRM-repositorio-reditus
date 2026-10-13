@@ -46,18 +46,29 @@ async function pedirJson(url, opciones = {}, esperas = [2000, 5000, 15000, 30000
 }
 
 /** Descarga una URL a un archivo (por flujo: un video no se carga entero en memoria). */
-async function descargar(url, destino, cabeceras = {}) {
+async function descargar(url, destino, cabeceras = {}, { maxBytes = 0 } = {}) {
   let ultimo;
   for (const espera of [0, 3000, 10000]) {
     if (espera) await esperar(espera);
     try {
       const res = await fetch(url, { headers: cabeceras, signal: AbortSignal.timeout(10 * 60000) });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} al descargar ${url.split("?")[0]}`);
-      await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(destino));
+      // Con tope de tamaño: no se baja (ni se sigue bajando) un archivo más grande de lo permitido.
+      const pasa = (n) => Object.assign(new Error(`el archivo pesa más de ${Math.round(maxBytes / 1048576)} MB${n ? ` (${Math.round(n / 1048576)} MB)` : ""}`), { demasiadoGrande: true });
+      if (maxBytes && Number(res.headers.get("content-length")) > maxBytes) throw pasa(Number(res.headers.get("content-length")));
+      let bajado = 0;
+      const tope = new (require("stream").Transform)({
+        transform(trozo, _c, sigue) {
+          bajado += trozo.length;
+          sigue(maxBytes && bajado > maxBytes ? pasa(0) : null, trozo);
+        },
+      });
+      await pipeline(Readable.fromWeb(res.body), tope, fs.createWriteStream(destino));
       if (fs.statSync(destino).size < 1024) throw new Error("la descarga llegó vacía");
       return destino;
     } catch (e) {
       ultimo = e;
+      if (e.demasiadoGrande) break; // repetir no lo achica
     }
   }
   throw ultimo;

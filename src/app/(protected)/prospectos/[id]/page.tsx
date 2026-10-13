@@ -3,6 +3,8 @@ import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ORIGEN_PROSPECCION, ROLES_ASIGNABLES, etapaEfectiva, leerProspeccion } from "@/lib/prospeccion";
 import { ProspectoDetalle } from "@/components/prospectos/prospecto-detalle";
+import { VideosProspectos } from "@/components/prospectos/videos-prospectos";
+import { videosDeProspectos } from "../video-actions";
 import { ROLES_ACTIVAN_ENVIO, leerCorreos } from "@/lib/prospeccion-correo";
 import { envioSinConfirmar, faltaParaEnviar } from "@/lib/prospeccion-correo-server";
 
@@ -40,8 +42,13 @@ export default async function ProspectoPage({ params }: { params: Promise<{ id: 
   }
 
   const correos = leerCorreos(fila.respuestas_calificacion);
+  // Video gratis automático de ESTE prospecto (si es candidato): decide solo el CEO.
+  const videos = await videosDeProspectos();
+  const suVideo = "error" in videos ? [] : videos.filas.filter((f) => f.candidato.id === id);
 
   return (
+    <div className="flex flex-col gap-4">
+    {suVideo.length > 0 && !("error" in videos) && <VideosProspectos filas={suVideo} esCeo={profile.role === "ceo"} pideAprobacion={videos.pideAprobacion} soloUno />}
     <ProspectoDetalle
       id={fila.id as string}
       nombre={fila.nombre as string}
@@ -59,5 +66,6 @@ export default async function ProspectoPage({ params }: { params: Promise<{ id: 
         puedeAutorizar: ROLES_ACTIVAN_ENVIO.includes(profile.role),
       }}
     />
+    </div>
   );
 }

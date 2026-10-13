@@ -5,6 +5,7 @@ import { notify } from "@/lib/notify";
 import { RAIZ_COLA } from "@/lib/cola-raiz";
 import { leerConfig } from "@/lib/videos-config-server";
 import { buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
+import { bloqueDeAudio } from "@/lib/proyecto-video-plan";
 import { duracionTotal, gastoDeTrabajo, type CodigoParada, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
 import { corchetes, escenasParaVideo, pasosDelGuion } from "@/lib/trabajos-video";
 import {
@@ -15,6 +16,7 @@ import {
   ETAPA_LABELS,
   EXT_IMAGEN,
   MAX_REPORTES,
+  MAX_TOMAS_ANALISIS,
   escenasSinReportar,
   type EtapaTrabajo,
   ID_TRABAJO,
@@ -181,7 +183,8 @@ async function claveDeTope(carpeta: Carpeta, id: string): Promise<string | null>
   const t = await leerEn(carpeta, id);
   if (!t) return `v:${id}`; // se está moviendo: cuenta como siempre y no se recuerda
   let clave: string | null;
-  if (t.variacion) clave = `x:${t.guionId}`;
+  if (t.etapa === "analisis") clave = null;
+  else if (t.variacion) clave = `x:${t.guionId}`;
   else if (t.etapa === "imagenes" || t.etapa === "armado") clave = null;
   // Un trabajo que falló sin gastar no cuenta.
   else if (carpeta === CARPETAS.fallos && t.segundosGenerados <= 0 && !t.reportes.length) clave = null;
@@ -350,6 +353,8 @@ export async function crearTrabajoVideo(
     todas: [],
     reportes: [],
     creditos: 0,
+    referencia: null,
+    analisis: null,
     variacion: false,
     estado: "pendiente",
     motivo: "",
@@ -443,7 +448,12 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
   const paraEtapa = escenas.map((e) =>
     etapa === "imagenes"
       ? { ...e, promptImagen: conNota(e.promptImagen, e.imagen.nota), imagen: { ...e.imagen, intentos: e.imagen.intentos + 1 } }
-      : { ...e, promptVideo: conNota(e.promptVideo, e.clip.nota), clip: { ...e.clip, intentos: e.clip.intentos + 1 } },
+      : {
+          ...e,
+          // Con la voz dentro del clip, el prompt dice quién habla, la frase exacta, el acento y la voz fija del proyecto.
+          promptVideo: [conNota(e.promptVideo, e.clip.nota), proyecto.contexto.voz.motor === "clip" && proyecto.opciones.voz ? bloqueDeAudio(e, proyecto.contexto.voz) : ""].filter(Boolean).join("\n\n"),
+          clip: { ...e.clip, intentos: e.clip.intentos + 1 },
+        },
   );
   const trabajo: TrabajoVideo = {
     id: `${sello.dia}-${sello.hora}-${randomBytes(6).toString("hex")}`,
@@ -459,7 +469,7 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     duracionObjetivo: etapa === "armado" ? duracionTotal(proyecto) : escenas.reduce((x, e) => x + e.duracion, 0),
     escenas: [],
     imagenesProducto: proyecto.contexto.fotos.slice(0, MAX_IMAGENES_PRODUCTO),
-    opciones: { ...proyecto.opciones },
+    opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica },
     pedidoPor: p.quien,
     origen: "manual",
     cierre: { ...proyecto.contexto.cierre },
@@ -470,6 +480,8 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     todas: etapa === "armado" ? proyecto.escenas : [],
     reportes: [],
     creditos: 0,
+    referencia: null,
+    analisis: null,
     variacion: esVariante,
     estado: "pendiente",
     motivo: "",
@@ -493,6 +505,73 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
         nota: `${ETAPA_LABELS[etapa]}${etapa === "armado" ? "" : ` · ${escenas.length === 1 ? `escena ${escenas[0].n}` : `${escenas.length} escenas`}`} · pedido por ${p.quien.nombre}`,
       },
     ],
+  };
+  const w = await escribir(admin, CARPETAS.pendientes, trabajo, true);
+  if (w.error) return { error: w.error };
+  return { trabajo };
+}
+
+// ---------------------------------------- análisis de un video de referencia ----
+
+/** Archivos de una referencia (video original, fotogramas, audio): bucket PRIVADO. Son de un tercero y se borran tras el análisis. */
+export const carpetaReferencia = (refId: string) => `${RAIZ_COLA}-referencias/${refId}`;
+
+/**
+ * Encola el análisis de un video de referencia («Clonar video»): el trabajador
+ * saca los cortes, un fotograma por toma y, si puede, la transcripción. No
+ * cuenta para ningún tope ni gasta créditos de video.
+ */
+export async function crearTrabajoAnalisis(admin: Admin, refId: string, url: string, quien: { id: string; nombre: string }): Promise<{ trabajo: TrabajoVideo } | { error: string }> {
+  if (!servidorVideoActivo()) return { error: "El análisis automático lo hace el servidor de videos y no está conectado (falta SERVIDOR_SECRET). Describe la referencia toma por toma." };
+  const b = await asegurarBucketTrabajos(admin);
+  if (b.error) return { error: b.error };
+  const ahora = new Date();
+  const sello = selloBogota(ahora);
+  const iso = ahora.toISOString();
+  const trabajo: TrabajoVideo = {
+    id: `${sello.dia}-${sello.hora}-${randomBytes(6).toString("hex")}`,
+    tipo: "video",
+    guionId: refId,
+    version: 1,
+    formato: "",
+    formatoNombre: "",
+    producto: "Video de referencia",
+    cliente: "",
+    pais: "",
+    relacionAspecto: "9:16",
+    duracionObjetivo: 0,
+    escenas: [],
+    imagenesProducto: [],
+    opciones: { subtitulos: false, voz: false, musica: null, modelo: null },
+    pedidoPor: quien,
+    origen: "manual",
+    cierre: { oferta: "", llamadoALaAccion: "" },
+    avisos: [],
+    etapa: "analisis",
+    contexto: null,
+    escenasEtapa: [],
+    todas: [],
+    reportes: [],
+    creditos: 0,
+    referencia: { url, maxTomas: MAX_TOMAS_ANALISIS },
+    analisis: null,
+    variacion: false,
+    estado: "pendiente",
+    motivo: "",
+    intentos: 0,
+    maxIntentos: 2,
+    creadoAt: iso,
+    tomadoAt: null,
+    latidoAt: null,
+    terminadoAt: null,
+    noAntesDe: null,
+    toma: null,
+    trabajador: null,
+    progreso: null,
+    segundosGenerados: 0,
+    costoEstimadoUsd: null,
+    resultado: null,
+    historial: [{ fecha: iso, estado: "pendiente", nota: `Análisis de un video de referencia · pedido por ${quien.nombre}` }],
   };
   const w = await escribir(admin, CARPETAS.pendientes, trabajo, true);
   if (w.error) return { error: w.error };
@@ -790,7 +869,7 @@ export async function recibirResultado(
   if (!r.ok) {
     // Reintento de un resultado que ya había entrado: se responde lo mismo.
     const hecho = r.estado === 409 ? await leerEn(CARPETAS.listos, id) : null;
-    if (hecho && typeof cuerpo.toma === "string" && hecho.historial.some((h) => h.estado === "listo") && (hecho.resultado || hecho.etapa === "imagenes" || hecho.etapa === "clips")) {
+    if (hecho && typeof cuerpo.toma === "string" && hecho.historial.some((h) => h.estado === "listo") && (hecho.resultado || hecho.etapa === "imagenes" || hecho.etapa === "clips" || hecho.etapa === "analisis")) {
       return {
         ok: true,
         dato: { estado: "listo", videoUrl: hecho.resultado?.videoUrl ?? "", version: hecho.version, guionId: hecho.guionId, ...(hecho.etapa ? { etapa: hecho.etapa } : {}) },
@@ -799,6 +878,7 @@ export async function recibirResultado(
     return r;
   }
   const t = r.dato;
+  if (t.etapa === "analisis") return recibirAnalisis(admin, t, cuerpo);
   const esperada = rutaVideoGenerado(t);
   const almacen = admin.storage.from(BUCKET_VIDEOS_GENERADOS);
   const porEscenas = t.etapa === "imagenes" || t.etapa === "clips";
@@ -829,6 +909,16 @@ export async function recibirResultado(
         },
       },
     };
+  }
+  // Fotogramas del video armado, para el control de calidad automático (opcional).
+  if (cuerpo.pedirSubida === true && cuerpo.tipo === "fotograma-final") {
+    if (t.etapa !== "armado") return no(400, "Los fotogramas del final solo se suben en un trabajo de armado.");
+    const i = typeof cuerpo.indice === "number" ? Math.floor(cuerpo.indice) : NaN;
+    if (!(i >= 1 && i <= 6)) return no(400, "`indice` debe ir de 1 a 6.");
+    const destino = `${carpetaProyecto(t)}/final-f${i}.jpg`;
+    const { data, error } = await almacen.createSignedUploadUrl(destino, { upsert: true });
+    if (error || !data) return no(500, `No se pudo preparar la subida: ${error?.message ?? "sin respuesta"}`);
+    return { ok: true, dato: { subida: { url: data.signedUrl, metodo: "PUT", cabeceras: { "content-type": "image/jpeg", "x-upsert": "true" }, bucket: BUCKET_VIDEOS_GENERADOS, ruta: destino } } };
   }
   if (porEscenas && cuerpo.pedirSubida === true) {
     return no(400, "En esta etapa cada archivo se sube por escena: manda `tipo` («imagen» o «clip») y `escena`.");
@@ -931,6 +1021,11 @@ export async function recibirResultado(
     modelos: lst(cuerpo.modelos, 6),
     sinVoz: cuerpo.sinVoz === true,
     avisos: lst(cuerpo.avisos, 12),
+    // Fotogramas del final (subidos con `tipo: "fotograma-final"`): solo los de la carpeta de este trabajo.
+    fotogramas: lst(cuerpo.fotogramas, 6)
+      .filter((ruta) => ruta.startsWith(`${carpetaProyecto(t)}/final-f`))
+      .map((ruta) => almacen.getPublicUrl(ruta).data.publicUrl),
+    subtitulos: typeof cuerpo.subtitulos === "boolean" ? cuerpo.subtitulos : null,
   };
   t.terminadoAt = iso;
   t.latidoAt = iso;
@@ -944,6 +1039,68 @@ export async function recibirResultado(
 
   await avisar(admin, t.pedidoPor.id, `El video de «${t.producto}» (v${t.version}) está listo: revísalo y apruébalo`, `/videos?guion=${t.guionId}`);
   return { ok: true, dato: { estado: "listo", videoUrl, version: t.version, guionId: t.guionId, ...(t.etapa ? { etapa: t.etapa } : {}) } };
+}
+
+const EXT_AUDIO: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4" };
+
+/** `resultado` de un trabajo de análisis: subida de fotogramas y audio (bucket privado) y cierre con las tomas. */
+async function recibirAnalisis(admin: Admin, t: TrabajoVideo, cuerpo: Record<string, unknown>): Promise<RespuestaServidor<{ subida: SubidaFirmada } | ResultadoRecibido>> {
+  const base = carpetaReferencia(t.guionId);
+  const privado = admin.storage.from(BUCKET_TRABAJOS);
+  const rutaFotograma = (i: number) => `${base}/f${i}.jpg`;
+  if (cuerpo.pedirSubida === true) {
+    let destino: string;
+    let tipoContenido: string;
+    if (cuerpo.tipo === "fotograma") {
+      const i = typeof cuerpo.indice === "number" ? Math.floor(cuerpo.indice) : NaN;
+      if (!(i >= 1 && i <= MAX_TOMAS_ANALISIS)) return no(400, `\`indice\` debe ir de 1 a ${MAX_TOMAS_ANALISIS}.`);
+      destino = rutaFotograma(i);
+      tipoContenido = "image/jpeg";
+    } else if (cuerpo.tipo === "audio") {
+      const ext = typeof cuerpo.extension === "string" && EXT_AUDIO[cuerpo.extension] ? cuerpo.extension : "m4a";
+      destino = `${base}/audio.${ext}`;
+      tipoContenido = EXT_AUDIO[ext];
+    } else return no(400, "En un análisis se suben fotogramas (`tipo: \"fotograma\"`, con `indice`) y, si se puede, el audio (`tipo: \"audio\"`).");
+    const { data, error } = await privado.createSignedUploadUrl(destino, { upsert: true });
+    if (error || !data) return no(500, `No se pudo preparar la subida: ${error?.message ?? "sin respuesta"}`);
+    t.latidoAt = new Date().toISOString();
+    await escribir(admin, CARPETAS.enCurso, t);
+    return { ok: true, dato: { subida: { url: data.signedUrl, metodo: "PUT", cabeceras: { "content-type": tipoContenido, "x-upsert": "true" }, bucket: BUCKET_TRABAJOS, ruta: destino } } };
+  }
+  const crudas = Array.isArray(cuerpo.tomas) ? cuerpo.tomas.slice(0, MAX_TOMAS_ANALISIS) : [];
+  if (!crudas.length) return no(400, "El cierre del análisis debe traer `tomas: [{ desde, hasta, fotograma }]`.");
+  const { data: subidos } = await privado.list(base, { limit: 100 });
+  const hay = new Set((subidos ?? []).map((o) => o.name));
+  const tomas = [];
+  for (const [i, c] of crudas.entries()) {
+    const x = c && typeof c === "object" ? (c as Record<string, unknown>) : {};
+    const desde = numero(x.desde);
+    const hasta = numero(x.hasta);
+    const fotograma = typeof x.fotograma === "string" ? x.fotograma : "";
+    if (desde === null || hasta === null || hasta <= desde) return no(400, `La toma ${i + 1} no trae \`desde\` y \`hasta\` válidos.`);
+    if (!fotograma.startsWith(`${base}/f`) || !hay.has(fotograma.slice(base.length + 1))) return no(409, `El fotograma de la toma ${i + 1} no está en Storage o no es la ruta que entregó la subida.`);
+    tomas.push({ desde, hasta, fotograma });
+  }
+  const audio = typeof cuerpo.audio === "string" && cuerpo.audio.startsWith(`${base}/audio.`) && hay.has(cuerpo.audio.slice(base.length + 1)) ? cuerpo.audio : null;
+  const transcripcion = (Array.isArray(cuerpo.transcripcion) ? cuerpo.transcripcion : [])
+    .slice(0, 200)
+    .map((c) => {
+      const x = c && typeof c === "object" ? (c as Record<string, unknown>) : {};
+      return { desde: numero(x.desde) ?? 0, hasta: numero(x.hasta) ?? 0, texto: typeof x.texto === "string" ? x.texto.trim().slice(0, 600) : "" };
+    })
+    .filter((x) => x.texto);
+  const iso = new Date().toISOString();
+  t.analisis = { duracion: numero(cuerpo.duracion) ?? tomas[tomas.length - 1].hasta, tomas, audio, transcripcion };
+  t.terminadoAt = iso;
+  t.latidoAt = iso;
+  t.toma = null;
+  t.progreso = null;
+  t.motivo = "";
+  anotar(t, "listo", `Análisis entregado: ${tomas.length} tomas${transcripcion.length ? ", con transcripción" : ", sin transcripción"}`, iso);
+  const w = await escribir(admin, CARPETAS.enCurso, t);
+  if (w.error) return no(500, w.error);
+  await mover(admin, t.id, CARPETAS.enCurso, CARPETAS.listos);
+  return { ok: true, dato: { estado: "listo", videoUrl: "", version: 1, guionId: t.guionId, etapa: "analisis" } };
 }
 
 export async function reportarFallo(

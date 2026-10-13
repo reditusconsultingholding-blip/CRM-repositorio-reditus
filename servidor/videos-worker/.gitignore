@@ -1,3 +1,6 @@
 .env
 datos/
 node_modules/
+# La biblioteca de música la llena el dueño en el servidor: las pistas NO se suben al repositorio.
+musica/**
+!musica/LEEME.md

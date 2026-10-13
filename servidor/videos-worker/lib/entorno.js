@@ -38,6 +38,8 @@ function cargar() {
     falKey: dato("FAL_KEY"),
     elevenKey: dato("ELEVENLABS_API_KEY"),
     elevenVoz: dato("ELEVENLABS_VOICE_ID"),
+    // Servicio de voz a texto para la etapa «analisis». Vacío = ninguno (transcripcion: null con el motivo).
+    transcripcion: (dato("TRANSCRIPCION") || "ninguno").toLowerCase(),
     nombre: dato("NOMBRE_TRABAJADOR") || require("os").hostname(),
     ffmpeg: dato("FFMPEG") || "ffmpeg",
     ffprobe: dato("FFPROBE") || "ffprobe",
@@ -46,6 +48,8 @@ function cargar() {
       trabajos: path.join(datos, "trabajos"),
       proyectos: path.join(datos, "proyectos"),
       cache: path.join(datos, "cache"),
+      // Biblioteca de música por tono (la llena el dueño). Fuera de datos\\ a propósito: no es temporal.
+      musica: path.resolve(RAIZ, dato("CARPETA_MUSICA") || "musica"),
       entregados: path.join(datos, "entregados"),
       registro: path.join(datos, "registro"),
     },

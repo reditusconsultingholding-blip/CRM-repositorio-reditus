@@ -40,6 +40,7 @@
 const path = require("path");
 const { descargar, esperar } = require("../lib/red");
 const { crearFreno, ajustesParalelo } = require("../lib/limites");
+const { lineasDeHabla, seHabla } = require("../lib/habla");
 
 const BASE = "https://api.kie.ai";
 
@@ -142,7 +143,10 @@ function armarPrompt(cfg, ctx) {
   const kie = cfg.config.kie || {};
   const habla = (ctx.escena.voz || "").trim();
   const partes = [ctx.escena.prompt];
-  if (ctx.audio === "veo" && habla) partes.push(`${kie.instruccionVoz || "La persona dice, en español latino, exactamente:"} "${habla}"`);
+  // Quién habla, en qué acento y con qué voz sale del trabajo (lib/habla.js), no de un texto fijo.
+  if (ctx.audioEnPrompt) {
+    // El CRM ya escribió en el prompt quién habla, la frase, el acento y la voz: no se toca.
+  } else if (ctx.audio === "veo" && habla && seHabla(ctx.escena)) partes.push(...lineasDeHabla(cfg, ctx.trabajo, habla, ctx.escena));
   else partes.push(kie.instruccionSinVoz || "Sin diálogo ni voz en off.");
   if (kie.sufijoPrompt) partes.push(kie.sufijoPrompt);
   return partes.join("\n").slice(0, kie.maxLetrasPrompt || 4000);

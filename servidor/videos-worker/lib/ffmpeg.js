@@ -84,7 +84,83 @@ function crear(cfg) {
     return v.split(/\r?\n/)[0];
   }
 
-  return { ffmpeg, duracion, tieneAudio, dimensiones, comprobar };
+  /**
+   * Corre ffmpeg y devuelve TODO lo que escribe (para los filtros que informan por texto:
+   * silencedetect, ebur128, showinfo…). No produce archivo: la salida va a `-f null -`.
+   */
+  function informe(args, cwd, limiteMs = 10 * 60000) {
+    return new Promise((resolver, rechazar) => {
+      const hijo = spawn(cfg.ffmpeg, ["-hide_banner", "-nostats", "-filter_threads", hilos, ...args, "-f", "null", "-"], { cwd, windowsHide: true });
+      if (paralelo.prioridadBaja && hijo.pid) {
+        try {
+          os.setPriority(hijo.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
+        } catch {
+          /* corre igual */
+        }
+      }
+      let texto = "";
+      const reloj = setTimeout(() => hijo.kill("SIGKILL"), limiteMs);
+      hijo.stdout.on("data", () => {});
+      hijo.stderr.on("data", (d) => {
+        if (texto.length < 8e6) texto += d;
+      });
+      hijo.on("error", (e) => (clearTimeout(reloj), rechazar(new Error(`No se pudo ejecutar ffmpeg: ${e.message}`))));
+      hijo.on("close", (codigo) => {
+        clearTimeout(reloj);
+        if (codigo === 0) return resolver(texto);
+        rechazar(new Error(`ffmpeg terminó con código ${codigo}: ${texto.trim().split(/\r?\n/).slice(-3).join(" | ")}`));
+      });
+    });
+  }
+
+  const medidas = new Map();
+  /**
+   * Mide el audio de un archivo: volumen integrado (LUFS) y dónde empieza y termina el sonido.
+   *   { dura, lufs, mudo, desde, hasta, inicioDetectado, finDetectado }
+   * `inicioDetectado` / `finDetectado`: hay un silencio claro al inicio / al final. Si no lo hay
+   * (ruido de ambiente continuo), `desde` = 0 y `hasta` = `dura`, y NO se sabe dónde acaba la frase.
+   */
+  async function medirAudio(archivo, cwd, { ruidoDb = -35, silencioMinimo = 0.3 } = {}) {
+    const clave = `${cwd || ""}|${archivo}|${ruidoDb}|${silencioMinimo}`;
+    if (medidas.has(clave)) return medidas.get(clave);
+    const dura = await duracion(archivo, cwd);
+    const r = { dura, lufs: NaN, mudo: true, desde: 0, hasta: dura, inicioDetectado: false, finDetectado: false };
+    try {
+      const texto = await informe(["-i", archivo, "-vn", "-af", `silencedetect=noise=${ruidoDb}dB:d=${silencioMinimo},ebur128=framelog=verbose`], cwd);
+      const i = /I:\s+(-?[\d.]+|-inf)\s+LUFS/.exec(texto.slice(texto.lastIndexOf("Summary:")));
+      r.lufs = i && i[1] !== "-inf" ? Number(i[1]) : -Infinity;
+      r.mudo = !(r.lufs > -55);
+      const silencios = [];
+      let abierto = null;
+      for (const m of texto.matchAll(/silence_(start|end): (-?[\d.]+)/g)) {
+        if (m[1] === "start") abierto = Math.max(0, Number(m[2]));
+        else if (abierto !== null) {
+          silencios.push([abierto, Number(m[2])]);
+          abierto = null;
+        }
+      }
+      if (abierto !== null) silencios.push([abierto, dura]);
+      const primero = silencios[0];
+      const ultimo = silencios[silencios.length - 1];
+      if (primero && primero[0] <= 0.08) {
+        r.desde = Math.min(dura, primero[1]);
+        r.inicioDetectado = true;
+      }
+      if (ultimo && ultimo[1] >= dura - 0.12 && ultimo[0] > r.desde) {
+        r.hasta = ultimo[0];
+        r.finDetectado = true;
+      }
+      if (r.desde >= dura - 0.05) r.mudo = true; // todo el archivo es silencio
+    } catch {
+      /* sin medida: se trata como audio normal, sin recortes ni ganancia */
+      r.mudo = false;
+    }
+    if (medidas.size > 400) medidas.clear();
+    medidas.set(clave, r);
+    return r;
+  }
+
+  return { ffmpeg, informe, medirAudio, duracion, tieneAudio, dimensiones, comprobar };
 }
 
 /** Ancho y alto de salida para una relación de aspecto («9:16», «16:9», «1:1»…). */

@@ -50,7 +50,22 @@
       "amplitudCierre": 0.03,
       "recorteMaximo": 0.12,
       "movimientoPorDefecto": "acercar"
-    }
+    },
+    "habla": {
+      "_nota": "Uniones entre clips que hablan. objetivoLufs = volumen al que se lleva cada clip (ganancia fija, hasta ±gananciaMaxDb). ruidoDb / silencioMinimo = qué se considera silencio. Un silencio inicial de más de recortarInicioDesde s (o final de más de recortarFinDesde s) se recorta dejando margenInicio / margenFin alrededor de la frase: nunca se corta una palabra. fundidoEntrada / fundidoSalida = fundidos de audio en cada corte.",
+      "objetivoLufs": -16,
+      "gananciaMaxDb": 12,
+      "ruidoDb": -35,
+      "silencioMinimo": 0.3,
+      "recortarInicioDesde": 0.6,
+      "recortarFinDesde": 0.8,
+      "margenInicio": 0.25,
+      "margenFin": 0.35,
+      "fundidoEntrada": 0.04,
+      "fundidoSalida": 0.1
+    },
+    "fotogramasFinales": 5,
+    "_fotogramasFinales": "Cuántos fotogramas del video ya armado se le mandan al CRM para su control de calidad (de 3 a 6; 0 = ninguno). El primero es del primer segundo y el último del cierre con el rótulo."
   },
   "rotulo": {
     "_nota": "Rótulo de la escena de cierre: la oferta (grande, sobre un panel oscuro) y el llamado a la acción (botón). Los textos se escriben tal cual llegan del CRM. Colores en RRGGBB.",
@@ -62,11 +77,41 @@
     "fondoLlamado": "FFE600"
   },
   "musica": {
-    "_nota": "Solo se mezcla si el trabajo trae una pista (opciones.musica = URL). volumen = nivel de la música cuando hay voz (además baja sola mientras alguien habla); volumenSinVoz = nivel cuando el video no tiene voz.",
-    "volumen": 0.22,
-    "volumenSinVoz": 0.6,
-    "entradaSegundos": 0.4,
-    "salidaSegundos": 1.2
+    "_nota": "Música de fondo. De dónde sale, por orden: (1) opciones.musica del trabajo = un enlace; (2) la carpeta musica\\ del trabajador, con una subcarpeta por tono (suspenso, energia, emotivo, neutro… las que quieras): el trabajo dice el tono con opciones.tonoMusica y, si no lo dice, se usa tonoPorDefecto; si no hay pistas de ese tono se usa tonoDeRespaldo; (3) si generarConKie es true, la genera Kie y la guarda en esa carpeta. Sin pista, el video sale sin música y lo avisa. automatica: false = solo se pone música cuando el trabajo trae enlace o tono. Niveles en LUFS (más negativo = más bajo): la voz va a -16; la música va a nivelBajoVozLufs y además baja sola mientras se habla.",
+    "automatica": true,
+    "tonoPorDefecto": "neutro",
+    "tonoDeRespaldo": "neutro",
+    "nivelBajoVozLufs": -30,
+    "nivelSinVozLufs": -20,
+    "entradaSegundos": 0.05,
+    "salidaSegundos": 1.2,
+    "generarConKie": false,
+    "_generarConKie": "APAGADO. Encenderlo GASTA créditos de Kie (una vez por tono: la pista queda en la carpeta y se reutiliza). VERIFICAR antes: precio en kie.ai/pricing y que el plan de la cuenta permita uso comercial de la música generada.",
+    "kie": {
+      "_VERIFICAR": "Revisado el 13-oct-2026 contra docs.kie.ai («Generate Music»), SIN ninguna llamada real. Por verificar con la primera: los estados de la tarea al consultarla, dónde llega la dirección del audio y el precio.",
+      "modeloApi": "ai-music-api/generate",
+      "modelo": "V6_MINI",
+      "segundosDeMas": 5,
+      "consultarCadaSegundos": 8,
+      "limiteMinutos": 10,
+      "entradaExtra": {},
+      "estilos": {
+        "_nota": "Qué se le pide a Kie para cada tono (siempre instrumental). Agrega los tonos que uses.",
+        "suspenso": "instrumental, tense cinematic suspense underscore, low pulsing synth, sparse percussion, no vocals, no melody on top, background music for a short ad",
+        "energia": "instrumental, upbeat energetic modern pop beat, bright, driving rhythm, no vocals, background music for a short ad",
+        "emotivo": "instrumental, warm emotional piano and soft strings, hopeful, slow build, no vocals, background music for a short ad",
+        "neutro": "instrumental, light neutral corporate background, soft mallets and pads, unobtrusive, no vocals, background music for a short ad"
+      }
+    }
+  },
+  "analisis": {
+    "_nota": "Etapa «analisis» (clonar un anuncio): se baja el video de referencia, se detectan los cortes de plano, se saca UN fotograma por toma (del medio) y el audio, y se borra el original. maxSegundos / maxMb = lo más largo y pesado que se acepta (lo acordado con el CRM: 3 minutos y 200 MB). umbralCorte = sensibilidad de la detección de cortes (0.2 detecta más, 0.5 menos). tomaMinima = segundos mínimos de una toma. maxTomas = tope de tomas (el CRM acepta 16): si hay más, se unen las más cortas. ladoFotograma = lado mayor del fotograma en píxeles.",
+    "maxSegundos": 180,
+    "maxMb": 200,
+    "umbralCorte": 0.3,
+    "tomaMinima": 0.6,
+    "maxTomas": 16,
+    "ladoFotograma": 768
   },
   "voz": {
     "_nota": "ElevenLabs. Solo se usa si en el .env están ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID.",
@@ -79,15 +124,36 @@
     "demoraSegundos": 2
   },
   "audio": {
-    "_nota": "De dónde sale el audio de cada video: \"veo\" = el que Veo genera dentro del clip (dice la frase del guion; no se le pone otra voz encima), \"elevenlabs\" = voz de ElevenLabs sobre el video (el audio del clip se descarta), \"ninguno\" = mudo. Los subtítulos salen siempre del texto hablado del guion. Con Kie el audio del clip es el de Veo, igual que con Veo directo. Con un proveedor sin audio propio (simulado, fal), \"veo\" equivale a \"elevenlabs\".",
+    "_nota": "De dónde sale el audio de cada video. \"veo\" = habla el propio clip (Veo dice la frase del guion; es lo normal para TODOS los formatos). \"elevenlabs\" = voz de ElevenLabs encima (solo funciona si el servidor tiene ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID; sin clave se usa el audio del clip y se avisa). \"ninguno\" = mudo. Un trabajo puede pedir otra cosa con opciones.voz: \"elevenlabs\" | \"veo\" | false. Los subtítulos salen siempre del texto del guion.",
     "porDefecto": "veo",
     "porFormato": {
-      "_nota": "Formatos narrados por una voz aparte (no habla nadie en cámara): mejor ElevenLabs. Ajusta a gusto.",
-      "historia": "elevenlabs",
-      "crochet": "elevenlabs",
-      "esqueleto": "elevenlabs",
-      "plastilina": "elevenlabs",
+      "_nota": "Solo excepciones. Ejemplo: \"musica\": \"ninguno\". Los formatos narrados ya NO van aquí: usan el audio del clip con narrador fuera de cámara (ver «habla»).",
       "musica": "ninguno"
+    }
+  },
+  "habla": {
+    "_nota": "Cómo se le pide al modelo de video la frase hablada. {acento} sale del trabajo (contexto.voz.acento o idioma); si no llega, de porPais según el país del proyecto; si el país no está en la lista, de «neutro». {descripcion} es contexto.voz.descripcion: va igual en todas las escenas para que la voz no cambie de un clip a otro.",
+    "narrados": [
+      "historia",
+      "crochet",
+      "esqueleto",
+      "plastilina"
+    ],
+    "_narrados": "Formatos donde nadie habla a cámara: se pide narrador fuera de cámara.",
+    "plantillaEnCamara": "La persona dice a cámara, en {acento}, con voz natural, exactamente:",
+    "plantillaNarrador": "Narrador fuera de cámara (voz en off; ningún personaje mueve los labios), en {acento}, con voz natural, dice exactamente:",
+    "plantillaVoz": "Voz: {descripcion}. Es la misma voz en todas las escenas de este video.",
+    "sinMusica": true,
+    "textoSinMusica": "Sin música de fondo.",
+    "neutro": "español latino neutro",
+    "porPais": {
+      "ES": "español de España (castellano peninsular)",
+      "MX": "español de México",
+      "CO": "español de Colombia",
+      "AR": "español de Argentina (rioplatense)",
+      "CL": "español de Chile",
+      "PE": "español de Perú",
+      "EC": "español de Ecuador"
     }
   },
   "kie": {
@@ -131,12 +197,12 @@
     "_entradaExtra": "Campos adicionales tal cual para «input» (p. ej. \"enable_translation\": false, \"watermark\": \"\"). Vacío = los de Kie por defecto.",
     "usdPorCredito": null,
     "_usdPorCredito": "VERIFICAR en kie.ai/pricing cuánto vale un crédito en dólares. Kie reporta los créditos reales de cada tarea; con este valor el CRM muestra además el costo en dólares. En null se reportan solo créditos y segundos.",
-    "instruccionVoz": "La persona dice, en español latino, con voz natural, exactamente:",
     "instruccionSinVoz": "Sin diálogo ni voz en off.",
     "sufijoPrompt": "Sin texto ni subtítulos en pantalla.",
     "maxLetrasPrompt": 4000,
     "consultarCadaSegundos": 10,
-    "limiteMinutosPorEscena": 25
+    "limiteMinutosPorEscena": 25,
+    "_instruccionVoz": "Ya no existe: la frase hablada, el acento y la voz se arman en la sección «habla» con lo que manda el trabajo."
   },
   "kieImagen": {
     "_VERIFICAR": "Imagen base por Kie. Revisado el 12-oct-2026 contra docs.kie.ai (GPT Image 2.5 Sunburst texto e imagen, Nano Banana 2, Nano Banana Pro, Get Task Details), SIN hacer ninguna llamada real. POR VERIFICAR con  .\\probar.ps1 -UnaImagen : el precio en créditos (la documentación no lo publica), que las fotos del producto sirvan como enlace público, y si 1K alcanza.",
@@ -264,12 +330,12 @@
     "maxMbImagen": 15,
     "parametrosExtra": {},
     "_parametrosExtra": "Parámetros adicionales tal cual para «parameters» (p. ej. personGeneration). Vacío = los de Google por defecto.",
-    "instruccionVoz": "La persona dice, en español latino, con voz natural, exactamente:",
     "instruccionSinVoz": "Sin diálogo ni voz en off.",
     "sufijoPrompt": "Sin texto ni subtítulos en pantalla.",
     "maxLetrasPrompt": 4000,
     "consultarCadaSegundos": 10,
-    "limiteMinutosPorEscena": 20
+    "limiteMinutosPorEscena": 20,
+    "_instruccionVoz": "Ya no existe: la frase hablada, el acento y la voz se arman en la sección «habla» con lo que manda el trabajo."
   },
   "fal": {
     "_VERIFICAR": "ALTERNATIVA (el proveedor elegido es Veo). ANTES DE USAR CON DINERO: abre cada modelo en fal.ai (pestaña API) y confirma su identificador, los nombres de sus campos, las duraciones que acepta y su precio. Los modelos de fal cambian seguido; lo de abajo se revisó el 11-oct-2026 solo contra las páginas públicas, sin hacer ninguna llamada real.",

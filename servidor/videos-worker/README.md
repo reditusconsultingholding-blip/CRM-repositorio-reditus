@@ -23,11 +23,11 @@ Lo que conviene saber:
 
 - **Un fallo de una escena no tumba a las demás**: se reporta con su motivo y el trabajo sigue. Solo se cae el trabajo entero si no se puede hablar con el CRM o, en el armado, si falta un clip aprobado.
 - **Nada se paga dos veces.** Lo ya generado queda en `datos\trabajos\<id>\` y se retoma tras un reinicio. Si una imagen o un clip quedó «pendiente» en el proveedor, su tarea se guarda en `datos\proyectos\<guion>-v<versión>\tareas.json` y se retoma cuando el CRM vuelva a pedir esa misma escena, aunque sea en otro trabajo. Crear una tarea paga nunca se reintenta a ciegas.
-- **Duración**: el modelo de video solo hace 4, 6 u 8 s; se pide la menor que cubra la `duracion` de la escena y el armado **recorta lo que sobre**.
+- **Duración**: el modelo de video solo hace 4, 6 u 8 s; se pide la menor que cubra la `duracion` de la escena y el armado **recorta lo que sobre**, sin cortar la frase (sección 0c).
 - **Escenas `foto-real`** (costo cero, producto idéntico): la foto real con un movimiento suave (`acercar`, `alejar`, `paneo-izq`, `paneo-der`, `quieto`). La foto nunca se deforma: si no llena el cuadro, va entera sobre un fondo difuminado de ella misma. Ajustes en `config.json` → `armado.fotoReal`.
 - **Rótulo de cierre**: en la escena `cierre` se dibujan la oferta (grande, sobre un panel oscuro) y el llamado a la acción (botón) durante toda la escena, **tal cual llegan** del CRM. El cuadro se reparte para que nada se pise: en vertical, oferta arriba · producto · botón · subtítulos; en horizontal, producto a la izquierda y textos a la derecha. Si un texto es muy largo se achica (y se avisa), no se recorta. Colores y fuente en `config.json` → `rotulo`.
-- **Música**: solo si el trabajo trae una pista (`opciones.musica`, un enlace). Se repite hasta el final, baja sola mientras hay voz y se apaga al cierre. Sin pista no se inventa una. Niveles en `config.json` → `musica`.
-- **Voz**: igual que antes (audio del clip / ElevenLabs / ninguno, según `config.json` → `audio`). Las escenas `foto-real` y `cierre` con texto se narran con ElevenLabs si hay clave; si no, salen sin voz y queda en los avisos del resultado. Una narración ya hecha no se vuelve a pedir.
+- **Voz, uniones entre clips y música**: sección 0c. En corto: habla el propio clip (ElevenLabs solo si se pide), los clips se nivelan y se les quitan los silencios largos, y la música sale de la carpeta `musica\` según el tono.
+- **Análisis de un video de referencia** (etapa `analisis`, para clonar un anuncio): sección 0c.
 - **Armado rápido y repetible**: lo descargado y cada escena ya codificada quedan en `datos\cache\`, compartida por todos los proyectos. Volver a armar sin cambios no baja ni codifica nada; cambiar un texto (la oferta, un subtítulo) recodifica solo esa escena; poner o quitar música solo rehace el audio. El mismo proyecto da siempre el mismo archivo (mientras no se cambie `paralelo.hilosFfmpeg`). Lo que lleve 21 días sin usarse se borra solo (`diasParaBorrarCache`).
 - **Imágenes base con Kie**: `config.json` → `kieImagen` (modelo por defecto «GPT Image 2.5 Sunburst» a 1K; alternativas Nano Banana 2 y Pro). Qué se verificó contra docs.kie.ai y qué falta por verificar: al inicio de `proveedores-imagen\kie.js`. **El precio en créditos no está en la documentación**: sale de la primera prueba real (`.\probar.ps1 -UnaImagen`).
 - Otro proveedor de imagen: copia `proveedores-imagen\simulado.js`, respeta la interfaz descrita en `proveedores-imagen\index.js` y pon su nombre en `PROVEEDOR_IMAGEN`.
@@ -74,6 +74,48 @@ Con eso, **el armado no es el límite**: aun suponiendo que el servidor (8 núcl
 
 Esos tiempos por tarea son supuestos, no datos. El primer día con clave real mira `tiempos.csv`: las columnas `cola_proveedor_s` y `generacion_s` dicen cuánto tarda Kie de verdad; si aparecen 429 en el registro, baja `imagenes` o `clips` (o pide a Kie un límite mayor). Tampoco está medido cuántas peticiones por minuto aguanta la cuenta de Kie.
 
+## 0c. Voz, uniones, música y análisis de referencia
+
+### Quién habla
+
+- **Por defecto habla el propio clip** (Veo, por Kie), en todos los formatos. ElevenLabs ya no se usa solo: hace falta que el trabajo lo pida (`contexto.voz.motor: "narracion"` u `opciones.voz: "elevenlabs"`) **y** que el servidor tenga la clave. Si lo pide y no hay clave, no falla: usa el audio del clip y lo avisa. `opciones.voz: false` = sin ninguna voz.
+- **El texto de la frase, el acento y la voz los manda el CRM** dentro del prompt del clip (su bloque «AUDIO»). Cuando viene así, el trabajador no agrega nada. Cuando no viene (trabajos de antes), el trabajador arma la instrucción él: el acento sale de `contexto.voz` y, si no hay, del país del proyecto (España → castellano peninsular; México, Colombia, Argentina, Chile, Perú y Ecuador → el suyo; el resto → español neutro), y en los formatos narrados (`historia`, `crochet`, `esqueleto`, `plastilina`) pide narrador fuera de cámara. Todo en `config.json` → `habla`.
+- **Nunca sale mudo sin avisar.** Si un clip que debía hablar vuelve sin audio o en silencio, se dice en esa escena al entregarla (campo `aviso`) y otra vez en los avisos del video. Si ninguna escena tiene voz, es el primer aviso del video.
+- Las escenas de foto real y el cierre no hablan (son una foto): llevan subtítulos y música. La voz puede variar un poco de un clip a otro; el trabajador no la «arregla»: se regenera el clip desde el CRM.
+
+### Uniones entre clips que hablan (`config.json` → `armado.habla`)
+
+- **Volumen parejo**: cada clip se mide y se lleva al mismo volumen (−16 LUFS) con una ganancia fija, sin compresión que «bombee». Un clip donde nadie habla nunca se sube.
+- **Silencios**: un silencio de más de 0,6 s al inicio o de 0,8 s al final se recorta, dejando un respiro alrededor de la frase. Nunca se corta una palabra: si la duración pedida cortaría la frase, manda la frase y se avisa.
+- **Entrada en seco**: al primer clip se le quita todo silencio inicial y no lleva fundido; la música también entra de una. El gancho suena en el primer segundo.
+- **Cortes**: fundidos de audio muy cortos (40 ms al entrar, 100 ms al salir) para que no haga «clic».
+- **Subtítulos**: salen del texto del guion y empiezan donde empieza la frase de cada escena (se mide dónde arranca el sonido).
+- Límite: lo de «dónde está la frase» se mide por silencio. Si el clip trae ruido de ambiente continuo no se distingue, y entonces se respeta la duración pedida y se avisa.
+
+### Música de fondo (`config.json` → `musica`; ver `musica\LEEME.md`)
+
+Por orden: (1) la pista que traiga el trabajo (`opciones.musica`, un enlace); (2) la carpeta **`musica\`**, con una subcarpeta por tono (`suspenso`, `energia`, `emotivo`, `neutro`…), elegida por `opciones.tonoMusica` (o el tono por defecto); (3) opcional y **apagado**, generarla con la cuenta de Kie (`musica.generarConKie`; gasta créditos una vez por tono y la guarda en la carpeta).
+
+- La carpeta viene **vacía**: las pistas las pone el dueño, con licencia para anuncios. Mientras esté vacía, los videos salen sin música y lo avisan; nunca fallan por eso.
+- La música va siempre por debajo de la voz (−30 LUFS contra −16) y además baja sola mientras alguien habla. Se repite si es corta y se apaga con un fundido al final.
+- La generación por Kie se revisó contra su documentación y se probó con un servidor de mentira, no con la cuenta real: precio, estados de la tarea y licencia de uso están marcados «verificar».
+
+### Fotogramas para el control de calidad
+
+Al entregar el armado, el trabajador manda al CRM 5 fotogramas del video terminado (el primero del primer segundo, el último del cierre con el rótulo) y confirma si quemó subtítulos. Con eso el CRM revisa solo gancho, producto, oferta y subtítulos. `armado.fotogramasFinales` (0 = no mandar).
+
+### Etapa `analisis` (clonar un anuncio)
+
+Recibe un video de referencia que la persona subió al CRM y devuelve su estructura. Solo ffmpeg, sin IA y sin costo:
+
+1. Baja el archivo. Límites: 200 MB y 3 minutos (`config.json` → `analisis`). Si pasa, o no es un video, falla con un motivo que empieza por «no analizable».
+2. Detecta los cortes de plano y arma las tomas (hasta 16; si hay más, une las más cortas).
+3. Saca un fotograma por toma (del medio) y el audio (MP3 mono), y los sube al CRM, que los guarda en privado y los borra después.
+4. **Transcripción**: hoy no hay servicio configurado, así que devuelve `transcripcion: null` con el motivo y la persona escribe lo que se dice. El punto de extensión está en `transcripcion\` (variable `TRANSCRIPCION`); la recomendación y qué clave pediría están al inicio de `transcripcion\index.js`.
+5. Borra el original siempre, termine bien o mal.
+
+Quién clasifica cada toma (tipo, encuadre, qué pasa) es el CRM con su IA de visión; el trabajador no describe personas ni lee textos.
+
 ## 1. Instalar
 
 1. Instala **Node.js 20 o superior** (https://nodejs.org) y **ffmpeg** (`winget install Gyan.FFmpeg`). Comprueba: `node -v` y `ffmpeg -version`.
@@ -89,8 +131,9 @@ Esos tiempos por tarea son supuestos, no datos. El primer día con clave real mi
 | `KIE_API_KEY` | Clave de Kie (clips con `PROVEEDOR=kie` e imágenes base con Kie) |
 | `GEMINI_API_KEY` | Clave de la API de Gemini, para Veo directo (solo con `PROVEEDOR=veo`) |
 | `FAL_KEY` | Clave de fal.ai (solo con `PROVEEDOR=fal`) |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Voz de ElevenLabs, para los formatos con audio `elevenlabs`. Vacías = esos videos salen sin voz (lo reporta) |
-| `NOMBRE_TRABAJADOR`, `FFMPEG`, `FFPROBE`, `CARPETA_DATOS` | Opcionales |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Opcionales. Voz de ElevenLabs: solo se usa si el trabajo la pide. Vacías = habla siempre el propio clip |
+| `TRANSCRIPCION` | Opcional. Servicio de voz a texto para la etapa `analisis`. Vacío = ninguno (hoy no hay ninguno real implementado) |
+| `NOMBRE_TRABAJADOR`, `FFMPEG`, `FFPROBE`, `CARPETA_DATOS`, `CARPETA_MUSICA` | Opcionales |
 
 ## 2. Probar con el simulado (no gasta)
 
@@ -149,7 +192,7 @@ Lo que hay que saber:
 - **Variantes** (`config.json` → `kie.modelos`): `rapido` (veo3_fast, por defecto para texto y para imagen), `lite` (veo3_lite, la más barata) y `calidad` (veo3). Se cambia en `kie.porDefecto`, por formato en `kie.porFormato`, o por trabajo en el campo «Modelo» del CRM.
 - **Clips**: 4, 6 u 8 segundos, en 9:16 o 16:9, a 720p (1080p y 4k cuestan más y van siempre a 8 s).
 - **Foto del producto**: Kie la recibe **por enlace público** (no se sube el archivo). Se usan los enlaces https que se pegan en el CRM al pedir el video; deben abrir sin iniciar sesión. `kie.modoImagen`: `"primer-fotograma"` (la primera foto es el primer fotograma; por defecto) o `"referencia"` (hasta 3 fotos como referencia; solo 8 s y solo `rapido`/`lite`).
-- **Audio**: los clips traen el audio de Veo, igual que con Veo directo; aplica lo de `config.json` → `audio` (ver la sección de Veo).
+- **Audio**: los clips traen el audio de Veo y ese es el que se usa por defecto en todos los formatos (sección 0c).
 - **Consumo**: cada tarea devuelve los créditos realmente cobrados; quedan en el CRM (aviso del video) y en `costos.csv` (columna `creditos`).
 - **Retención**: Kie guarda los archivos 14 días; el trabajador los descarga apenas terminan.
 - **Errores**: Kie puede responder HTTP 200 con un código de error adentro (402 = sin créditos, 429 = límite). El trabajador mira ese código y reporta el motivo.
@@ -168,7 +211,7 @@ Lo que hay que saber de Veo:
 
 - **Clips cortos**: 4, 6 u 8 segundos por escena, solo en 9:16 o 16:9. Cada escena del guion es un clip; el montaje los une.
 - **Variantes**: `estandar`, `rapido` (por defecto) y `lite`. Se elige en `veo.porDefecto`, por formato en `veo.porFormato`, o por trabajo en el campo «Modelo» del CRM (alias o identificador). La variante usada queda en el CRM y en `costos.csv`.
-- **Audio**: Veo siempre genera audio. En `config.json` → `audio` se decide por formato:
+- **Audio**: Veo siempre genera audio y es el que se usa por defecto (sección 0c). En `config.json` → `audio` se pueden poner excepciones por formato:
   - `"veo"`: la frase del guion va en el prompt y la dice el clip; no se le pone otra voz encima. La escena conserva la duración completa del clip para no cortar la frase.
   - `"elevenlabs"`: se pide el clip sin diálogo, se descarta su audio y se monta la voz de ElevenLabs.
   - `"ninguno"`: mudo.

@@ -1,3 +1,39 @@
+# Cambios del 14-oct: habla el clip, uniones, música por tono y análisis de referencia
+
+Se monta encima de las versiones de abajo. El acuerdo con el CRM está en `..\CONTRATO-PROYECTO-VIDEO.md` (secciones del 14-oct).
+
+## Pasos para actualizar el servidor
+
+1. Detén la tarea «Reditus - Trabajador de videos».
+2. Reemplaza la carpeta `videos-worker` por la nueva **menos** `.env`, `datos\` y **`musica\`** (nueva: si ya le pusiste pistas, no la pises; si no existe, cópiala tal cual, trae solo un LEEME).
+3. `config.json` se reemplaza por el nuevo. Si le habías cambiado algo a mano, vuelve a ponerlo. Cambió: `audio` (todo con el audio del clip), secciones nuevas `habla`, `armado.habla`, `analisis`, y `musica` con otros campos. `kie.instruccionVoz` ya no existe.
+4. `.env`: nada obligatorio. Las de ElevenLabs pueden quedar vacías. Variables nuevas opcionales: `CARPETA_MUSICA`, `TRANSCRIPCION`.
+5. **Música**: mete pistas con licencia en `musica\suspenso\`, `musica\energia\`, `musica\emotivo\` y `musica\neutro\` (ver `musica\LEEME.md`). Mientras estén vacías, los videos salen sin música y lo avisan.
+6. Comprueba: `powershell -ExecutionPolicy Bypass -File .\probar.ps1` (debe terminar en «TODO OK»).
+7. Arranca la tarea.
+
+El primer armado de cada proyecto tras actualizar vuelve a codificar sus escenas una vez (cambió la forma de tratar el audio).
+
+## Qué cambió
+
+- **Voz**: por defecto habla el propio clip en todos los formatos. ElevenLabs solo si el trabajo lo pide y hay clave; si no hay clave, se usa el audio del clip y se avisa. Un clip con frase que vuelve sin audio se avisa en la escena (`aviso`) y en el video. `lib/habla.js` (nuevo), `config.json` → `audio` y `habla`.
+- **Acento e idioma**: salen del trabajo (`contexto.voz`); si el CRM ya trae su bloque «AUDIO» en el prompt, no se agrega nada; si no llega nada, se decide por país. Narrador fuera de cámara en los formatos narrados o cuando la escena lo dice (`locucion`).
+- **Uniones**: volumen parejo entre clips (−16 LUFS), recorte de silencios largos sin cortar palabras, fundidos cortos en los cortes, subtítulos que empiezan donde empieza la frase, y entrada en seco del primer clip. `lib/armado.js`, `lib/ffmpeg.js` (medición de audio), `config.json` → `armado.habla`.
+- **Música**: carpeta `musica\` por tono, elegida con `opciones.tonoMusica`; nivelada por debajo de la voz; sin pista disponible el video sale sin música y lo dice. Generación por Kie preparada y apagada. `lib/musica.js` (nuevo), `musica\LEEME.md` (nuevo).
+- **Control de calidad**: el armado manda 5 fotogramas del video terminado y confirma los subtítulos.
+- **Etapa `analisis`**: desarma un video de referencia (cortes de plano, un fotograma por toma, audio) y borra el original. Transcripción: punto de extensión en `transcripcion\` (nuevo), sin servicio real. `lib/analisis.js` (nuevo).
+- `lib/red.js`: descarga con tope de tamaño. `lib/etapas.js`: etapa nueva y avisos por escena. `proveedores/kie.js` y `veo.js`: la instrucción de voz sale de `lib/habla.js`.
+
+## Sin probar con servicios reales
+
+- Que Veo (por Kie) diga la frase con el acento pedido y mantenga la voz entre clips.
+- El recorte de silencios con audio real de Veo: se probó con tonos; con ruido de ambiente continuo no se distingue dónde acaba la frase (se avisa).
+- La generación de música por Kie (precio, estados de la tarea, licencia).
+- Ningún servicio de transcripción.
+- El CRM real: las pruebas usan uno de mentira escrito contra el contrato.
+
+---
+
 # Cambios del 13-oct: volumen (varios trabajos a la vez)
 
 Se monta encima de la versión «proyecto por escenas» de abajo. Para actualizar: mismos pasos de la sección «Cómo actualizar el servidor»; `.env` no cambia. `config.json` trae la sección nueva `paralelo` y `diasParaBorrarCache`.

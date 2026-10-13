@@ -69,7 +69,7 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">Texto, cierre y música</span>
-          <Chip tono="verde">Solo se arma de nuevo · sin costo</Chip>
+          <Chip tono={proyecto.contexto.voz.motor === "clip" ? "ambar" : "verde"}>{proyecto.contexto.voz.motor === "clip" ? "El cierre y la música no cuestan; una frase dicha en un clip, sí" : "Solo se arma de nuevo · sin costo"}</Chip>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <Label className="flex flex-col items-stretch gap-1.5">
@@ -98,7 +98,9 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
             </Label>
           ))}
           <p className="text-xs text-muted-foreground">
-            Si en la escena alguien habla a cámara, cambiar el texto no mueve sus labios: en ese caso marca además «El clip está mal».
+            {proyecto.contexto.voz.motor === "clip"
+              ? "La voz sale de cada clip: cambiar la frase de una escena generada obliga a generar ese clip de nuevo (abajo ves el costo). En las de foto real y el cierre, la frase es solo texto: no cuesta."
+              : "Con narración aparte, cambiar el texto solo obliga a armar de nuevo."}
           </p>
         </div>
       </section>

@@ -15,6 +15,8 @@ export type ConfigVideos = {
   exigencia: Exigencia;
   /** Al terminar los clips se arma de una vez: la persona revisa el video armado, no clip por clip. */
   armarAlTerminarClips: boolean;
+  /** Pedir el Sí del CEO antes de cada video automático de un prospecto. Apagado, se agendan solos (hasta el tope diario). */
+  aprobarProspectos: boolean;
   /** Videos nuevos (proyectos que piden clips) por día. */
   videosPorDia: number;
   /** Variaciones (proyectos hijos) por día. */
@@ -33,6 +35,7 @@ export const CONFIG_VIDEOS_BASE: ConfigVideos = {
   autoImagenes: true,
   exigencia: "estricto",
   armarAlTerminarClips: true,
+  aprobarProspectos: true,
   videosPorDia: 6,
   variacionesPorDia: 12,
   intentosPorEscena: 3,
@@ -53,6 +56,7 @@ export function leerConfigVideos(raw: unknown): ConfigVideos {
     autoImagenes: typeof o.autoImagenes === "boolean" ? o.autoImagenes : b.autoImagenes,
     exigencia: o.exigencia === "normal" ? "normal" : "estricto",
     armarAlTerminarClips: typeof o.armarAlTerminarClips === "boolean" ? o.armarAlTerminarClips : b.armarAlTerminarClips,
+    aprobarProspectos: typeof o.aprobarProspectos === "boolean" ? o.aprobarProspectos : b.aprobarProspectos,
     videosPorDia: entero(o.videosPorDia, b.videosPorDia, 1, 200),
     variacionesPorDia: entero(o.variacionesPorDia, b.variacionesPorDia, 0, 500),
     intentosPorEscena: entero(o.intentosPorEscena, b.intentosPorEscena, 1, 6),

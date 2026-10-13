@@ -18,9 +18,12 @@ const { tamano } = require("./ffmpeg");
 const { TrabajoSoltado } = require("./crm");
 const { carpetaProyecto, carpetaCache, huella, claveUrl, tareaPendiente, recordarTarea } = require("./proyecto");
 const { crearLimites, prioridadDe, crearPresupuesto } = require("./limites");
-const { armar, modoAudio } = require("./armado");
+const { armar } = require("./armado");
+const { analizar } = require("./analisis");
+const { decidirAudio, seHabla, audioYaEnPrompt } = require("./habla");
+const vozTts = require("./voz");
 
-const ETAPAS = ["imagenes", "clips", "armado"];
+const ETAPAS = ["imagenes", "clips", "armado", "analisis"];
 const dos = (n) => String(n).padStart(2, "0");
 const redondo = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
 
@@ -99,7 +102,7 @@ async function procesarEtapa(trabajo, deps) {
   const guardar = () => guardarEstado(carpeta, estado);
 
   const lista = Array.isArray(trabajo.escenas) ? trabajo.escenas : [];
-  const total = etapa === "armado" ? 2 : lista.length;
+  const total = etapa === "armado" ? 2 : etapa === "analisis" ? 1 : lista.length;
   let hecho = 0;
   let ultimoLatido = 0;
   const fase = etapa === "armado" ? "montando" : "generando";
@@ -114,7 +117,7 @@ async function procesarEtapa(trabajo, deps) {
     return conCrm(crm.progreso(trabajo, { estado: fase, progreso: { hecho, total, detalle: String(detalle).slice(0, 200) }, ...gasto(), ...(escenas ? { escenas } : {}) }));
   }
 
-  const nombreProveedor = etapa === "imagenes" ? (deps.proveedorImagen || {}).nombre || "sin-proveedor" : etapa === "clips" ? deps.proveedor.nombre : "armado";
+  const nombreProveedor = etapa === "imagenes" ? (deps.proveedorImagen || {}).nombre || "sin-proveedor" : etapa === "clips" ? deps.proveedor.nombre : etapa === "analisis" ? "analisis" : "armado";
 
   // Paralelismo: los límites son de TODO el proceso (los comparte cada trabajo en curso).
   const limites = deps.limites || crearLimites(cfg);
@@ -136,8 +139,30 @@ async function procesarEtapa(trabajo, deps) {
   try {
     if (!ETAPAS.includes(etapa)) throw new Error(`Etapa desconocida: «${String(etapa).slice(0, 40)}». Este trabajador conoce: ${ETAPAS.join(", ")}.`);
     registro.info(`Trabajo ${trabajo.id}: etapa «${etapa}» de ${trabajo.guionId || "?"} v${trabajo.version ?? "?"}, ${etapa === "armado" ? (trabajo.todas || lista).length : lista.length} escena(s), ${trabajo.relacionAspecto}, proveedor ${nombreProveedor}`);
-    const proyecto = carpetaProyecto(cfg, trabajo);
     await reportar("Empezando", true);
+
+    // ================================================ analisis ====
+    // Clonar un anuncio: se desarma el video de referencia (cortes, fotogramas, audio). No cuesta.
+    if (etapa === "analisis") {
+      const r = await limites.armado.usar({ prioridad, grupo }, async (espera) => {
+        T.turno += espera;
+        if (retirado) throw retirado;
+        const t0 = Date.now();
+        try {
+          return await analizar({ cfg, ff, registro, trabajo, carpeta, subir: (archivo, que) => conCrm(crm.subir(trabajo, archivo, que)), latir: (d) => ((ultimoDetalle = d), reportar(d)) });
+        } finally {
+          T.armado += Date.now() - t0;
+        }
+      });
+      hecho = total;
+      const respuesta = await conCrm(crm.cerrar(trabajo, { etapa, ...r.resultado }));
+      fs.rmSync(carpeta, { recursive: true, force: true });
+      const tiempos = anotarTiempos("listo", r.resultado.tomas.length);
+      registro.info(`Trabajo ${trabajo.id}: análisis entregado: ${redondo(r.resultado.duracion)} s, ${r.resultado.tomas.length} toma(s), ${r.fotogramas} fotograma(s)${r.resultado.audio ? ", con audio" : ", sin audio"}${r.resultado.transcripcion ? ", con transcripción" : ", sin transcripción"}. Tardó ${tiempos.total} s.`);
+      return { ok: true, respuesta, analisis: r, tiempos };
+    }
+
+    const proyecto = carpetaProyecto(cfg, trabajo);
 
     // ================================================== armado ====
     if (etapa === "armado") {
@@ -155,12 +180,36 @@ async function procesarEtapa(trabajo, deps) {
       hecho = 1;
       const tSubida = Date.now();
       await reportar("Subiendo el video al CRM", true);
+      // Fotogramas del video YA armado, para el control de calidad del CRM (gancho, producto, cierre con
+      // rótulo, subtítulos): el primero del primer segundo, el último del cierre, el resto repartidos.
+      const fotogramas = [];
+      const cuantos = Math.max(0, Math.min(6, Math.floor(Number((cfg.config.armado || {}).fotogramasFinales ?? 5))));
+      if (cuantos >= 1) {
+        try {
+          const ultimoCierre = r.cierres[r.cierres.length - 1];
+          const primero = Math.min(1, r.duracion / 4);
+          const ultimo = ultimoCierre ? ultimoCierre.inicio + Math.min(ultimoCierre.dura - 0.4, Math.max(1, ultimoCierre.dura * 0.6)) : Math.max(primero, r.duracion - 0.8);
+          const momentos = cuantos === 1 ? [primero] : Array.from({ length: cuantos }, (_, i) => primero + ((ultimo - primero) * i) / (cuantos - 1));
+          for (const [i, s] of momentos.entries()) {
+            const jpg = `final-f${i + 1}.jpg`;
+            await ff.ffmpeg(["-ss", String(redondo(Math.max(0, Math.min(r.duracion - 0.1, s)), 2)), "-i", r.archivo, "-frames:v", "1", "-vf", "scale='if(gt(iw,ih),768,-2)':'if(gt(iw,ih),-2,768)'", "-q:v", "4", "-update", "1", jpg], carpeta);
+            fotogramas.push(await crm.subir(trabajo, path.join(carpeta, jpg), { tipo: "fotograma-final", indice: i + 1 }));
+          }
+        } catch (e) {
+          // Son opcionales: si el CRM no los acepta o algo falla, el video se entrega igual, sin ellos.
+          if (e instanceof TrabajoSoltado) throw e;
+          fotogramas.length = 0;
+          registro.aviso(`Trabajo ${trabajo.id}: no se mandaron los fotogramas del final (${registro.limpiar(e.message || String(e)).slice(0, 160)}).`);
+        }
+      }
       const respuesta = await conCrm(
         crm.entregar(
           trabajo,
           r.archivo,
           {
             duracion: redondo(r.duracion, 2),
+            subtitulos: r.segmentos.some((s) => s.subtitulo),
+            ...(fotogramas.length ? { fotogramas } : {}),
             proveedor: "armado",
             modelos: [],
             sinVoz: r.sinVoz,
@@ -190,10 +239,12 @@ async function procesarEtapa(trabajo, deps) {
       const falta = deps.proveedorImagen.comprobar(cfg);
       if (falta) throw new Error(falta);
     }
+    // Quién habla: por defecto el propio clip. Si el proveedor no da audio (simulado, fal), el clip se pide sin diálogo.
     const audio = etapa === "clips" ? (() => {
-      const m = modoAudio(cfg, trabajo);
+      const m = decidirAudio(cfg, trabajo, vozTts.disponible(cfg)).modo;
       return m === "veo" && !deps.proveedor.daAudio ? "elevenlabs" : m;
     })() : "ninguno";
+    const H = ((cfg.config.armado || {}).habla) || {};
     let cortar = null; // motivo de cuenta (clave, saldo): las escenas que faltan fallarían igual y no se piden
     let buenas = 0;
     let fatal = null; // el CRM retiró el trabajo o no responde: las escenas que no han empezado ya no empiezan
@@ -265,6 +316,7 @@ async function procesarEtapa(trabajo, deps) {
         let archivo = memo.archivo && fs.existsSync(path.join(carpeta, memo.archivo)) ? memo.archivo : null;
         if (!archivo) {
           let r;
+          let avisoEscena = "";
           if (tipo === "imagen") {
             const prompt = String(escena.promptImagen || "").trim();
             if (!prompt) throw new Error(`La escena ${n} no trae el texto de la imagen (promptImagen).`);
@@ -304,16 +356,24 @@ async function procesarEtapa(trabajo, deps) {
                 cfg, registro, ff,
                 // El proveedor de video recibe la imagen aprobada como «foto» de la escena: es su primer fotograma.
                 trabajo: { ...trabajo, imagenesProducto: [imagen.url], opciones: { ...(trabajo.opciones || {}) } },
-                escena: { n, nombre: escena.nombre || `Escena ${n}`, prompt, duracion: Number(escena.duracion) > 0 ? Number(escena.duracion) : 4, usaImagenProducto: true, voz: escena.voz || "" },
+                escena: { n, nombre: escena.nombre || `Escena ${n}`, prompt, duracion: Number(escena.duracion) > 0 ? Number(escena.duracion) : 4, usaImagenProducto: true, voz: escena.voz || "", locucion: escena.locucion },
                 primerFotograma: true,
+                // Si el CRM ya trae su bloque «AUDIO» en el prompt, el proveedor no agrega otra instrucción de voz.
+                audioEnPrompt: audio === "veo" && audioYaEnPrompt(trabajo, prompt),
                 carpeta, salida, ancho, alto, relacion: trabajo.relacionAspecto, audio,
                 ...extra,
               }),
             );
             if ((await ff.duracion(archivo, carpeta)) <= 0.5) throw new Error(`El proveedor no dejó un clip válido para la escena ${n}.`);
             estado.segundosGenerados += r.segundos || 0;
+            // La voz es la del propio clip: si la escena tiene frase y el clip volvió sin audio o en
+            // silencio, se dice EN LA ESCENA (nunca un video mudo sin avisar). El clip se entrega igual.
+            if (audio === "veo" && seHabla(escena)) {
+              const med = (await ff.tieneAudio(archivo, carpeta)) ? await ff.medirAudio(archivo, carpeta, { ruidoDb: H.ruidoDb, silencioMinimo: H.silencioMinimo }) : null;
+              if (!med || med.mudo) avisoEscena = `sin audio: el clip tiene frase pero volvió ${med ? "en silencio" : "sin pista de audio"}. Conviene regenerarlo.`;
+            }
           }
-          memo = { archivo, creditos: typeof r.creditos === "number" ? r.creditos : null, segundos: tipo === "clip" ? r.segundos || 0 : null, modelo: r.modelo };
+          memo = { archivo, creditos: typeof r.creditos === "number" ? r.creditos : null, segundos: tipo === "clip" ? r.segundos || 0 : null, modelo: r.modelo, ...(avisoEscena ? { aviso: avisoEscena } : {}) };
           estado.escenas[n] = memo;
           if (typeof r.costoUsd === "number") estado.costoUsd = (estado.costoUsd || 0) + r.costoUsd;
           else estado.costoDesconocido = true;
@@ -335,7 +395,7 @@ async function procesarEtapa(trabajo, deps) {
             guardar();
           }
           const resp = await reportar(`Escena ${n}: ${tipo === "imagen" ? "imagen lista" : "clip listo"} (${hecho} de ${total})`, true, [
-            { n, tipo, ruta: memo.ruta, ...(memo.creditos !== null && memo.creditos !== undefined ? { creditos: memo.creditos } : {}), ...(tipo === "clip" ? { segundos: memo.segundos } : {}) },
+            { n, tipo, ruta: memo.ruta, ...(memo.creditos !== null && memo.creditos !== undefined ? { creditos: memo.creditos } : {}), ...(tipo === "clip" ? { segundos: memo.segundos } : {}), ...(memo.aviso ? { aviso: memo.aviso } : {}) },
           ]);
           const acuse = resp && Array.isArray(resp.escenas) ? resp.escenas.find((x) => x && x.n === n && x.tipo === tipo) : null;
           if (!acuse || acuse.ok !== false) break;

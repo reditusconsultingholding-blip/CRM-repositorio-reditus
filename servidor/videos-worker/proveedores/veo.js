@@ -32,6 +32,7 @@
 //     precios de Google, no en la del modelo. En null el costo se reporta solo en segundos.
 const path = require("path");
 const { pedirJson, descargar, esperar, ErrorHttp } = require("../lib/red");
+const { lineasDeHabla, seHabla } = require("../lib/habla");
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -84,7 +85,9 @@ function armarPrompt(cfg, ctx) {
   const partes = [escena.prompt];
   const habla = (escena.voz || "").trim();
   // Si el audio del video es el de Veo, la frase del guion va en el prompt para que la diga.
-  if (ctx.audio === "veo" && habla) partes.push(`${veo.instruccionVoz || "La persona dice, en español latino, exactamente:"} "${habla}"`);
+  if (ctx.audioEnPrompt) {
+    // El CRM ya escribió en el prompt quién habla y qué dice: no se agrega otra instrucción.
+  } else if (ctx.audio === "veo" && habla && seHabla(escena)) partes.push(...lineasDeHabla(cfg, ctx.trabajo || {}, habla, escena));
   else partes.push(veo.instruccionSinVoz || "Sin diálogo ni voz en off.");
   if (veo.sufijoPrompt) partes.push(veo.sufijoPrompt);
   return partes.join("\n").slice(0, veo.maxLetrasPrompt || 4000);

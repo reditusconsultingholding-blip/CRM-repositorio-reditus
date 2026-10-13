@@ -62,6 +62,65 @@ export const MOVIMIENTO_LABELS: Record<Movimiento, string> = {
   quieto: "Quieto",
 };
 
+// ---- la voz: la genera el modelo de video DENTRO de cada clip (decisión del dueño) ----
+
+/** Quién dice la frase de una escena. */
+export const LOCUCIONES = ["camara", "narrador", "texto", "sin-voz"] as const;
+export type Locucion = (typeof LOCUCIONES)[number];
+export const LOCUCION_LABELS: Record<Locucion, string> = {
+  camara: "La persona en cámara",
+  narrador: "Narrador (fuera de cámara)",
+  texto: "Solo texto en pantalla",
+  "sin-voz": "Nadie habla",
+};
+
+export type VozProyecto = {
+  /** `clip`: la voz sale del propio clip generado (por defecto). `narracion`: locución aparte al armar (ElevenLabs), apagada salvo que se pida. */
+  motor: "clip" | "narracion";
+  /** BCP-47: es-CO, es-ES, es-MX, en-US… */
+  idioma: string;
+  /** El acento, dicho para el modelo. */
+  acento: string;
+  /** Descripción fija de la voz/personaje. Va IDÉNTICA en todos los clips: es lo único que sostiene la continuidad de voz. */
+  descripcion: string;
+};
+
+const ACENTOS: Record<string, { idioma: string; acento: string }> = {
+  CO: { idioma: "es-CO", acento: "español de Colombia, acento colombiano neutro" },
+  EC: { idioma: "es-EC", acento: "español de Ecuador, acento ecuatoriano de la sierra, neutro" },
+  MX: { idioma: "es-MX", acento: "español de México, acento mexicano neutro" },
+  PE: { idioma: "es-PE", acento: "español de Perú, acento peruano neutro" },
+  CL: { idioma: "es-CL", acento: "español de Chile, acento chileno suave y claro" },
+  AR: { idioma: "es-AR", acento: "español rioplatense de Argentina, con voseo" },
+  PA: { idioma: "es-PA", acento: "español de Panamá, acento panameño neutro" },
+  DO: { idioma: "es-DO", acento: "español de República Dominicana, acento dominicano claro" },
+  GT: { idioma: "es-GT", acento: "español de Guatemala, acento centroamericano neutro" },
+  VE: { idioma: "es-VE", acento: "español de Venezuela, acento venezolano neutro" },
+  ES: { idioma: "es-ES", acento: "castellano peninsular (España), con distinción de z y c, y «vosotros»" },
+  US: { idioma: "es-US", acento: "español latino neutro para público hispano de Estados Unidos" },
+};
+
+/** El idioma y el acento que le corresponden al país del proyecto. */
+export function acentoDePais(pais: string): { idioma: string; acento: string } {
+  return ACENTOS[pais] ?? { idioma: "es", acento: "español latino neutro" };
+}
+
+export const VOZ_DESCRIPCION_BASE = "voz adulta joven, cálida y cercana, ritmo natural de conversación, sin tono de locutor";
+
+export function vozDePais(pais: string): VozProyecto {
+  return { motor: "clip", ...acentoDePais(pais), descripcion: VOZ_DESCRIPCION_BASE };
+}
+
+/** Duración máxima de un clip generado (el modelo no da más en una toma). */
+export const MAX_SEGUNDOS_CLIP = 8;
+
+export const contarPalabras = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
+
+/** Palabras que caben dichas con naturalidad en un clip de esa duración (deja ~1 s de aire). */
+export function palabrasQueCaben(duracion: number): number {
+  return Math.max(4, Math.round((Math.min(duracion, MAX_SEGUNDOS_CLIP) - 1) * 2.6));
+}
+
 export const NOMBRE_PASO: Record<number, string> = { 1: "Impacto", 2: "Bajada", 3: "Refuerzo", 4: "Subida", 5: "Cierre" };
 
 export type TipoPieza = "imagen" | "clip";
@@ -130,8 +189,10 @@ export type EscenaProyecto = {
   titulo: string;
   /** Segundos objetivo. */
   duracion: number;
-  /** Lo que se dice (voz y subtítulos). */
+  /** Lo que se dice (voz y subtítulos): la frase de ESTA escena, que cabe en su clip. */
   voz: string;
+  /** Quién la dice. */
+  locucion: Locucion;
   promptImagen: string;
   promptVideo: string;
   /** Foto real que se anima (tipos `foto-real` y `cierre`). */
@@ -260,6 +321,7 @@ export type ContextoProyecto = {
   /** Ficha del producto en texto, confirmada por una persona. */
   analisisProducto: string;
   cierre: { oferta: string; llamadoALaAccion: string };
+  voz: VozProyecto;
 };
 
 export type EstadoFinal = "pendiente" | "en-cola" | "generando" | "por-aprobar" | "aprobada" | "fallo";
@@ -272,6 +334,29 @@ export const ESTADO_FINAL_LABELS: Record<EstadoFinal, string> = {
   fallo: "Falló el armado",
 };
 
+/** Tono de la música del armado, elegido según la narrativa. */
+export const TONOS_MUSICA = ["neutro", "energia", "suspenso", "emotivo"] as const;
+export type TonoMusica = (typeof TONOS_MUSICA)[number];
+export const TONO_MUSICA_LABELS: Record<TonoMusica, string> = { neutro: "Neutro", energia: "Energía", suspenso: "Suspenso", emotivo: "Emotivo" };
+
+/** Control de calidad del video armado: una lista fija, anotada junto al video «por aprobar». No aprueba nada. */
+export const PUNTOS_CONTROL = {
+  gancho: "Gancho en los primeros 2 segundos",
+  producto: "El producto real se ve",
+  cierre: "Oferta y llamado a la acción al final",
+  subtitulos: "Subtítulos presentes",
+  duracion: "Duración dentro del objetivo",
+} as const;
+export type PuntoControl = keyof typeof PUNTOS_CONTROL;
+export type ControlFinal = {
+  /** El video que se revisó (si se vuelve a armar, se revisa de nuevo). */
+  url: string;
+  puntos: Partial<Record<PuntoControl, { nota: NotaCriterio; detalle: string }>>;
+  /** Se miraron fotogramas del video (si no, solo los datos del plan y del trabajo). */
+  conFotogramas: boolean;
+  fecha: string;
+};
+
 export type OpcionesProyecto = { subtitulos: boolean; voz: boolean; musica: string | null; modelo: string | null };
 export type GastoTrabajo = { creditos: number; segundos: number; imagenes: number };
 
@@ -279,7 +364,9 @@ export type ProyectoVideo = {
   contexto: ContextoProyecto;
   escenas: EscenaProyecto[];
   costo: { creditos: number; segundosGenerados: number; imagenes: number };
-  final: { estado: EstadoFinal; url: string | null; armados: number; trabajoId: string | null; nota: string };
+  final: { estado: EstadoFinal; url: string | null; armados: number; trabajoId: string | null; nota: string; control?: ControlFinal | null };
+  /** Tono de la música de fondo (lo mezcla el trabajador al armar). */
+  tonoMusica: TonoMusica;
   // ---- uso interno del CRM ----
   opciones: OpcionesProyecto;
   /** De dónde salió el plan de escenas. */
@@ -348,6 +435,7 @@ export function leerEscenas(raw: unknown): EscenaProyecto[] {
         titulo: txt(o.titulo, 80),
         duracion: Math.min(15, Math.max(2, Math.round(num(o.duracion, 5)))),
         voz: txt(o.voz, 1200),
+        locucion: uno(o.locucion, LOCUCIONES, tipo === "generada" ? "camara" : "texto"),
         promptImagen: txt(o.promptImagen, 4000),
         promptVideo: txt(o.promptVideo, 4000),
         fotoUrl: txt(o.fotoUrl, 600) || null,
@@ -370,6 +458,67 @@ export function leerContexto(raw: unknown): ContextoProyecto {
       .slice(0, MAX_FOTOS_PROYECTO),
     analisisProducto: txt(o.analisisProducto, 2400),
     cierre: { oferta: txt(c.oferta, 400), llamadoALaAccion: txt(c.llamadoALaAccion, 200) },
+    voz: leerVoz(o.voz, txt(o.pais, 4)),
+  };
+}
+
+export function leerVoz(raw: unknown, pais: string): VozProyecto {
+  const v = obj(raw);
+  const base = vozDePais(pais);
+  return {
+    // Los proyectos de antes (sin este campo) se armaban con narración aparte: se respetan.
+    motor: v.motor === "clip" ? "clip" : v.motor === "narracion" ? "narracion" : raw ? "clip" : "narracion",
+    idioma: /^[a-z]{2}(-[A-Z]{2})?$/.test(txt(v.idioma, 8)) ? txt(v.idioma, 8) : base.idioma,
+    acento: txt(v.acento, 200).trim() || base.acento,
+    descripcion: txt(v.descripcion, 400).trim() || base.descripcion,
+  };
+}
+
+function leerControl(raw: unknown): ControlFinal | null {
+  const o = obj(raw);
+  const url = txt(o.url, 600);
+  if (!url) return null;
+  const puntos: ControlFinal["puntos"] = {};
+  for (const k of Object.keys(PUNTOS_CONTROL) as PuntoControl[]) {
+    const x = obj(obj(o.puntos)[k]);
+    if (x.nota === "ok" || x.nota === "duda" || x.nota === "mal" || x.nota === "no-aplica") puntos[k] = { nota: x.nota, detalle: txt(x.detalle, 300) };
+  }
+  return { url, puntos, conFotogramas: o.conFotogramas === true, fecha: txt(o.fecha, 40) };
+}
+
+/**
+ * Control del video armado SOLO con datos (el plan y lo que reportó el trabajo): gancho al
+ * inicio, producto real, cierre, subtítulos y duración. Lo que solo se sabe mirando el
+ * video queda en «duda» hasta que haya fotogramas.
+ */
+export function controlPorDatos(p: ProyectoVideo, url: string, datos: { duracion: number | null; subtitulos: boolean | null }): ControlFinal {
+  const primera = p.escenas[0];
+  const ultima = p.escenas[p.escenas.length - 1];
+  const objetivo = duracionTotal(p);
+  const d = datos.duracion;
+  const conSub = datos.subtitulos ?? p.opciones.subtitulos;
+  return {
+    url,
+    conFotogramas: false,
+    fecha: new Date().toISOString(),
+    puntos: {
+      gancho:
+        primera?.paso === 1 && primera.duracion <= 4
+          ? { nota: "ok", detalle: `El plan abre con el gancho en una toma de ${primera.duracion} s.` }
+          : { nota: "duda", detalle: primera?.paso === 1 ? `La primera toma dura ${primera.duracion} s: el arranque puede sentirse lento.` : "La primera escena del plan no es el gancho." },
+      producto: p.escenas.some((e) => e.tipo !== "generada" && e.fotoUrl) ? { nota: "ok", detalle: "Hay escenas con la foto real del producto." } : { nota: "duda", detalle: "Ninguna escena usa la foto real del producto." },
+      cierre:
+        ultima?.tipo === "cierre" && p.contexto.cierre.oferta.trim() && p.contexto.cierre.llamadoALaAccion.trim()
+          ? { nota: "ok", detalle: "El plan cierra con la foto real y el rótulo de oferta y llamado." }
+          : { nota: "mal", detalle: "Falta el cierre con oferta y llamado a la acción." },
+      subtitulos: conSub ? { nota: datos.subtitulos === null ? "duda" : "ok", detalle: datos.subtitulos === null ? "Se pidieron; el servidor no confirmó que los puso." : "El servidor confirmó los subtítulos." } : { nota: "mal", detalle: "El video se armó sin subtítulos." },
+      duracion:
+        d === null
+          ? { nota: "duda", detalle: `El servidor no informó la duración (objetivo: ${objetivo} s).` }
+          : Math.abs(d - objetivo) <= Math.max(3, objetivo * 0.15)
+            ? { nota: "ok", detalle: `Dura ${Math.round(d)} s (objetivo: ${objetivo} s).` }
+            : { nota: "duda", detalle: `Dura ${Math.round(d)} s y el objetivo era ${objetivo} s.` },
+    },
   };
 }
 
@@ -409,7 +558,9 @@ export function leerProyecto(raw: unknown): ProyectoVideo | null {
       armados: Math.max(0, Math.floor(num(f.armados))),
       trabajoId: txt(f.trabajoId, 40) || null,
       nota: txt(f.nota, 600),
+      control: leerControl(f.control),
     },
+    tonoMusica: uno(o.tonoMusica, TONOS_MUSICA, "neutro"),
     opciones: {
       subtitulos: op.subtitulos !== false,
       voz: op.voz !== false,

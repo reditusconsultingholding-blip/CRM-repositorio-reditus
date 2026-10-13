@@ -26,6 +26,7 @@ const { disenarCierre } = require("../lib/rotulo");
 const { ENCABEZADO, ENCABEZADO_TIEMPOS } = require("../lib/etapas");
 const { crearLimites, crearSemaforo, crearPresupuesto, ajustesParalelo, prioridadDe } = require("../lib/limites");
 const { atenderCola } = require("../lib/cola");
+const habla = require("../lib/habla");
 
 const SECRETO = "secreto-de-prueba-0123456789";
 const sha1 = (archivo) => crypto.createHash("sha1").update(fs.readFileSync(archivo)).digest("hex");
@@ -133,8 +134,20 @@ function crearCrmDeMentira(carpetaFijos) {
       }
       // resultado
       if (c.pedirSubida) {
-        if (t.etapa && !["imagen", "clip", "final"].includes(c.tipo)) return json(400, { error: "falta tipo" });
+        if (t.etapa === "analisis") {
+          // Subidas del análisis: fotogramas (con su índice) y el audio.
+          if (!["fotograma", "audio"].includes(c.tipo)) return json(400, { error: "tipo de subida desconocido" });
+          if (c.tipo === "fotograma" && !(Number.isInteger(c.indice) && c.indice >= 1 && c.indice <= 16)) return json(400, { error: "indice debe ir de 1 a 16" });
+          const ruta = c.tipo === "audio" ? `referencias/${t.guionId}/audio.${c.extension === "mp3" ? "mp3" : "m4a"}` : `referencias/${t.guionId}/f${c.indice}.jpg`;
+          return json(200, { subida: { url: `http://127.0.0.1:${puerto}/subir/${ruta}`, metodo: "PUT", cabeceras: { "content-type": c.tipo === "audio" ? "audio/mpeg" : "image/jpeg" }, ruta } });
+        }
+        if (t.etapa && !["imagen", "clip", "final", "fotograma-final"].includes(c.tipo)) return json(400, { error: "falta tipo" });
         let ruta;
+        if (c.tipo === "fotograma-final") {
+          if (!(Number.isInteger(c.indice) && c.indice >= 1 && c.indice <= 6)) return json(400, { error: "indice debe ir de 1 a 6" });
+          ruta = `videos/${t.guionId}/${t.id}/final-f${c.indice}.jpg`;
+          return json(200, { subida: { url: `http://127.0.0.1:${puerto}/subir/${ruta}`, metodo: "PUT", cabeceras: { "content-type": "image/jpeg" }, ruta } });
+        }
         if (c.tipo === "final") ruta = `videos/${t.guionId}/final-${++p.final.armados}.mp4`;
         else {
           const escena = p.escenas.find((x) => x.n === c.escena);
@@ -150,6 +163,11 @@ function crearCrmDeMentira(carpetaFijos) {
       if (t.etapa === "armado") {
         if (!archivos.has(c.ruta)) return json(400, { error: "el final no se subió" });
         Object.assign(p.final, { estado: "por-aprobar", url: firmada(c.ruta), ruta: c.ruta });
+        visto.cierres.push({ id: t.id, ...c });
+      } else if (t.etapa === "analisis") {
+        // Como el CRM real: cada toma debe traer su fotograma YA subido.
+        if (c.etapa !== "analisis" || !Array.isArray(c.tomas) || !c.tomas.length) return json(400, { error: "faltan las tomas" });
+        if (!c.tomas.every((x) => typeof x.fotograma === "string" && archivos.has(x.fotograma) && x.hasta > x.desde)) return json(409, { error: "falta el fotograma de una toma" });
         visto.cierres.push({ id: t.id, ...c });
       } else {
         if (c.etapa !== t.etapa) return json(400, { error: "falta etapa" });
@@ -186,6 +204,14 @@ function crearCrmDeMentira(carpetaFijos) {
       cambiar(hijo);
       proyectos.set(hijoId, hijo);
       return hijo;
+    },
+    /** Trabajo de análisis de un video de referencia (clonar anuncio): no pertenece a ningún proyecto con escenas. */
+    encolarAnalisis(url, extra = {}) {
+      const id = `20260101-${String(++consecutivo).padStart(6, "0")}-${crypto.randomBytes(6).toString("hex")}`;
+      const trabajo = { id, toma: crypto.randomBytes(6).toString("hex"), guionId: `clon-${consecutivo}`, etapa: "analisis", referencia: { url }, intentos: 1, maxIntentos: 3 };
+      trabajos.set(id, { trabajo, estado: "pendiente", ...extra });
+      cola.push(trabajo);
+      return trabajo;
     },
     encolar(guionId, etapa, numeros = null, opciones = {}, extra = {}) {
       const p = proyectos.get(guionId);
@@ -269,7 +295,8 @@ async function correrPruebas({ ok, hasta = "todo" }) {
 
   const crmFalso = crearCrmDeMentira(fijos);
   const crmUrl = await crmFalso.abrir();
-  const carpetas = { datos, trabajos: path.join(datos, "trabajos"), proyectos: path.join(datos, "proyectos"), entregados: path.join(datos, "entregados"), registro: path.join(datos, "registro") };
+  const carpetas = { datos, trabajos: path.join(datos, "trabajos"), proyectos: path.join(datos, "proyectos"), entregados: path.join(datos, "entregados"), registro: path.join(datos, "registro"), musica: path.join(datos, "musica-de-prueba") };
+  fs.mkdirSync(carpetas.musica, { recursive: true }); // la biblioteca de música empieza vacía
   const base = { ...cfg, crmUrl, secreto: SECRETO, nombre: "prueba", elevenKey: "", elevenVoz: "", permitirHttpLocal: true, carpetas, config: { ...cfg.config, simulado: { demoraSegundos: 0 } } };
   const registro = crearRegistro(carpetas.registro, [SECRETO]);
   const crm = crearCrm(base);
@@ -363,7 +390,7 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   const entrega = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
   ok(r.ok && Math.abs(info.dura - 19.5) < 0.25, `armado vertical: ${info.dura.toFixed(2)} s (se esperaban 19,5: 4 + 4,5 recortado de un clip de 5 + 3 + 3 + 5)`);
   ok(info.video.width === 1080 && info.video.height === 1920 && info.video.codec_name === "h264" && info.video.r_frame_rate === "30/1" && info.audio && info.audio.codec_name === "aac" && info.pistas === 2, `armado vertical: ${info.video.width}x${info.video.height}, h264 a 30 fps, una pista de audio aac`);
-  ok(pv.final.estado === "por-aprobar" && /final-1\.mp4$/.test(pv.final.ruta) && entrega.sinVoz === true && /no tiene clave de ElevenLabs.*escenas 1, 2, 3, 5/.test(entrega.avisos.join(" ")) && entrega.segundosGenerados === 0, "armado: sube el final con la subida de tipo «final», queda por aprobar, y avisa qué escenas salieron sin voz por no haber clave");
+  ok(pv.final.estado === "por-aprobar" && /final-1\.mp4$/.test(pv.final.ruta) && entrega.sinVoz === true && JSON.stringify(r.armado.sinAudio) === "[1,2]" && JSON.stringify(r.armado.sinLocucion) === "[3,5]" && /escena 1 llegó sin audio/.test(entrega.avisos.join(" ")) && entrega.segundosGenerados === 0, "armado: sube el final con la subida de tipo «final», queda por aprobar, y avisa escena por escena las que salieron sin voz (clips sin audio y fotos sin locución)");
   ok(r.armado.stats.descargas === 3 && r.armado.stats.reutilizados === 2 && r.armado.stats.segmentosHechos === 4, `armado: bajó ${r.armado.stats.descargas} archivos (1 clip + 2 fotos) y codificó ${r.armado.stats.segmentosHechos} escenas; el clip y la escena 1 ya estaban del intento anterior, y la foto repetida se bajó una sola vez`);
   const c5 = r.armado.cierres[0];
   await fotograma(finalV, c5.inicio + 1.0, path.join(capturas, "vertical-cierre-con-subtitulo.png"));
@@ -434,14 +461,21 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   });
   await new Promise((res) => eleven.listen(0, "127.0.0.1", res));
   const conVoz = { ...deps, cfg: { ...base, elevenKey: "clave-eleven-de-mentira", elevenVoz: "voz-de-mentira", elevenBase: `http://127.0.0.1:${eleven.address().port}` } };
+  // ElevenLabs es OPCIONAL: aunque el servidor tenga la clave, solo se usa si el trabajo lo pide.
   crmFalso.encolar(V, "armado", null, { musica: crmFalso.fijo("musica.mp3") });
+  r = await atender(conVoz);
+  ok(r.ok && vistoVoz.llamadas === 0 && r.armado.modo === "veo", "voz: con clave de ElevenLabs en el servidor pero sin pedirla, NO se usa (manda el audio de los clips)");
+  crmFalso.encolar(V, "armado", null, { musica: crmFalso.fijo("musica.mp3"), voz: "elevenlabs" });
   r = await atender(conVoz);
   const eVoz = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
   const volVoz = await volumen(path.join(carpetas.entregados, `${r.trabajo.id}.mp4`));
-  ok(r.ok && vistoVoz.llamadas === 4 && vistoVoz.textos.includes("Pídelo hoy con envío gratis.") && eVoz.sinVoz === false && !/sin voz/.test(eVoz.avisos.join(" ")) && volVoz > conMusica, `voz: con clave se narran las escenas con texto, incluidas foto-real y cierre (4 llamadas; la escena sin texto no se narra)`);
-  crmFalso.encolar(V, "armado", null, { musica: crmFalso.fijo("musica.mp3") });
+  ok(r.ok && vistoVoz.llamadas === 4 && vistoVoz.textos.includes("Pídelo hoy con envío gratis.") && eVoz.sinVoz === false && !/sin voz/i.test(eVoz.avisos.join(" ")) && volVoz > -40, `voz: si el trabajo pide ElevenLabs (opciones.voz: "elevenlabs") y hay clave, se narran las escenas con texto, incluidas foto-real y cierre (4 llamadas)`);
+  crmFalso.encolar(V, "armado", null, { musica: crmFalso.fijo("musica.mp3"), voz: "elevenlabs" });
   r = await atender(conVoz);
   ok(r.ok && vistoVoz.llamadas === 4 && r.armado.stats.finalReutilizado, "voz: al rearmar no se vuelve a pedir (ni a pagar) la misma narración");
+  crmFalso.encolar(V, "armado", null, { voz: "elevenlabs" });
+  r = await atender(); // el mismo pedido en un servidor SIN clave
+  ok(r.ok && r.armado.modo === "veo" && /no tiene esa clave/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "voz: si se pide ElevenLabs y el servidor no tiene clave, no falla: usa el audio del clip y lo avisa");
   crmFalso.encolar(V, "armado", null, { voz: false });
   r = await atender(conVoz);
   ok(r.ok && vistoVoz.llamadas === 4 && crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].sinVoz === true, "voz: con «voz: false» no se narra nada");
@@ -559,6 +593,199 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   await fotograma(finalH, 4 + 0.1, path.join(capturas, "horizontal-foto-real-alta-alejar-inicio.png"));
   await fotograma(finalH, 4 + 2.9, path.join(capturas, "horizontal-foto-real-alta-alejar-fin.png"));
   fs.copyFileSync(finalH, path.join(capturas, "horizontal-final.mp4"));
+
+  // ================================== quién habla, acento, uniones, música, análisis ====
+  {
+    // ---- acento e idioma: salen del trabajo; si no, del país ----
+    const con = (extra) => ({ formato: "ugc", opciones: {}, contexto: { pais: "CO" }, ...extra });
+    const porPais = (p) => habla.acentoPara(base, con({ contexto: { pais: p } }));
+    ok(/España/.test(porPais("ES")) && /México/.test(porPais("MX")) && /Colombia/.test(porPais("CO")) && /Argentina/.test(porPais("AR")) && /Chile/.test(porPais("CL")) && /Perú/.test(porPais("PE")) && /Ecuador/.test(porPais("EC")) && porPais("US") === "español latino neutro" && porPais("") === "español latino neutro" && /Colombia/.test(porPais("Colombia")) && /España/.test(porPais("España")), "acento por país cuando el trabajo no lo dice: España → castellano peninsular; MX, CO, AR, CL, PE, EC → el suyo; el resto → español neutro");
+    ok(habla.acentoPara(base, con({ contexto: { pais: "CO", voz: { acento: "español paisa de Medellín" } } })) === "español paisa de Medellín" && habla.acentoPara(base, con({ contexto: { pais: "BR", voz: { idioma: "portugués de Brasil" } } })) === "portugués de Brasil" && /México/.test(habla.acentoPara(base, con({ contexto: { pais: "CO", voz: { pais: "MX" } } }))), "acento: lo que manda el trabajo (contexto.voz.acento, idioma o país) le gana al país del proyecto");
+    const tVoz = con({ imagenesProducto: [], contexto: { pais: "MX", voz: { descripcion: "mujer de unos 35 años, voz cálida y cercana" } } });
+    const p1 = kieVideo.armarEntrada(base, { escena: { prompt: "Mujer en su cocina", duracion: 8, usaImagenProducto: false, voz: "Mira lo que encontré." }, trabajo: tVoz, relacion: "9:16", audio: "veo" }, kieVideo.modeloPara(base, tVoz, false)).input.prompt;
+    const p2 = kieVideo.armarEntrada(base, { escena: { prompt: "La misma mujer en la sala", duracion: 8, usaImagenProducto: false, voz: "Y funciona." }, trabajo: tVoz, relacion: "9:16", audio: "veo" }, kieVideo.modeloPara(base, tVoz, false)).input.prompt;
+    const lineaVoz = (p) => p.split("\n").find((l) => l.startsWith("Voz:"));
+    ok(/dice a cámara, en español de México/.test(p1) && /"Mira lo que encontré\."/.test(p1) && lineaVoz(p1) && lineaVoz(p1) === lineaVoz(p2) && /Sin música de fondo/.test(p1) && !/español latino,/.test(p1), "prompt del clip: la frase con el acento del país y la MISMA descripción de voz en todas las escenas");
+    const tNarr = con({ formato: "historia", imagenesProducto: [], contexto: { pais: "ES" } });
+    const p3 = kieVideo.armarEntrada(base, { escena: { prompt: "Un muñeco de plastilina camina", duracion: 8, usaImagenProducto: false, voz: "Érase una vez." }, trabajo: tNarr, relacion: "9:16", audio: "veo" }, kieVideo.modeloPara(base, tNarr, false)).input.prompt;
+    ok(/Narrador fuera de cámara/.test(p3) && /castellano peninsular/.test(p3) && !/dice a cámara/.test(p3), "formatos narrados (historia, crochet, esqueleto, plastilina): se pide narrador fuera de cámara");
+    const d = (formato, voz, tts) => habla.decidirAudio(base, { formato, opciones: voz === undefined ? {} : { voz } }, tts).modo;
+    ok(["ugc", "historia", "crochet", "esqueleto", "plastilina"].every((f) => d(f, undefined, false) === "veo" && d(f, true, true) === "veo") && d("ugc", "elevenlabs", true) === "elevenlabs" && d("ugc", "elevenlabs", false) === "veo" && d("ugc", false, true) === "ninguno" && d("musica", undefined, true) === "ninguno", "audio por defecto: TODOS los formatos con el audio del clip; ElevenLabs solo si el trabajo lo pide y hay clave; «voz: false» = sin voz");
+  }
+
+  // ---- clips que hablan: aviso de clip mudo, recorte de silencios, volumen parejo, entrada en seco ----
+  // Proveedor de mentira cuyos clips traen audio, como Veo: silencio + «frase» (un tono) + silencio.
+  const formas = {
+    1: { antes: 1.0, frase: 3.0, despues: 2.0, vol: 4 }, // silencios largos a los dos lados, fuerte (el tono de ffmpeg nace a -18 dB)
+    2: { antes: 0.4, frase: 3.0, despues: 0.5, vol: 1 }, // silencios cortos, 12 dB más bajo
+    3: { antes: 0, frase: 0, despues: 4.0, vol: 0 }, // tiene frase en el guion pero el clip volvió en silencio
+  };
+  const hablador = {
+    nombre: "hablador-de-mentira",
+    daAudio: true,
+    comprobar: () => null,
+    async generarEscena(c) {
+      const f = formas[c.escena.n];
+      const total = f.antes + f.frase + f.despues;
+      const audio = f.frase ? `sine=frequency=440:duration=${f.frase},volume=${f.vol},adelay=${Math.round(f.antes * 1000)}:all=1,apad=whole_dur=${total}` : `anullsrc=r=44100:cl=mono,atrim=duration=${total}`;
+      await c.ff.ffmpeg(["-f", "lavfi", "-i", `testsrc2=s=720x1280:r=24:d=${total}`, "-f", "lavfi", "-i", audio, "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-t", String(total), c.salida], c.carpeta);
+      return { segundos: 8, modelo: "hablador", costoUsd: null };
+    },
+  };
+  const HB = "guion-hablado";
+  const ph = crmFalso.crearProyecto(HB, "9:16", contexto(), [
+    { n: 1, tipo: "generada", duracion: 6, voz: "¿A ti también te pasa esto?", promptImagen: "i1", promptVideo: "v1" },
+    { n: 2, tipo: "generada", duracion: 3, voz: "Yo lo arreglé con esto.", promptImagen: "i2", promptVideo: "v2" },
+    { n: 3, tipo: "generada", duracion: 4, voz: "Míralo bien.", promptImagen: "i3", promptVideo: "v3" },
+    { n: 4, tipo: "cierre", duracion: 5, voz: "Pídelo hoy.", fotoUrl: crmFalso.fijo("cuadrada.jpg") },
+  ]);
+  for (const e of ph.escenas.filter((x) => x.tipo === "generada")) Object.assign(e.imagen, { estado: "aprobada", url: crmFalso.fijo("cuadrada.jpg"), intentos: 1 });
+  const depsH = { ...deps, proveedor: hablador };
+  const tHC = crmFalso.encolar(HB, "clips");
+  r = await atender(depsH);
+  const repH = progresoDe(tHC.id).flatMap((p) => p.escenas || []);
+  ok(r.ok && repH.filter((e) => e.aviso).length === 1 && /^sin audio/.test(repH.find((e) => e.n === 3).aviso) && repH.find((e) => e.n === 3).ruta && !repH.find((e) => e.n === 1).aviso, "clip con frase que vuelve sin audio: se avisa EN LA ESCENA (campo «aviso») y el clip se entrega igual");
+  for (const n of [1, 2, 3]) crmFalso.aprobar(HB, "clip", n);
+  crmFalso.encolar(HB, "armado");
+  r = await atender(depsH);
+  const eH = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+  const sg = r.armado.segmentos;
+  const dirCacheH = path.join(datos, "cache");
+  const m1 = await ff.medirAudio(sg[0].archivo, dirCacheH);
+  const m2 = await ff.medirAudio(sg[1].archivo, dirCacheH);
+  ok(r.ok && Math.abs(sg[0].dura - 3.4) < 0.15 && m1.desde < 0.15 && Math.abs(m1.hasta - m1.desde - 3.0) < 0.2, `uniones: al clip con 1 s de silencio antes y 2 s después se le quitan los silencios (6 s → ${sg[0].dura.toFixed(2)} s) y la frase queda entera (${(m1.hasta - m1.desde).toFixed(2)} s de 3)`);
+  ok(Math.abs(sg[1].dura - 3.75) < 0.1 && /escena 2 quedó en 3\.[78] s \(se pedían 3\) para no cortar la frase/.test(eH.avisos.join(" ")), `uniones: si la duración pedida (3 s) cortaría la frase, manda la frase (${sg[1].dura.toFixed(2)} s) y se avisa`);
+  ok(Math.abs(m1.lufs - m2.lufs) < 1.5 && Math.abs(m1.lufs - -16) < 1.5, `volumen parejo entre clips: llegaban con 12 dB de diferencia y quedan a ${m1.lufs} y ${m2.lufs} LUFS (objetivo -16)`);
+  const finalHablado = path.join(carpetas.entregados, `${r.trabajo.id}.mp4`);
+  const mF = await ff.medirAudio(finalHablado, undefined);
+  ok(mF.desde < 0.15 && sg[0].subtitulo && sg[0].subtitulo.desde < 0.2 && Math.abs(sg[1].subtitulo.desde - 0.4) < 0.15, `entrada en seco: el video arranca con la frase a los ${mF.desde.toFixed(2)} s (el clip traía 1 s de silencio), y los subtítulos empiezan donde empieza la frase de cada escena`);
+  ok(JSON.stringify(r.armado.sinAudio) === "[3]" && /escena 3 llegó en silencio/.test(eH.avisos.join(" ")) && eH.sinVoz === false && JSON.stringify(r.armado.sinLocucion) === "[4]", "nunca mudo sin avisar: el clip en silencio y la escena de foto sin locución quedan en los avisos del video");
+  ok(/SIN música/.test(eH.avisos.join(" ")) && r.armado.conMusica === false, "música: con la carpeta de música vacía el video sale sin música, lo dice y NO falla");
+  ok(/SIN VOZ en todas/.test(entrega.avisos.join(" ")), "nunca mudo sin avisar: un video donde ninguna escena tiene voz lo dice en el primer aviso");
+
+  // ---- música por tono desde la carpeta local ----
+  fs.mkdirSync(path.join(carpetas.musica, "Suspenso"), { recursive: true });
+  fs.mkdirSync(path.join(carpetas.musica, "neutro"), { recursive: true });
+  await ff.ffmpeg(["-f", "lavfi", "-i", "sine=frequency=110:duration=5", "-c:a", "libmp3lame", "-b:a", "128k", "tension.mp3"], path.join(carpetas.musica, "Suspenso"));
+  await ff.ffmpeg(["-f", "lavfi", "-i", "sine=frequency=330:duration=5,volume=0.1", "-c:a", "libmp3lame", "-b:a", "128k", "suave.mp3"], path.join(carpetas.musica, "neutro"));
+  crmFalso.encolar(HB, "armado", null, { tonoMusica: "suspenso" });
+  r = await atender(depsH);
+  const conTono = path.join(carpetas.entregados, `${r.trabajo.id}.mp4`);
+  const tramoVol = async (archivo, desde, dura) => {
+    const { se } = await correr(cfg.ffmpeg, ["-hide_banner", "-ss", String(desde), "-t", String(dura), "-i", archivo, "-af", "volumedetect", "-vn", "-f", "null", "-"]);
+    return Number((/mean_volume: (-?[\d.]+) dB/.exec(se) || [])[1]);
+  };
+  const s3 = r.armado.segmentos[2];
+  const volFrase = await tramoVol(conTono, 0.3, 2.4); // la frase de la escena 1
+  const volSoloMusica = await tramoVol(conTono, s3.inicio + 0.5, 3); // la escena 3 no tiene voz: solo suena la música
+  ok(r.ok && r.armado.conMusica && r.armado.tonoMusica === "suspenso" && r.armado.stats.segmentosHechos === 0 && volSoloMusica > -45 && volFrase - volSoloMusica > 8, `música por tono (opciones.tonoMusica: "suspenso"): sale de la carpeta local, sin recodificar el video, y queda por debajo de la voz (${volFrase} dB la frase, ${volSoloMusica} dB la música sola)`);
+  crmFalso.encolar(HB, "armado", null, { tonoMusica: "Energía" });
+  r = await atender(depsH);
+  ok(r.ok && r.armado.tonoMusica === "neutro" && /No hay pistas de tono «energia».*se usó una de «neutro»/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "música: si no hay pistas del tono pedido se usa la de respaldo y se avisa");
+  crmFalso.encolar(HB, "armado");
+  r = await atender(depsH);
+  ok(r.ok && r.armado.tonoMusica === "neutro", "música: sin tono en el trabajo se usa el tono por defecto de config.json");
+  crmFalso.encolar(HB, "armado", null, { musica: false });
+  r = await atender(depsH);
+  ok(r.ok && !r.armado.conMusica && !/música/i.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.filter((a) => !/^Audio:/.test(a)).join(" ")), "música: con «musica: false» no se pone ni se avisa");
+  crmFalso.encolar(HB, "armado", null, { musica: "http://127.0.0.1:9/no-existe.mp3" });
+  r = await atender(depsH);
+  ok(r.ok && !r.armado.conMusica && /SIN música/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "música: si la pista del trabajo no se puede bajar, el video sale sin música y lo dice (no falla)");
+
+  // ---- música generada por Kie (preparado, apagado por defecto): servidor de mentira ----
+  const km = { creadas: [], consultas: 0 };
+  const kieMusica = http.createServer((req, res) => {
+    let c = "";
+    req.on("data", (x) => (c += x));
+    req.on("end", () => {
+      const json = (o) => (res.writeHead(200, { "content-type": "application/json" }), res.end(JSON.stringify(o)));
+      if (req.url === "/pista.mp3") return res.writeHead(200), res.end(fs.readFileSync(path.join(fijos, "musica.mp3")));
+      if (req.method === "POST" && req.url === "/api/v1/jobs/createTask") {
+        km.creadas.push(JSON.parse(c));
+        return json({ code: 200, msg: "success", data: { taskId: `musica_${km.creadas.length}` } });
+      }
+      if (req.url.startsWith("/api/v1/jobs/recordInfo")) {
+        return json({ code: 200, msg: "success", data: ++km.consultas < 2 ? { state: "generating" } : { state: "success", creditsConsumed: 12, response: { data: [{ audio_url: `http://127.0.0.1:${kieMusica.address().port}/pista.mp3`, duration: 6 }, { audio_url: `http://127.0.0.1:${kieMusica.address().port}/pista.mp3`, duration: 6 }] } } });
+      }
+      json({ code: 404, msg: "not found" });
+    });
+  });
+  await new Promise((res) => kieMusica.listen(0, "127.0.0.1", res));
+  ok(cfg.config.musica.generarConKie === false, "música generada por Kie: viene APAGADA en config.json");
+  const cfgM = { ...base, kieKey: "clave-kie-de-mentira", kieBase: `http://127.0.0.1:${kieMusica.address().port}`, config: { ...base.config, musica: { ...base.config.musica, generarConKie: true, kie: { ...base.config.musica.kie, consultarCadaSegundos: 0.1 } } } };
+  crmFalso.encolar(HB, "armado", null, { tonoMusica: "emotivo" });
+  r = await atender({ ...depsH, cfg: cfgM });
+  const pedidaM = km.creadas[0] || { input: {} };
+  ok(r.ok && r.armado.tonoMusica === "emotivo" && km.creadas.length === 1 && pedidaM.model === "ai-music-api/generate" && pedidaM.input.instrumental === true && pedidaM.input.custom_mode === true && pedidaM.input.duration >= 10 && fs.readdirSync(path.join(carpetas.musica, "emotivo")).some((f) => /^kie-.*\.mp3$/.test(f)) && /generada con Kie \(12 créditos\)/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "música generada por Kie (de mentira, encendida solo en la prueba): pide una instrumental del tono, la guarda en la carpeta y avisa los créditos");
+  crmFalso.crearHijo(HB, "hablado-variacion");
+  crmFalso.encolar("hablado-variacion", "armado", null, { tonoMusica: "emotivo" });
+  r = await atender({ ...depsH, cfg: cfgM });
+  ok(r.ok && km.creadas.length === 1 && r.armado.tonoMusica === "emotivo", "música generada: el siguiente video de ese tono reutiliza la pista guardada (no se paga otra)");
+  kieMusica.close();
+
+  // ---- lo que manda el CRM desde el 14-oct: contexto.voz y locucion por escena ----
+  {
+    const tCrm = { formato: "ugc", imagenesProducto: [], opciones: {}, contexto: { pais: "CO", voz: { motor: "clip", idioma: "es-MX", acento: "español de México, tono cercano", descripcion: "mujer de 30 años" } } };
+    const conBloque = "La mujer levanta el frasco.\nAUDIO: la persona en pantalla dice, en español de México: \"Mira esto.\" Voz: mujer de 30 años.";
+    const pA = kieVideo.armarEntrada(base, { escena: { prompt: conBloque, duracion: 8, usaImagenProducto: false, voz: "Mira esto.", locucion: "camara" }, trabajo: tCrm, relacion: "9:16", audio: "veo", audioEnPrompt: habla.audioYaEnPrompt(tCrm, conBloque) }, kieVideo.modeloPara(base, tCrm, false)).input.prompt;
+    ok((pA.match(/Mira esto\./g) || []).length === 1 && !/Sin diálogo/.test(pA) && !/dice a cámara, en/.test(pA), "si el CRM ya trae su bloque «AUDIO» en el prompt (contexto.voz.motor: \"clip\"), el trabajador no agrega otra instrucción de voz ni pide «sin diálogo»");
+    ok(habla.decidirAudio(base, tCrm, true).modo === "veo" && habla.decidirAudio(base, { ...tCrm, contexto: { voz: { motor: "narracion" } } }, true).modo === "elevenlabs" && habla.decidirAudio(base, { ...tCrm, contexto: { voz: { motor: "narracion" } } }, false).modo === "veo" && /México/.test(habla.acentoPara(base, { contexto: { pais: "CO", voz: { idioma: "es-MX" } } })) && /inglés/.test(habla.acentoPara(base, { contexto: { voz: { idioma: "en-US" } } })), "contexto.voz: motor «clip» nunca usa ElevenLabs aunque haya clave; «narracion» sí (si hay clave); el idioma «es-MX» decide el acento cuando no viene escrito");
+    ok(habla.seHabla({ voz: "Hola", locucion: "camara" }) && habla.seHabla({ voz: "Hola", locucion: "narrador" }) && habla.seHabla({ voz: "Hola" }) && !habla.seHabla({ voz: "50% OFF", locucion: "texto" }) && !habla.seHabla({ voz: "", locucion: "camara" }) && habla.esNarrado(base, { formato: "ugc" }, { locucion: "narrador" }) && !habla.esNarrado(base, { formato: "historia" }, { locucion: "camara" }), "locucion por escena: «camara» y «narrador» se dicen; «texto» y «sin-voz» no (solo subtítulo); la escena le gana al formato");
+  }
+  // Una escena de solo texto (locucion «texto») con un clip en silencio: lleva subtítulo y NO cuenta como clip mudo.
+  ph.escenas[2].locucion = "texto";
+  crmFalso.encolar(HB, "armado", null, { musica: false });
+  r = await atender(depsH);
+  ok(r.ok && JSON.stringify(r.armado.sinAudio) === "[]" && r.armado.segmentos[2].subtitulo && !/escena 3 llegó/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "locucion «texto»: la escena lleva su subtítulo y no se reporta como clip sin audio");
+  delete ph.escenas[2].locucion;
+
+  // ---- fotogramas del video armado para el control de calidad del CRM, y confirmación de subtítulos ----
+  const eQ = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+  const q1 = eQ.fotogramas && eQ.fotogramas.length ? crmFalso.archivos.get(eQ.fotogramas[0]) : null;
+  ok(eQ.subtitulos === true && Array.isArray(eQ.fotogramas) && eQ.fotogramas.length === 5 && eQ.fotogramas.every((f, i) => f.endsWith(`final-f${i + 1}.jpg`) && crmFalso.archivos.has(f)) && q1 && q1[0] === 0xff && q1[1] === 0xd8, "armado: manda 5 fotogramas del video ya armado (subida «fotograma-final») y confirma «subtitulos: true» para el control de calidad del CRM");
+  if (q1) {
+    fs.writeFileSync(path.join(capturas, "control-fotograma-1-gancho.jpg"), q1);
+    fs.writeFileSync(path.join(capturas, "control-fotograma-5-cierre.jpg"), crmFalso.archivos.get(eQ.fotogramas[4]));
+  }
+
+  // ---- etapa «analisis»: desarmar un video de referencia ----
+  // Un «anuncio» de prueba hecho con ffmpeg: tres tomas (2 s + 3 s + 1,5 s) con audio.
+  await ff.ffmpeg(
+    ["-f", "lavfi", "-i", "color=c=0xB71C1C:s=640x1136:r=25:d=2", "-f", "lavfi", "-i", "testsrc2=s=640x1136:r=25:d=3", "-f", "lavfi", "-i", "color=c=0x0D47A1:s=640x1136:r=25:d=1.5", "-f", "lavfi", "-i", "sine=frequency=500:duration=6.5,volume=4",
+      "-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]", "-map", "[v]", "-map", "3:a", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-t", "6.5", "referencia.mp4"],
+    fijos,
+  );
+  const tAn = crmFalso.encolarAnalisis(crmFalso.fijo("referencia.mp4"));
+  r = await atender();
+  const an = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+  const cerca = (a, b, t = 0.15) => Math.abs(a - b) <= t;
+  ok(r.ok && an.etapa === "analisis" && cerca(an.duracion, 6.5) && an.tomas.length === 3 && cerca(an.tomas[0].hasta, 2) && cerca(an.tomas[1].hasta, 5) && cerca(an.tomas[2].hasta, 6.5), `análisis: ${an.duracion} s, ${an.tomas ? an.tomas.length : 0} tomas detectadas en ${(an.tomas || []).map((t) => `${t.desde}–${t.hasta}`).join(", ")} (el video de prueba corta en 2 y 5 s)`);
+  const jpgAn = an.tomas && an.tomas[0] ? crmFalso.archivos.get(an.tomas[0].fotograma) : null;
+  ok((an.tomas || []).every((t, i) => typeof t.fotograma === "string" && t.fotograma.endsWith(`/f${i + 1}.jpg`) && crmFalso.archivos.has(t.fotograma)) && jpgAn && jpgAn[0] === 0xff && jpgAn[1] === 0xd8 && typeof an.audio === "string" && an.audio.endsWith("/audio.mp3") && crmFalso.archivos.has(an.audio), "análisis: un fotograma JPG por toma (del medio) y el audio en MP3, subidos al CRM con las rutas que él entrega");
+  ok(an.transcripcion === null && /TRANSCRIPCION/.test(an.transcripcionMotivo), "análisis: sin servicio de transcripción configurado devuelve transcripcion: null con el motivo (no inventa texto)");
+  ok(!fs.existsSync(path.join(carpetas.trabajos, tAn.id)), "análisis: al terminar no queda nada en disco (ni el original ni los fotogramas)");
+  if (jpgAn) fs.writeFileSync(path.join(capturas, "analisis-fotograma-toma-1.jpg"), jpgAn);
+  crmFalso.encolarAnalisis(crmFalso.fijo("referencia.mp4"));
+  r = await atender({ ...deps, cfg: { ...base, transcripcion: "simulado" } });
+  const an2 = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+  ok(r.ok && Array.isArray(an2.transcripcion) && an2.transcripcion.length === 2 && an2.transcripcion[1].hasta > 6 && an2.transcripcion[0].texto && !("transcripcionMotivo" in an2), "análisis: con un servicio enchufado (el de prueba) la transcripción viaja como [{ desde, hasta, texto }]: el punto de extensión funciona");
+  {
+    const cortes = Array.from({ length: 29 }, (_, i) => (i + 1) * 2 + (i % 3 === 0 ? 0.9 : 0)); // 30 tomas de largos distintos
+    const { tomas, unidas } = require("../lib/analisis").armarTomas(cortes, 60, { tomaMinima: 0.6, maxTomas: 16 });
+    ok(tomas.length === 16 && unidas === 14 && tomas[0].desde === 0 && tomas[15].hasta === 60 && tomas.every((t, i) => i === 0 || t.desde === tomas[i - 1].hasta), "análisis: si hay más cortes que tomas admite el CRM (16), se unen las más cortas y no queda ningún hueco");
+  }
+  const fallosAn = crmFalso.visto.fallos.length;
+  crmFalso.encolarAnalisis(crmFalso.fijo("referencia.mp4"));
+  r = await atender({ ...deps, cfg: { ...base, config: { ...base.config, analisis: { ...base.config.analisis, maxSegundos: 5 } } } });
+  const largo = crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1];
+  crmFalso.encolarAnalisis(crmFalso.fijo("referencia.mp4"));
+  const r4 = await atender({ ...deps, cfg: { ...base, config: { ...base.config, analisis: { ...base.config.analisis, maxMb: 0.01 } } } });
+  const pesado = crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1];
+  crmFalso.encolarAnalisis(crmFalso.fijo("musica.mp3"));
+  const r5 = await atender();
+  const noVideo = crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1];
+  ok(!r.ok && !r4.ok && !r5.ok && crmFalso.visto.fallos.length === fallosAn + 3 && /^no analizable: el video dura 7 s y el máximo es 5 s/.test(largo.motivo) && /^no analizable: el archivo pesa más de/.test(pesado.motivo) && /^no analizable: el archivo no es un video/.test(noVideo.motivo) && fs.readdirSync(carpetas.trabajos).every((d) => !fs.existsSync(path.join(carpetas.trabajos, d, "original.bin"))), "análisis: un video demasiado largo, demasiado pesado o que no es video se rechaza con un motivo claro («no analizable: …») y el original se borra igual");
+  ok(cfg.config.analisis.maxSegundos === 180 && cfg.config.analisis.maxMb === 200 && cfg.config.analisis.maxTomas === 16, "análisis: límites por defecto los acordados con el CRM (3 minutos, 200 MB, 16 tomas)");
 
   // =========================================== varios trabajos a la vez ====
   // Piezas sueltas de lib/limites.js

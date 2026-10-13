@@ -7,6 +7,12 @@
 import type { FormatoVideo } from "@/lib/video-formatos";
 import { corchetes, pasosDelGuion, segundosDeTramo } from "@/lib/trabajos-video";
 import {
+  LOCUCIONES,
+  MAX_SEGUNDOS_CLIP,
+  contarPalabras,
+  palabrasQueCaben,
+  type Locucion,
+  type VozProyecto,
   MAX_ESCENAS_PROYECTO,
   MOVIMIENTOS,
   NOMBRE_PASO,
@@ -24,9 +30,74 @@ export type FormatoPlan = Pick<FormatoVideo, "slug" | "nombre" | "estructura" | 
 /** Formatos donde el producto es el protagonista de todo el video: sus escenas salen de las fotos reales. */
 const PRODUCTO_PROTAGONISTA = new Set(["usos-del-producto"]);
 /** Segundos máximos de un clip generado (los modelos de video no dan más en una toma). */
-const MAX_CLIP = 8;
+const MAX_CLIP = MAX_SEGUNDOS_CLIP;
+/** Formatos narrados: nadie habla a cámara; la frase la dice un narrador fuera de cámara. */
+const NARRADOS = new Set(["usos-del-producto", "historia", "explicativo-3d", "animacion-3d", "claymation", "crochet", "esqueleto", "historias-musicales"]);
+export const locucionDeFormato = (slug: string): Locucion => (NARRADOS.has(slug) ? "narrador" : "camara");
 
-export type DatosPlan = { guion: string; formato: FormatoPlan; fotos: string[]; fichaTexto: string; producto: string };
+export type DatosPlan = {
+    guion: string;
+    formato: FormatoPlan;
+    fotos: string[];
+    fichaTexto: string;
+    producto: string;
+    /** La voz del proyecto. Con motor `clip`, las escenas de foto real no hablan: su frase va solo escrita. */
+    voz?: VozProyecto;
+  };
+
+const ORACION = /[^.!?…]+[.!?…]+["”»]?|[^.!?…]+$/g;
+const oraciones = (t: string) => (t.match(ORACION) ?? []).map((x) => x.trim()).filter(Boolean);
+
+/**
+ * La voz la genera el modelo dentro de cada clip, así que cada escena generada
+ * lleva SU frase: lo que cabe dicho con naturalidad en su duración. Dentro de
+ * cada paso se reparten las oraciones entre sus escenas generadas, sin partir
+ * ninguna. Lo que no quepa se dice con claridad para que alguien lo recorte.
+ */
+export function repartirVoz(escenas: EscenaProyecto[], repartir: boolean): { escenas: EscenaProyecto[]; avisos: string[] } {
+  const avisos: string[] = [];
+  const salida = escenas.map((e) => ({ ...e }));
+  if (repartir) {
+    for (const paso of [1, 2, 3, 4, 5]) {
+      const idx = salida.map((_, i) => i).filter((i) => salida[i].paso === paso && salida[i].tipo === "generada" && salida[i].locucion !== "sin-voz" && salida[i].locucion !== "texto");
+      if (idx.length < 2) continue;
+      const frases = idx.flatMap((i) => oraciones(salida[i].voz));
+      const reparto = idx.map(() => [] as string[]);
+      let k = 0;
+      for (const f of frases) {
+        const cabe = () => contarPalabras([...reparto[k], f].join(" ")) <= palabrasQueCaben(salida[idx[k]].duracion);
+        while (!cabe() && reparto[k].length && k < idx.length - 1) k++;
+        reparto[k].push(f);
+      }
+      idx.forEach((i, j) => {
+        salida[i] = { ...salida[i], voz: reparto[j].join(" ") };
+      });
+    }
+  }
+  const largas = salida.filter((e) => e.tipo === "generada" && e.locucion !== "texto" && contarPalabras(e.voz) > palabrasQueCaben(e.duracion));
+  if (largas.length) {
+    avisos.push(
+      `La frase de la escena ${largas.map((e) => `${e.n} (${contarPalabras(e.voz)} palabras para ${e.duracion} s; caben ${palabrasQueCaben(e.duracion)})`).join(", ")} no cabe dicha con naturalidad en su clip: recórtala o repártela, o el modelo la dirá atropellada o cortada.`,
+    );
+  }
+  return { escenas: salida, avisos };
+}
+
+/** El bloque de audio que se agrega al prompt del clip: quién habla, qué dice, en qué acento y con qué voz (siempre la misma). */
+export function bloqueDeAudio(e: Pick<EscenaProyecto, "voz" | "locucion">, voz: VozProyecto): string {
+  const frase = e.voz.trim();
+  if (!frase || e.locucion === "sin-voz" || e.locucion === "texto") return "AUDIO: nadie habla en esta toma; solo sonido ambiente suave. Sin música y sin voces.";
+  const quien =
+    e.locucion === "narrador"
+      ? "una voz narradora fuera de cámara (nadie en pantalla mueve los labios)"
+      : "la persona en pantalla, mirando a cámara, con los labios sincronizados";
+  return [
+    `AUDIO: habla ${quien} y dice exactamente, una sola vez y sin agregar nada: «${frase}»`,
+    `Idioma y acento: ${voz.acento} (${voz.idioma}).`,
+    `Voz (la misma en todo el video): ${voz.descripcion}.`,
+    "Sin música, sin otras voces y sin texto en pantalla. La frase termina antes del final del clip.",
+  ].join("\n");
+}
 
 const limpiar = (s: string, max: number) => s.replace(/\s+/g, " ").trim().slice(0, max);
 const entre = (v: number, min: number, max: number) => Math.min(max, Math.max(min, Math.round(v)));
@@ -43,6 +114,7 @@ function escena(base: Partial<EscenaProyecto> & Pick<EscenaProyecto, "paso" | "t
     movimiento: "acercar",
     imagen: piezaNueva(),
     clip: piezaNueva(),
+    locucion: base.tipo === "generada" ? "camara" : "texto",
     ...base,
   };
 }
@@ -112,6 +184,8 @@ export function planDePlantilla(d: DatosPlan): { escenas: EscenaProyecto[]; avis
       );
     }
   }
+  const quien = locucionDeFormato(d.formato.slug);
+  for (const e of escenas) e.locucion = e.tipo === "generada" ? quien : "texto";
   const avisos = ["El plan salió de la plantilla del formato (sin IA): revisa y mejora el prompt de cada escena generada antes de pedir las imágenes."];
   if (!pasos.length) avisos.push("El guion no tiene los rótulos «PASO 1…5»: las escenas quedaron sin voz. Escríbela en cada escena.");
   return { escenas: numerar(escenas.slice(0, MAX_ESCENAS_PROYECTO)), avisos };
@@ -158,6 +232,7 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
       titulo: s("titulo", 80) || NOMBRE_PASO[paso],
       duracion: n("duracion", 5),
       voz: s("voz", 1200),
+      ...((LOCUCIONES as readonly string[]).includes(o.locucion as string) ? { locucion: o.locucion as Locucion } : tipo === "generada" ? { locucion: locucionDeFormato(d.formato.slug) } : {}),
       promptImagen: s("promptImagen", 4000),
       promptVideo: s("promptVideo", 4000),
       fotoUrl: d.fotos.includes(pedida) ? pedida : (d.fotos[indice] ?? null),
@@ -188,7 +263,8 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
   escenas = escenas.map((e) => {
     const x = { ...e };
     if (x.tipo === "generada") {
-      x.duracion = entre(x.duracion, 3, 15);
+      x.duracion = entre(x.duracion, 3, MAX_CLIP);
+      if (x.locucion === "texto") x.locucion = "sin-voz";
       if (!x.promptImagen.trim() || !x.promptVideo.trim()) {
         const est = d.formato.estructura.find((s) => s.paso === x.paso);
         const p = promptsDePlantilla(d, x.paso, est?.que_pasa ?? NOMBRE_PASO[x.paso], pasos.find((s) => s.paso === x.paso)?.texto ?? "", x.duracion, x.paso >= 4);
@@ -197,6 +273,9 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
       }
     } else {
       x.duracion = x.tipo === "cierre" ? entre(x.duracion, 5, 10) : entre(x.duracion, 2, 8);
+      // Una foto animada no habla: con la voz dentro del clip, su frase va solo escrita.
+      if (!d.voz || d.voz.motor === "clip") x.locucion = x.voz.trim() ? "texto" : "sin-voz";
+      else if (x.locucion === "camara") x.locucion = "narrador";
       if (!x.fotoUrl || !d.fotos.includes(x.fotoUrl)) x.fotoUrl = d.fotos[0] ?? null;
     }
     return x;
@@ -225,6 +304,16 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
     if (corregidos) avisos.push(`En ${corregidos} ${corregidos === 1 ? "paso" : "pasos"} la voz propuesta no coincidía con el guion: se dejó la frase del guion tal cual. Repártela entre las escenas si hace falta.`);
   }
 
+  const reparto = repartirVoz(escenas, opciones.verificarVoz);
+  escenas = reparto.escenas;
+  avisos.push(...reparto.avisos);
+  if ((!d.voz || d.voz.motor === "clip") && escenas.some((e) => e.tipo === "cierre" && e.voz.trim()) && !escenas.some((e) => e.tipo === "generada" && e.paso === 5)) {
+    avisos.push("La frase del cierre no se dice en voz (el cierre es una foto real): va en subtítulo y en el rótulo. Si quieres que alguien la diga, agrega una escena generada en el paso 5.");
+  }
+  // Estructura obligatoria: arranque rápido con el gancho, y cierre con oferta + llamado (el cierre ya se garantizó arriba).
+  const primera = escenas[0];
+  if (primera && primera.paso !== 1) avisos.push("La primera escena no es el gancho (paso 1): el video debe abrir con el gancho en el primer segundo, sin presentación.");
+  else if (primera && primera.duracion > 4) avisos.push(`La primera toma dura ${primera.duracion} s: el arranque debe ser rápido. Déjala en 4 s o menos, o pártela en dos tomas cortas.`);
   if (!d.fotos.length) avisos.push("No hay fotos del producto: las escenas de foto real y el cierre no se pueden armar hasta subir al menos una.");
   if (!escenas.some((e) => e.tipo === "foto-real") && d.fotos.length) {
     avisos.push("Solo el cierre muestra el producto real. Si el producto debe verse antes, cambia una escena del paso 4 a «Foto real animada».");
@@ -310,11 +399,16 @@ export type CostoVariaciones = { imagenes: number; clips: number; segundos: numb
 /** Lo que cuestan N variaciones ANTES de crearlas: solo lo nuevo; todo lo demás se reutiliza. */
 export function costoDeVariaciones(p: ProyectoVideo, pedidos: PedidoVariacion[]): CostoVariaciones {
   const primera = p.escenas[0];
-  const conGeneracion = primera?.tipo === "generada" ? pedidos.filter((v) => v.regenerarGancho).length : 0;
-  const c = { imagenes: conGeneracion, clips: conGeneracion, segundos: conGeneracion * (primera?.duracion ?? 0), armados: pedidos.length };
+  const generable = primera?.tipo === "generada";
+  const hablaElClip = generable && p.contexto.voz.motor === "clip" && p.opciones.voz && primera.locucion !== "texto" && primera.locucion !== "sin-voz";
+  const conImagen = generable ? pedidos.filter((v) => v.regenerarGancho).length : 0;
+  // Con la voz dentro del clip, un gancho nuevo se dice en un clip nuevo (sobre la misma imagen).
+  const conClip = generable ? pedidos.filter((v) => v.regenerarGancho || (hablaElClip && v.gancho.trim() && v.gancho.trim() !== primera.voz.trim())).length : 0;
+  const c = { imagenes: conImagen, clips: conClip, segundos: conClip * (primera?.duracion ?? 0), armados: pedidos.length };
   const n = pedidos.length;
   const partes = [
-    c.clips ? `${c.imagenes} ${c.imagenes === 1 ? "imagen nueva" : "imágenes nuevas"} + ${c.clips} ${c.clips === 1 ? "clip nuevo" : "clips nuevos"} (${c.segundos} s)` : "",
+    c.imagenes ? `${c.imagenes} ${c.imagenes === 1 ? "imagen nueva" : "imágenes nuevas"}` : "",
+    c.clips ? `${c.clips} ${c.clips === 1 ? "clip nuevo" : "clips nuevos"} (${c.segundos} s)` : "",
     `${c.armados} ${c.armados === 1 ? "armado" : "armados"} (sin costo)`,
   ].filter(Boolean);
   return { ...c, texto: `${n} ${n === 1 ? "variación" : "variaciones"} = ${partes.join(" + ")}` };
@@ -331,6 +425,12 @@ export function proyectoDeVariacion(p: ProyectoVideo, v: PedidoVariacion, origen
     const copia: EscenaProyecto = { ...e, imagen: { ...e.imagen, trabajoId: null }, clip: { ...e.clip, trabajoId: null } };
     if (i !== 0) return copia;
     if (v.gancho.trim()) {
+      const hablaElClip = e.tipo === "generada" && p.contexto.voz.motor === "clip" && p.opciones.voz && e.locucion !== "texto" && e.locucion !== "sin-voz";
+      if (hablaElClip && v.gancho.trim() !== e.voz.trim() && !v.regenerarGancho) {
+        // La frase la dice el clip: se genera ese clip de nuevo sobre la misma imagen aprobada.
+        copia.clip = piezaNueva();
+        cambia.push("clip del gancho (lo dice el clip)");
+      }
       copia.voz = v.gancho.trim();
       cambia.push("gancho");
     }
@@ -444,6 +544,22 @@ export function planDeCorreccion(p: ProyectoVideo, c: CorreccionProyecto): PlanC
   for (const x of c.textos) {
     const e = de(x.n);
     if (!e || x.voz.trim() === e.voz.trim()) continue;
+    const vozEnElClip = e.tipo === "generada" && p.contexto.voz.motor === "clip" && p.opciones.voz && e.locucion !== "texto" && e.locucion !== "sin-voz";
+    if (vozEnElClip) {
+      // La voz la dice el propio clip: una frase nueva obliga a generar ese clip otra vez (la imagen se conserva).
+      if (imagenes.includes(e.n) || clips.includes(e.n)) {
+        pasos.push({ texto: `Frase de la escena ${e.n}: la dirá el clip que ya se va a generar.`, cuesta: false });
+        continue;
+      }
+      if (piezaEnCurso(e.clip) || piezaEnCurso(e.imagen)) bloqueos.push(`La escena ${e.n} ya se está generando: espera a que termine.`);
+      else if (e.imagen.estado !== "aprobada") bloqueos.push(`La escena ${e.n} no tiene imagen aprobada: primero aprueba su imagen.`);
+      else if (e.clip.intentos >= p.topeIntentos) bloqueos.push(`El clip de la escena ${e.n} ya llegó al tope de ${p.topeIntentos} intentos: su frase no se puede cambiar sin reabrirlo.`);
+      else {
+        clips.push(e.n);
+        pasos.push({ texto: `Frase de la escena ${e.n}: la voz sale del clip, así que se genera ese clip de nuevo (${e.duracion} s, intento ${e.clip.intentos + 1} de ${p.topeIntentos}). La imagen se conserva.`, cuesta: true });
+      }
+      continue;
+    }
     cambiosDeArmado = true;
     pasos.push({ texto: `Texto y subtítulo de la escena ${e.n}: se cambia al armar.`, cuesta: false });
   }

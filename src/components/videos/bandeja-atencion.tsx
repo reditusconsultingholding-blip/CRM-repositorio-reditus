@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Check, ChevronRight, FolderOpen, Inbox, Play, RefreshCw, X } from "lucide-react";
 import { aprobarVideo } from "@/app/(protected)/videos/actions";
 import { revisarPieza, seguirProyecto } from "@/app/(protected)/videos/proyecto-actions";
-import { detenido, type ProyectoVideo } from "@/lib/proyecto-video";
+import { PUNTOS_CONTROL, detenido, type ControlFinal, type ProyectoVideo, type PuntoControl } from "@/lib/proyecto-video";
 import { versionVigente, type GuionGuardado } from "@/lib/videos";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import { Chip, ETIQUETA } from "@/components/prospectos/piezas";
 
 export type Pendiente =
   | { clave: string; tipo: "imagen"; g: GuionGuardado; n: number; url: string; motivo: string; foto: string | null; voz: string }
-  | { clave: string; tipo: "video"; g: GuionGuardado; version: number; url: string }
+  | { clave: string; tipo: "video"; g: GuionGuardado; version: number; url: string; control: ControlFinal | null }
   | { clave: string; tipo: "clips"; g: GuionGuardado; cuantos: number }
   | { clave: string; tipo: "detenido"; g: GuionGuardado; texto: string };
 
@@ -34,7 +34,7 @@ export function pendientesDe(guiones: GuionGuardado[]): Pendiente[] {
         imagenes.push({ clave: `i:${g.id}:${e.n}:${e.imagen.url}`, tipo: "imagen", g, n: e.n, url: e.imagen.url, motivo: e.imagen.revision?.motivo ?? "", foto: p.contexto.fotos[0] ?? null, voz: e.voz });
       }
     }
-    if (p.final.estado === "por-aprobar" && p.final.url) videos.push({ clave: `v:${g.id}:${p.final.url}`, tipo: "video", g, version: v.n, url: p.final.url });
+    if (p.final.estado === "por-aprobar" && p.final.url) videos.push({ clave: `v:${g.id}:${p.final.url}`, tipo: "video", g, version: v.n, url: p.final.url, control: p.final.control?.url === p.final.url ? p.final.control : null });
     const porRevisar = p.escenas.filter((e) => e.tipo === "generada" && e.clip.estado === "por-aprobar").length;
     if (porRevisar && !p.auto.armarDirecto && p.final.estado !== "por-aprobar") clips.push({ clave: `c:${g.id}`, tipo: "clips", g, cuantos: porRevisar });
     if (detenido(p) && p.auto.parada) detenidos.push({ clave: `d:${g.id}:${p.auto.parada.fecha}`, tipo: "detenido", g, texto: p.auto.parada.texto });
@@ -233,6 +233,18 @@ export function BandejaAtencion({ guiones, puedeAprobar, onActualizado, onAbrir,
               <div className="grid gap-3 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
                 <video key={actual.url} src={actual.url} controls autoPlay muted playsInline className="mx-auto aspect-[9/16] max-h-[55vh] w-full max-w-[15rem] rounded-xl border border-border bg-black object-contain" aria-label="Video armado" />
                 <div className="flex min-w-0 flex-col gap-2">
+                  {actual.control && (
+                    <ul className="flex flex-col gap-0.5 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs">
+                      {(Object.keys(PUNTOS_CONTROL) as PuntoControl[]).map((k) => {
+                        const x = actual.control?.puntos[k];
+                        return x ? (
+                          <li key={k} className={x.nota === "mal" ? "text-destructive" : x.nota === "duda" ? "text-amber-700 dark:text-amber-300" : undefined}>
+                            {x.nota === "ok" ? "✓" : x.nota === "mal" ? "✗" : "?"} {PUNTOS_CONTROL[k]}. {x.detalle}
+                          </li>
+                        ) : null;
+                      })}
+                    </ul>
+                  )}
                   <p className="text-xs leading-relaxed text-muted-foreground">Míralo completo: es lo que sale hacia el cliente. Si algo está mal, ábrelo y márcalo en «Corregir»: se rehace solo esa escena.</p>
                   <div className="mt-auto grid grid-cols-3 gap-2">
                     <Button disabled={!puedeAprobar || ocupado} onClick={aprobar} title="Tecla A">

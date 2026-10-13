@@ -74,6 +74,8 @@ export type OpcionesVideo = {
   voz: boolean;
   /** Música de fondo del armado (enlace https o nombre de pista del servidor); null = sin música. */
   musica: string | null;
+  /** Tono de la música que debe mezclar el trabajador si no hay una pista dada: neutro, energia, suspenso o emotivo. */
+  tonoMusica?: string;
   /** Identificador del modelo en el proveedor; null = el que diga la configuración del servidor. */
   modelo: string | null;
 };
@@ -81,9 +83,19 @@ export type OpcionesVideo = {
 export const OPCIONES_VIDEO_BASE: OpcionesVideo = { subtitulos: true, voz: true, musica: null, modelo: null };
 
 /** Etapas del proyecto por escenas. Un trabajo sin etapa es un video completo de los de antes. */
-export const ETAPAS_TRABAJO = ["imagenes", "clips", "armado"] as const;
+export const ETAPAS_TRABAJO = ["imagenes", "clips", "armado", "analisis"] as const;
 export type EtapaTrabajo = (typeof ETAPAS_TRABAJO)[number];
-export const ETAPA_LABELS: Record<EtapaTrabajo, string> = { imagenes: "Imágenes base", clips: "Clips", armado: "Armado" };
+export const ETAPA_LABELS: Record<EtapaTrabajo, string> = { imagenes: "Imágenes base", clips: "Clips", armado: "Armado", analisis: "Análisis de la referencia" };
+
+/** Lo que devuelve el trabajador al analizar un video de referencia (solo cortes, fotogramas y, si puede, transcripción). */
+export type TomaAnalizada = { desde: number; hasta: number; fotograma: string };
+export type ResultadoAnalisis = {
+  duracion: number;
+  tomas: TomaAnalizada[];
+  audio: string | null;
+  transcripcion: { desde: number; hasta: number; texto: string }[];
+};
+export const MAX_TOMAS_ANALISIS = 16;
 
 /** Lo que el trabajador reportó de UNA escena (llega por `progreso`, en cuanto la termina). */
 export type ReporteEscena = {
@@ -118,6 +130,10 @@ export type ResultadoTrabajo = {
   modelos: string[];
   sinVoz: boolean;
   avisos: string[];
+  /** Fotogramas del video armado (para el control de calidad automático). */
+  fotogramas: string[];
+  /** El trabajador confirma si quemó subtítulos (null = no lo dijo). */
+  subtitulos: boolean | null;
 };
 
 export type TrabajoVideo = {
@@ -162,6 +178,10 @@ export type TrabajoVideo = {
   reportes: ReporteEscena[];
   /** Créditos totales que el trabajador dijo haber gastado al cerrar. */
   creditos: number;
+  /** Etapa `analisis`: el video de referencia que hay que desarmar. */
+  referencia: { url: string; maxTomas: number } | null;
+  /** Etapa `analisis`: lo que devolvió el trabajador. */
+  analisis: ResultadoAnalisis | null;
   /** El proyecto es una variación de otro (cuenta para el tope de variaciones, no para el de videos). */
   variacion: boolean;
 
@@ -217,6 +237,7 @@ const escenaFuera = (e: EscenaProyecto) => ({
   nombre: e.titulo,
   duracion: e.duracion,
   voz: e.voz,
+  locucion: e.locucion,
   promptImagen: e.promptImagen,
   promptVideo: e.promptVideo,
   fotoUrl: e.fotoUrl,
@@ -234,12 +255,18 @@ const escenaFuera = (e: EscenaProyecto) => ({
 export function paraTrabajador(t: TrabajoVideo): Record<string, unknown> {
   if (!t.etapa) {
     const deAntes: Record<string, unknown> = { ...t };
-    for (const k of ["etapa", "contexto", "escenasEtapa", "todas", "reportes", "creditos", "variacion"]) delete deAntes[k];
+    for (const k of ["etapa", "contexto", "escenasEtapa", "todas", "reportes", "creditos", "variacion", "referencia", "analisis"]) delete deAntes[k];
     return deAntes;
+  }
+  // Análisis de una referencia: solo lo que el trabajador necesita (no hay proyecto ni escenas).
+  if (t.etapa === "analisis") {
+    return { id: t.id, toma: t.toma, guionId: t.guionId, etapa: t.etapa, referencia: t.referencia, intentos: t.intentos, maxIntentos: t.maxIntentos, pedidoPor: t.pedidoPor };
   }
   const resto: Record<string, unknown> = { ...t };
   delete resto.escenasEtapa;
   delete resto.reportes;
+  delete resto.referencia;
+  delete resto.analisis;
   const pendientes = t.etapa === "armado" ? t.escenasEtapa : escenasSinReportar(t);
   // Armado directo: un clip que nadie revisó todavía se arma igual (la persona lo ve en el video).
   // Al trabajador le llega como aprobado y marcado `sinRevisar`.
@@ -316,6 +343,20 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
       }),
     creditos: Math.max(0, num(o.creditos)),
     variacion: o.variacion === true,
+    referencia: obj(o.referencia).url ? { url: txt(obj(o.referencia).url, 1200), maxTomas: Math.min(MAX_TOMAS_ANALISIS, Math.max(1, Math.floor(num(obj(o.referencia).maxTomas, MAX_TOMAS_ANALISIS)))) } : null,
+    analisis: o.analisis
+      ? {
+          duracion: Math.max(0, num(obj(o.analisis).duracion)),
+          tomas: lista(obj(o.analisis).tomas)
+            .slice(0, MAX_TOMAS_ANALISIS)
+            .map((x) => ({ desde: Math.max(0, num(obj(x).desde)), hasta: Math.max(0, num(obj(x).hasta)), fotograma: txt(obj(x).fotograma, 400) })),
+          audio: txt(obj(o.analisis).audio, 400) || null,
+          transcripcion: lista(obj(o.analisis).transcripcion)
+            .slice(0, 200)
+            .map((x) => ({ desde: Math.max(0, num(obj(x).desde)), hasta: Math.max(0, num(obj(x).hasta)), texto: txt(obj(x).texto, 600) }))
+            .filter((x) => x.texto),
+        }
+      : null,
     pedidoPor: { id: txt(por.id, 40), nombre: txt(por.nombre, 160) },
     origen: o.origen === "correccion" ? "correccion" : "manual",
     cierre: {
@@ -351,6 +392,11 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
             .filter(Boolean)
             .slice(0, 6),
           sinVoz: re.sinVoz === true,
+          fotogramas: lista(re.fotogramas)
+            .map((u) => txt(u, 600))
+            .filter((u) => u.startsWith("https://"))
+            .slice(0, 6),
+          subtitulos: typeof re.subtitulos === "boolean" ? re.subtitulos : null,
           avisos: lista(re.avisos)
             .map((a) => txt(a, 400))
             .filter(Boolean)

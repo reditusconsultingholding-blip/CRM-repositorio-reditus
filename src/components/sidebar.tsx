@@ -53,7 +53,7 @@ const ALL_LINKS = [
   },
   // Guiones por formato para cualquier producto; no confundir con la entrada
   // de arriba, que son las piezas gratis asignadas del embudo de prospección.
-  { href: "/videos", label: "Crear video", icon: Film, roles: VIDEOS_ROLES, grupo: "Operación" },
+  { href: "/videos", label: "Creativos", icon: Film, roles: VIDEOS_ROLES, grupo: "Operación" },
   { href: "/prospectos", label: "Prospectos", icon: UserPlus, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/clientes", label: "Clientes", icon: Contact, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/flujo", label: "Flujo de trabajo", icon: Workflow, roles: null, grupo: "Equipo" },

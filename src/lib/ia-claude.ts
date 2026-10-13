@@ -1,4 +1,5 @@
 import "server-only";
+import { dobleDeIA } from "@/lib/ia-doble";
 
 // Llamada única a la IA de texto (Anthropic). La comparten el embudo de
 // prospección (`prospeccion-server.ts`) y «Crear video» (`videos-server.ts`):
@@ -15,8 +16,8 @@ export type ResultadoIA = { texto: string } | { error: string };
  * bloques `image` con `source: { type: "url" }` de la API de mensajes: solo
  * enlaces https públicos (los descarga Anthropic, no este servidor).
  */
-export async function llamarClaudeConImagenes(system: string, user: string, imagenes: string[], maxTokens: number): Promise<ResultadoIA> {
-  const urls = imagenes.filter((u) => /^https:\/\//i.test(u)).slice(0, 4);
+export async function llamarClaudeConImagenes(system: string, user: string, imagenes: string[], maxTokens: number, maxImagenes = 4): Promise<ResultadoIA> {
+  const urls = imagenes.filter((u) => /^https:\/\//i.test(u)).slice(0, maxImagenes);
   if (!urls.length) return { error: "No hay fotos con enlace https para analizar." };
   return llamarClaude(system, [...urls.map((url) => ({ type: "image" as const, source: { type: "url" as const, url } })), { type: "text" as const, text: user }], maxTokens);
 }
@@ -24,6 +25,9 @@ export async function llamarClaudeConImagenes(system: string, user: string, imag
 type BloqueIA = { type: "text"; text: string } | { type: "image"; source: { type: "url"; url: string } };
 
 export async function llamarClaude(system: string, user: string | BloqueIA[], maxTokens: number): Promise<ResultadoIA> {
+  // Doble de prueba: SOLO con la cola de prueba y pedido a propósito (IA_DOBLE=1). Nunca en producción.
+  const doble = dobleDeIA(system, user);
+  if (doble) return doble;
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return {

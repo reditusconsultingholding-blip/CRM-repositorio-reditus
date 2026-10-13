@@ -99,7 +99,7 @@ export function ConfigVideosTarjeta({ esCeo, inicial }: { esCeo: boolean; inicia
           </p>
         )}
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={c.autoImagenes} disabled={quieto} onChange={(e) => set("autoImagenes", e.target.checked)} />
             <span>
@@ -112,6 +112,13 @@ export function ConfigVideosTarjeta({ esCeo, inicial }: { esCeo: boolean; inicia
             <span>
               Armar en cuanto terminen los clips
               <span className="block text-xs text-muted-foreground">Se revisa el video armado, no clip por clip. El video final siempre lo aprueba una persona.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={c.aprobarProspectos} disabled={quieto} onChange={(e) => set("aprobarProspectos", e.target.checked)} />
+            <span>
+              Pedir mi aprobación antes de cada video de prospecto
+              <span className="block text-xs text-muted-foreground">Apagado, cada prospecto nuevo se agenda solo hasta el tope diario. El video final lo sigue aprobando una persona.</span>
             </span>
           </label>
           <div className="flex flex-col gap-1.5">

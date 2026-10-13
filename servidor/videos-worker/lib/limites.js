@@ -151,7 +151,7 @@ function crearLimites(cfg) {
 /** ¿Este trabajo debe adelantarse? Armados, correcciones (una sola escena) o lo que diga `prioridad`. */
 function prioridadDe(trabajo) {
   if (Number.isFinite(Number(trabajo.prioridad)) && trabajo.prioridad !== null && trabajo.prioridad !== "") return Number(trabajo.prioridad);
-  if (trabajo.etapa === "armado") return 1;
+  if (trabajo.etapa === "armado" || trabajo.etapa === "analisis") return 1; // el análisis lo espera una persona en pantalla
   if (trabajo.etapa && Array.isArray(trabajo.escenas) && trabajo.escenas.length === 1) return 1;
   return 0;
 }

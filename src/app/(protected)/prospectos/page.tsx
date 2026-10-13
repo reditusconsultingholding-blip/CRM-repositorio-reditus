@@ -12,6 +12,8 @@ import { PROSPECTO_ESTADOS, PROSPECTO_ESTADO_COLORS, type ProspectoEstado } from
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LiveSync } from "@/components/live-sync";
 import { PestanasProspectos } from "@/components/prospectos/pestanas";
+import { VideosProspectos } from "@/components/prospectos/videos-prospectos";
+import { videosDeProspectos } from "./video-actions";
 import {
   Table,
   TableBody,
@@ -87,6 +89,9 @@ export default async function ProspectosPage() {
     hace: hace(p.created_at),
   }));
 
+  // Video gratis automático: candidatos y su estado (decide solo el CEO).
+  const videos = await videosDeProspectos();
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -110,6 +115,7 @@ export default async function ProspectosPage() {
           <ProspeccionFormDialog />
         </div>
       </div>
+      {!("error" in videos) && <VideosProspectos filas={videos.filas} esCeo={profile.role === "ceo"} pideAprobacion={videos.pideAprobacion} />}
 
       <PestanasProspectos activa="embudo" />
 

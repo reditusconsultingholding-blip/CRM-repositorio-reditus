@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const r = await recibirResultado(admin, id, cuerpo);
     if (r.ok && "estado" in r.dato) {
       // Modo directo: al cerrar una etapa, el proyecto pasa solo a la siguiente (revisión con IA, clips, armado).
-      if (r.dato.etapa) await avanzarGuion(admin, r.dato.guionId);
+      if (r.dato.etapa && r.dato.etapa !== "analisis") await avanzarGuion(admin, r.dato.guionId);
       revalidatePath("/videos");
     }
     return responder(r);

@@ -30,7 +30,9 @@ import {
   ESTADO_PIEZA_LABELS,
   NOMBRE_PASO,
   TONO_PIEZA,
+  PUNTOS_CONTROL,
   VEREDICTO_LABELS,
+  type PuntoControl,
   costoProyectoTexto,
   duracionTotal,
   escenasParaClip,
@@ -450,6 +452,22 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
                   ? "Nada generado sale sin un sí: míralo completo. Si algo está mal, márcalo en «Corregir»: se rehace solo eso."
                   : "Este es el armado anterior. Cuando esté lo nuevo, vuelve a armar (no cuesta)."}
             </p>
+            {final.control && final.control.url === final.url && (
+              <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs" data-control>
+                <span className={ETIQUETA}>Control automático {final.control.conFotogramas ? "(mirando fotogramas del video)" : "(solo con datos: el servidor no mandó fotogramas)"}</span>
+                <ul className="flex flex-col gap-0.5">
+                  {(Object.keys(PUNTOS_CONTROL) as PuntoControl[]).map((k) => {
+                    const x = final.control?.puntos[k];
+                    return x ? (
+                      <li key={k} className={x.nota === "mal" ? "text-destructive" : x.nota === "duda" ? "text-amber-700 dark:text-amber-300" : undefined}>
+                        {x.nota === "ok" ? "✓" : x.nota === "mal" ? "✗" : "?"} <strong className="font-medium">{PUNTOS_CONTROL[k]}.</strong> {x.detalle}
+                      </li>
+                    ) : null;
+                  })}
+                </ul>
+                <span className="text-muted-foreground">Es una ayuda para decidir más rápido: no aprueba nada.</span>
+              </div>
+            )}
             <div className="mt-auto flex flex-wrap gap-2">
               {final.estado === "por-aprobar" && puedeAprobar && (
                 <Button disabled={ocupado} onClick={() => void aprobarFinal()}>
@@ -566,8 +584,8 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
           proyecto={proyecto}
           bloqueado={enCurso}
           ocupado={ocupado}
-          onGuardar={async (escenas, opciones) => {
-            const ok = await correr("plan", () => guardarPlan(id, { escenas, opciones }), "Plan guardado");
+          onGuardar={async (escenas, opciones, extra) => {
+            const ok = await correr("plan", () => guardarPlan(id, { escenas, opciones, ...extra }), "Plan guardado");
             if (ok) setSerie((s) => s + 1);
             return ok;
           }}

@@ -159,3 +159,60 @@ Hoy la estructura del anuncio de referencia la describe una persona en el CRM, t
 3. **Cómo**: cortes de plano con ffmpeg (detección de escena) → un fotograma por toma; transcripción con tiempos del audio; una pasada de visión/texto que clasifica cada toma y cada frase con las listas de arriba. Los fotogramas y la transcripción se usan y se descartan en el servidor: no viajan al CRM ni se guardan.
 4. **Costo**: es análisis, no generación; no cuenta para ningún tope. Si falla, el CRM deja el formulario guiado como está.
 
+### 14-oct-2026 · voz dentro del clip, y análisis de un video de referencia (lado del CRM)
+
+Decisión del dueño: **la voz es la que genera el modelo de video dentro de cada clip** (Veo vía Kie, clips de hasta 8 s). ElevenLabs queda opcional y apagado. Y se ACTIVA el análisis de referencia que estaba preparado (reemplaza la sección «PREPARADO» de arriba). Todo lo nuevo es opcional: un trabajo sin estos campos se procesa como hasta hoy.
+
+**A. Voz**
+
+1. `contexto.voz` (en todo trabajo por etapa): `{ motor: "clip" | "narracion", idioma: "es-CO", acento: "español de Colombia, …", descripcion: "…" }`.
+   - `motor: "clip"` (por defecto): el audio hablado sale del propio clip. **No se llama a ElevenLabs** en ninguna etapa.
+   - `motor: "narracion"`: como hasta hoy (narración aparte al armar). Solo si el dueño lo enciende.
+   - `idioma` es BCP-47 (`es-CO`, `es-ES`, `es-MX`, `en-US`…); `acento` es el texto para el modelo; `descripcion` es la voz/personaje, **idéntica en todos los clips del proyecto** (es lo único que sostiene la continuidad de voz entre clips).
+2. Cada escena trae `locucion`: `"camara"` (la persona en pantalla dice la frase), `"narrador"` (voz fuera de cámara; nadie mueve los labios), `"texto"` (no se dice: solo va escrito) o `"sin-voz"`. Y `voz`, la frase de ESA escena (el CRM ya la reparte para que quepa dicha con naturalidad y no se parta entre clips).
+3. **Etapa `clips` con `motor: "clip"`**: el clip se genera CON audio. El CRM ya agrega al final de `promptVideo` el bloque «AUDIO», con quién habla, la frase exacta entre comillas, el idioma/acento y la descripción fija de la voz; para `texto` y `sin-voz` dice «nadie habla». El trabajador solo debe: pedir el modelo/variante con audio, **no quitar ni reemplazar el audio del clip**, y no acortar el clip por debajo de lo que dura la frase.
+4. **Etapa `armado` con `motor: "clip"`**: se conserva el audio de cada clip generado (normalizando el volumen entre clips). Las escenas `foto-real` y `cierre` no tienen voz: van en silencio (o con la música, si hay). Los subtítulos salen de `voz` en todas las escenas que la traigan, también en las de `locucion: "texto"` (ahí el subtítulo ES el mensaje). El rótulo de cierre sigue igual.
+5. `opciones.voz: false` sigue significando «sin ninguna voz»: los clips se arman en silencio.
+6. Riesgo conocido, para que el trabajador no intente «arreglarlo»: la voz puede variar un poco entre clips. No se dobla ni se clona voz; si un clip suena distinto, la persona lo regenera desde el CRM.
+
+**B. Análisis de un video de referencia (`etapa: "analisis"`)** — el CRM YA lo encola
+
+1. El trabajo: `{ id, toma, guionId, etapa: "analisis", referencia: { url: "https://…", maxTomas: 16 } }`. `url` es un archivo de video (enlace firmado de Storage, válido 6 h, o un .mp4 público). `guionId` aquí es solo un identificador de la referencia (no hay guion todavía). No trae `contexto` ni escenas.
+2. Qué hace el trabajador (solo ffmpeg, sin IA): baja el video (hasta 200 MB y 3 min; si pasa, `fallo` definitivo con el motivo), detecta los cortes de plano y arma hasta `maxTomas` tomas (si hay más cortes, une los más cortos); saca **un fotograma JPG por toma** (del medio de la toma, lado mayor ≤ 768 px) y, si puede, el audio en un archivo (mp3 o m4a, mono).
+3. Subidas (`resultado` paso 1): `{ toma, pedirSubida: true, tipo: "fotograma", indice: 1 }` por cada toma, y `{ toma, pedirSubida: true, tipo: "audio" }` una vez (opcional). La respuesta trae `subida.ruta`, como siempre. Van a un bucket PRIVADO: son material de un tercero, se usan para leer la estructura y el CRM los borra.
+4. Cierre (`resultado` paso 2): `{ toma, etapa: "analisis", duracion, tomas: [{ desde, hasta, fotograma: "<ruta>" }], audio?: "<ruta>", transcripcion?: [{ desde, hasta, texto }] }`. Responde `{ ok, estado: "listo", etapa: "analisis" }`.
+5. **Transcripción: opcional.** Si el trabajador tiene con qué (por ejemplo `ELEVENLABS_API_KEY` con su servicio de voz a texto, o una clave de otro servicio de transcripción), manda `transcripcion`; si no, la omite y el CRM sigue igual: clasifica las tomas mirando los fotogramas y la persona pega o corrige lo que se dice. La transcripción solo se usa para leer la función de cada frase; nunca se copia al video nuevo.
+6. Quién clasifica: el CRM (IA de visión sobre los fotogramas): tipo de toma, encuadre, si hay texto en pantalla y qué pasa, con palabras propias. El trabajador NO describe personas ni lee textos.
+7. No cuenta para ningún tope ni gasta créditos del proveedor de video. Un fallo no reintenta más de una vez (`maxIntentos: 2`).
+
+**C. Edición completa y control del video armado** (mismo día)
+
+1. `opciones.tonoMusica`: `"neutro" | "energia" | "suspenso" | "emotivo"`. Lo elige el CRM según la narrativa (editable por la persona). Si `opciones.musica` trae una URL, manda esa pista; si es `null`, el trabajador elige una pista propia de ese tono y la mezcla por debajo de la voz. Sin pistas disponibles, arma sin música y lo dice en `avisos`.
+2. `opciones.subtitulos` viene en `true` por defecto. En el `resultado` del armado, el trabajador puede confirmar con `subtitulos: true | false` si los quemó.
+3. **Fotogramas del final (opcional, recomendado)**: antes de cerrar el armado, subir de 3 a 6 fotogramas JPG del video ya armado con `{ toma, pedirSubida: true, tipo: "fotograma-final", indice: 1..6 }` y mandar sus rutas en el cierre: `fotogramas: ["<ruta>", …]`, en orden. El primero debe ser de los 2 primeros segundos; el último, del cierre con el rótulo; los demás, repartidos. Con ellos el CRM hace el control de calidad automático (gancho, producto visible, oferta y llamado al final, subtítulos) y lo deja anotado junto al video «por aprobar». Sin fotogramas, el control se hace solo con los datos (duración, plan), y lo dice.
+4. `duracion` en el resultado del armado ya existía: ahora se usa para comparar con el objetivo. Conviene mandarla siempre.
+
+### 14-oct-2026 · voz, uniones, música y análisis (lado del trabajador)
+
+Cómo quedó implementado lo del 14-oct del CRM (A, B y C) y lo poco que se añade. Nada de lo acordado cambia.
+
+**A. Voz**
+
+1. `contexto.voz.motor`: `"clip"` (o ausente) → el audio es el de los clips y **no se llama a ElevenLabs**, aunque el servidor tenga la clave. `"narracion"` → ElevenLabs si hay clave; **si no hay clave no falla**: usa el audio de los clips y lo dice en `avisos`. Equivalentes que el trabajador también entiende: `opciones.voz: "elevenlabs"` y `opciones.voz: "veo"`. `opciones.voz: false` sigue siendo «sin ninguna voz».
+2. **Bloque «AUDIO» del CRM** (A.3): cuando llega `contexto.voz.motor: "clip"` (o el `promptVideo` trae una línea que empieza por `AUDIO`), el trabajador **no agrega ninguna instrucción de voz** ni «sin diálogo»: el prompt del CRM va tal cual (solo se le suma el sufijo fijo «sin texto ni subtítulos en pantalla»). **Respaldo** para trabajos que no traen ni `motor` ni ese bloque: el trabajador arma la instrucción con `contexto.voz.acento`; si falta, con la región de `contexto.voz.idioma` (`es-MX` → México); si falta, con `contexto.pais`: ES → castellano peninsular; MX, CO, AR, CL, PE, EC → el suyo; cualquier otro → español neutro. Y agrega `contexto.voz.descripcion` igual en todas las escenas.
+3. `locucion` por escena (A.2): `"camara"` y `"narrador"` se dicen; `"texto"` y `"sin-voz"` no (en `texto` la frase va solo como subtítulo). Si la escena no trae `locucion`, cuenta como dicha si trae `voz`; el narrador sale del formato (historia, crochet, esqueleto, plastilina).
+4. **Nuevo en `progreso.escenas` (etapa `clips`): `aviso`** (texto, opcional). Hoy un solo caso: la escena se dice (`camara` o `narrador`) y el clip volvió sin pista de audio o en silencio → `aviso: "sin audio: …"`. El clip se entrega igual (`ruta`, sin `error`). Porqué: nunca debe salir un video mudo sin avisar; conviene que el CRM lo muestre junto al clip para regenerarlo. En el `armado` vuelve a salir en `avisos`, y si ninguna escena tiene voz el primer aviso lo dice.
+5. **Uniones en el armado** (A.4, sin campos nuevos): cada clip se lleva al mismo volumen con ganancia fija; se recortan los silencios largos del inicio y del final de cada clip hablado sin cortar palabras; fundidos de audio cortos en los cortes; el primer clip entra en seco. Consecuencia para el CRM: **la duración final puede ser algo menor que la suma de `duracion`** (silencios recortados) **o mayor en una escena** si `duracion` cortaría la frase (se avisa: «la escena N quedó en X s (se pedían Y)»). Va en `duracion` del resultado, como siempre.
+
+**B. Análisis** (implementado tal cual B.1–B.7)
+
+6. Cierre: `{ toma, etapa: "analisis", duracion, tomas: [{ desde, hasta, fotograma }], audio? }`. El audio se sube como MP3: la subida va con `{ tipo: "audio", extension: "mp3" }`.
+7. **Transcripción**: el servidor no tiene servicio de voz a texto, así que manda `transcripcion: null` y `transcripcionMotivo: "…"` (texto). Para el CRM es lo mismo que omitirla. Cuando haya servicio irá como `[{ desde, hasta, texto }]`. Campos de más en el cierre, informativos: `ancho`, `alto`, `tieneAudio`, `avisos`.
+8. **Motivos de fallo definitivos**: empiezan por `no analizable:` (pesa más de 200 MB, dura más de 3 min, no es un video legible, falta `referencia.url` https). Repetir no los arregla: conviene que el CRM no reintente esos.
+9. **Un fotograma por toma** (B.2). Sacar 2 o 3 en las tomas largas ayudaría a la IA de visión en tomas con movimiento, pero hoy la subida solo admite un `indice` por toma. Si se quiere: propuesta de `{ tipo: "fotograma", indice, parte: 1..3 }` y `tomas[].fotogramas: [ruta…]`. No implementado en ningún lado.
+10. El original se borra del servidor siempre, termine bien o mal; los fotogramas y el audio también, una vez subidos.
+
+**C. Edición completa**
+
+11. `opciones.tonoMusica` (C.1): la pista sale de la carpeta `musica\<tono>\` del servidor, que llena el dueño con pistas con licencia. Si `tonoMusica` no viene, se usa `neutro`. Si no hay pistas de ese tono, se usa una de `neutro` y se avisa; si tampoco hay, el video sale sin música y `avisos` trae una línea que empieza por **«El video salió SIN música»**. Nunca falla por la música (tampoco si no se puede bajar la de `opciones.musica`). **Nuevo: `opciones.musica: false`** = sin música y sin aviso (`null` = que elija el trabajador). El tono es libre: cualquier nombre que exista como carpeta sirve.
+12. `subtitulos: true | false` y `fotogramas: [ruta…]` (C.2 y C.3) van en el cierre del armado: 5 fotogramas, el primero del primer segundo y el último del cierre con el rótulo. Si la subida de fotogramas falla, el video se entrega igual, sin ellos.

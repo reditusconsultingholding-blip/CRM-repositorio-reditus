@@ -40,6 +40,7 @@ import {
   urlTikTokBusqueda,
   urlTikTokCreativeCenter,
   rotuloInvestigacion,
+  porqueDeFormato,
   faltaEnElCierre,
   versionVigente,
   type DatosVideo,
@@ -65,6 +66,7 @@ import { FotosProducto, enlacesDeFotos } from "./fotos-producto";
 import { FichaProductoBloque } from "./ficha-producto";
 import { ConvertirEnProyecto } from "./proyecto-video";
 import { ClonarAnuncio } from "./clonar-anuncio";
+import { CAMBIOS_VACIOS } from "@/lib/clonacion-video";
 import { EstudioVideo } from "./estudio-video";
 import { resumenProyecto } from "@/lib/proyecto-video";
 import { Clapperboard, ScanSearch } from "lucide-react";
@@ -143,6 +145,7 @@ const VACIO: DatosVideo = {
   fotosProducto: [],
   fichaProducto: FICHA_VACIA,
   referenciaTomas: [],
+  clonCambios: CAMBIOS_VACIOS,
 };
 
 /** Los campos del formulario tal como quedaron en un guion guardado. */
@@ -171,6 +174,7 @@ function datosDe(g: GuionGuardado): DatosVideo {
     fotosProducto: g.fotosProducto,
     fichaProducto: g.fichaProducto,
     referenciaTomas: g.referenciaTomas,
+    clonCambios: g.clonCambios,
   };
 }
 
@@ -614,15 +618,15 @@ export function CrearVideo(props: Props) {
             <ArrowLeft className="size-3.5" /> {prospecto.nombre}
           </Link>
         )}
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Estudio de video</h1>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">Creativos</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Dos formas de empezar; las dos terminan en el mismo estudio de cinco pasos (Plan · Activos · Escenas · Video · Exportar).
         </p>
         <div role="radiogroup" aria-label="Cómo empezar" className="mt-3 grid gap-2 sm:grid-cols-2" id="entradas-estudio">
           {(
             [
-              { m: "crear", titulo: "Crear video", texto: "Del producto al plan: investigación de mercado, formato, guion y plan de escenas.", Icono: Clapperboard },
-              { m: "clonar", titulo: "Clonar anuncio", texto: "De un anuncio que ya escala: se clona su estructura (ritmo, tomas, cierre) con tu producto. Nunca su material.", Icono: ScanSearch },
+              { m: "crear", titulo: "Crear video", texto: "Con el producto, el país, la oferta y dos fotos: investigación del país, formato, guion y video por escenas.", Icono: Clapperboard },
+              { m: "clonar", titulo: "Clonar video", texto: "De un video que ya funciona: se sube o se enlaza, marcas qué cambia (persona, idioma, producto, oferta) y se genera uno NUEVO con la misma estructura. Nunca se reutiliza su material.", Icono: ScanSearch },
             ] as const
           ).map(({ m, titulo, texto, Icono }) => (
             <button
@@ -666,22 +670,6 @@ export function CrearVideo(props: Props) {
         )}
       </div>
 
-      <BandejaAtencion
-        guiones={guiones}
-        puedeAprobar={props.puedeAprobarVideo}
-        onActualizado={(g) => (g.id === idGuardado ? alGuardar(g, false) : actualizarEnLista([g]))}
-        onAbrir={(g) => abrir(g, false)}
-        onRefrescar={refrescarGuiones}
-      />
-
-      <MisVideos
-        guiones={misGuiones}
-        trabajos={misTrabajos}
-        enCurso={fase ? { producto: datos.producto, etiqueta: fase } : null}
-        abiertoId={idGuardado}
-        onAbrir={(g) => abrir(g, false)}
-      />
-
       {/* ------------------------------------------- todo en un solo OK */}
       <Card
         onBlur={(e) => {
@@ -692,7 +680,7 @@ export function CrearVideo(props: Props) {
         }}
       >
         <CardHeader>
-          <CardTitle>{modo === "clonar" ? "Clonar anuncio · todo en un solo OK" : "Todo en un solo OK"}</CardTitle>
+          <CardTitle>{modo === "clonar" ? "Clonar video · lo mínimo" : "Crear video · lo mínimo"}</CardTitle>
           <CardDescription>
             Pon el producto, revisa la investigación, elige el formato y pulsa «Generar todo». Lo demás (guion, guardado
             y envío del video) se hace solo. Los pasos de abajo siguen ahí si quieres editar algo a mano.
@@ -712,6 +700,10 @@ export function CrearVideo(props: Props) {
               onEnlace={(v) => set("anuncioClonEnlace", v)}
               onTranscripcion={(v) => set("anuncioClon", v)}
               onTomas={(t) => set("referenciaTomas", t)}
+              cambios={datos.clonCambios}
+              onCambios={(c) => set("clonCambios", c)}
+              servidorActivo={props.videoActivo}
+              producto={datos.producto}
             />
           )}
           <div className="grid gap-4 md:grid-cols-2">
@@ -891,6 +883,11 @@ export function CrearVideo(props: Props) {
                 <Chip>Elegido a mano: {formato.nombre}</Chip>
               )}
             </div>
+            {formato && porqueDeFormato(datos.analisisProducto, formato.slug) && (
+              <p className="text-xs leading-relaxed text-muted-foreground" data-porque-formato>
+                <strong className="font-medium text-foreground">Por qué {formato.nombre}:</strong> {porqueDeFormato(datos.analisisProducto, formato.slug)}
+              </p>
+            )}
           </div>
 
           {faltantes && (
@@ -935,6 +932,34 @@ export function CrearVideo(props: Props) {
           </div>
         </CardContent>
       </Card>
+
+      <BandejaAtencion
+        guiones={guiones}
+        puedeAprobar={props.puedeAprobarVideo}
+        onActualizado={(g) => (g.id === idGuardado ? alGuardar(g, false) : actualizarEnLista([g]))}
+        onAbrir={(g) => abrir(g, false)}
+        onRefrescar={refrescarGuiones}
+      />
+
+      <MisVideos
+        guiones={misGuiones}
+        trabajos={misTrabajos}
+        enCurso={fase ? { producto: datos.producto, etiqueta: fase } : null}
+        abiertoId={idGuardado}
+        onAbrir={(g) => abrir(g, false)}
+      />
+
+      <LotesVideos
+        formatos={formatos.map((f) => ({ slug: f.slug, nombre: f.nombre }))}
+        prospectos={props.prospectosLote}
+        guiones={guiones}
+        onGuion={(g) => actualizarEnLista([g])}
+        onAbrir={(g) => abrir(g, false)}
+      />
+
+      <ConfigVideosTarjeta esCeo={props.esCeo} inicial={props.config} />
+
+      <h2 className="mt-2 font-heading text-lg font-semibold tracking-tight">Paso a paso (para editar a mano)</h2>
 
       {/* ------------------------------------------------ 01 formato */}
       <Card>
@@ -1643,16 +1668,6 @@ export function CrearVideo(props: Props) {
           )}
         </CardContent>
       </Card>
-
-      <LotesVideos
-        formatos={formatos.map((f) => ({ slug: f.slug, nombre: f.nombre }))}
-        prospectos={props.prospectosLote}
-        guiones={guiones}
-        onGuion={(g) => actualizarEnLista([g])}
-        onAbrir={(g) => abrir(g, false)}
-      />
-
-      <ConfigVideosTarjeta esCeo={props.esCeo} inicial={props.config} />
 
       {/* El Estudio de video: el proyecto del guion abierto, a pantalla completa. */}
       {estudio && actual && vigenteActual?.proyecto && (

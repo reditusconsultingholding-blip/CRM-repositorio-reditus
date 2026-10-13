@@ -93,7 +93,9 @@ export function CrearVariaciones({ proyecto, analisis, ocupado, onCerrar, onCrea
               <span>
                 Generar también una imagen y un clip nuevos para el gancho
                 <span className="block text-xs text-muted-foreground">
-                  Sin esto solo cambia el texto (voz y subtítulo) sobre el mismo clip: no cuesta nada. Si en la escena 1 alguien habla a cámara, márcalo: los labios no cambian solos.
+                  {proyecto.contexto.voz.motor === "clip"
+                    ? "Sin esto se conserva la imagen del gancho y se genera solo su clip (la voz la dice el clip). Con esto, también la imagen."
+                    : "Sin esto solo cambia el texto (voz y subtítulo) sobre el mismo clip: no cuesta nada."}
                 </span>
               </span>
             </label>

@@ -4,7 +4,7 @@
 // (bucket `chat-files`, carpeta `videos/`), escrito y leído solo por acciones
 // del servidor. Ver `src/app/(protected)/videos/actions.ts`.
 import { leerAnuncios, leerFuentes, type AnuncioVideo, type FuenteConsultada } from "@/lib/investigacion-video/tipos";
-import { leerTomas, type TomaReferencia } from "@/lib/clonacion-video";
+import { leerCambios, leerTomas, type CambiosClon, type TomaReferencia } from "@/lib/clonacion-video";
 import { MAX_FOTOS_PROYECTO, leerFicha, leerProyecto, type FichaProducto, type ProyectoVideo } from "@/lib/proyecto-video";
 
 export { VIDEOS_ROLES } from "@/lib/roles";
@@ -154,6 +154,8 @@ export type DatosVideo = {
   fichaProducto: FichaProducto;
   /** «Clonar anuncio»: la estructura de la referencia, toma por toma (función, duración, tipo, encuadre). Vacío = no se clona. */
   referenciaTomas: TomaReferencia[];
+  /** «Clonar video con cambios»: qué debe ser distinto en el video nuevo (persona, idioma, nombre del producto, cierre, notas). */
+  clonCambios: CambiosClon;
 };
 
 /** Rótulo honesto de la investigación: dice de dónde salió lo que se lee. */
@@ -396,6 +398,7 @@ export function leerDatosVideo(raw: unknown): DatosVideo {
       .slice(0, MAX_FOTOS_PROYECTO),
     fichaProducto: leerFicha(o.fichaProducto),
     referenciaTomas: leerTomas(o.referenciaTomas),
+    clonCambios: leerCambios(o.clonCambios),
   };
 }
 
@@ -547,4 +550,15 @@ export function lineaMercado(refs: Referencia[]): string {
   return n
     ? `MERCADO: ${n} ${n === 1 ? "referencia pegada" : "referencias pegadas"} por el equipo (la IA no vio los anuncios)`
     : "MERCADO: sin referencias de mercado";
+}
+
+/** El porqué (una línea) con que la investigación recomendó un formato. Vacío si no lo recomendó. */
+export function porqueDeFormato(analisis: string, slug: string): string {
+  const i = analisis.search(/FORMATOS RECOMENDADOS/i);
+  if (i < 0 || !slug) return "";
+  const linea = analisis
+    .slice(i)
+    .split("\n")
+    .find((l) => new RegExp(`(^|[^a-z0-9-])${slug}([^a-z0-9-]|$)`, "i").test(l) && !/FORMATOS RECOMENDADOS/i.test(l));
+  return linea ? linea.replace(new RegExp(`^.*?${slug}\\s*[·:—-]*\\s*`, "i"), "").trim().slice(0, 300) : "";
 }

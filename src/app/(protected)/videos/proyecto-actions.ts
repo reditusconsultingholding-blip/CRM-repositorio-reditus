@@ -10,7 +10,11 @@ import { VIDEOS_ROLES, enlaceSeguro, leerDatosVideo, versionVigente, type GuionG
 import { ID_VALIDO, escribirGuionArchivo, leerGuionArchivo } from "@/lib/videos-server";
 import {
   MAX_FOTOS_PROYECTO,
+  TONOS_MUSICA,
   anotar,
+  leerVoz,
+  type TonoMusica,
+  vozDePais,
   escenasParaClip,
   escenasParaImagen,
   faltaParaArmar,
@@ -27,7 +31,7 @@ import {
   type TipoPieza,
 } from "@/lib/proyecto-video";
 import { heredarProyecto, normalizarPlan, planDeCorreccion, proyectoDeVariacion, type CorreccionProyecto, type PedidoVariacion } from "@/lib/proyecto-video-plan";
-import { alDiaYAvanzar, analizarFotosProducto, avanzar, conCandado, datosDePlan, encolarEtapa, marcarEnMarcha, ponerAlDiaProyecto, proponerPlan, type AnalisisFotos } from "@/lib/proyecto-video-server";
+import { alDiaYAvanzar, analizarFotosProducto, armarProyecto, avanzar, conCandado, encolarEtapa, marcarEnMarcha, ponerAlDiaProyecto, type AnalisisFotos } from "@/lib/proyecto-video-server";
 import { ID_TRABAJO, type EtapaTrabajo, type TrabajoVista } from "@/lib/trabajos-video";
 import { cancelarTrabajo, creditosDeHoy, servidorVideoActivo, topeDeHoy, type TopeDiario } from "@/lib/trabajos-video-server";
 import { leerConfigVideos, type ConfigVideos } from "@/lib/videos-config";
@@ -195,6 +199,7 @@ export async function crearProyecto(id: string, pedido: PedidoProyecto): Promise
       fotos,
       analisisProducto: textoFicha(ficha),
       cierre: { oferta: x.g.oferta, llamadoALaAccion: x.g.llamado },
+      voz: previo?.contexto.voz ?? vozDePais(x.g.pais),
     };
     const g: GuionGuardado = { ...x.g, fotosProducto: fotos, fichaProducto: ficha };
 
@@ -204,41 +209,7 @@ export async function crearProyecto(id: string, pedido: PedidoProyecto): Promise
       const h = heredarProyecto(origen.proyecto, origen.guion, x.version.guion, contexto);
       p = { ...h.proyecto, avisos: [`Proyecto traído de la v${origen.n}: lo aprobado se conserva.`, ...h.avisos].slice(0, 8) };
     } else {
-      const plan = await proponerPlan(datosDePlan(g, x.version, x.formato, fotos, ficha), x.formato, g.pais, g.referenciaTomas);
-      const cfg = await leerConfig(x.admin);
-      // Un plan de plantilla (sin IA) con escenas que cuestan no arranca solo: sus prompts son genéricos.
-      const hayGeneradas = plan.escenas.some((e) => e.tipo === "generada");
-      const arranca = pedido?.directo === true && (plan.origen === "ia" || !hayGeneradas);
-      p = {
-        topeIntentos: cfg.intentosPorEscena,
-        auto: {
-          activo: arranca,
-          imagenes: cfg.autoImagenes,
-          exigencia: cfg.exigencia,
-          armarDirecto: cfg.armarAlTerminarClips,
-          parada:
-            pedido?.directo === true && !arranca
-              ? { codigo: "datos", texto: `El plan salió ${g.referenciaTomas.length ? "de la referencia, toma por toma," : "de la plantilla del formato"} sin IA (no está disponible): sus prompts son genéricos. Revísalos en «Plan» y pulsa «Seguir» para que el proyecto avance solo.`, fecha: ahora }
-              : null,
-        },
-        variacionDe: null,
-        contexto,
-        escenas: plan.escenas,
-        costo: { creditos: 0, segundosGenerados: 0, imagenes: 0 },
-        final: { estado: "pendiente", url: null, armados: 0, trabajoId: null, nota: "" },
-        opciones: previo?.opciones ?? { subtitulos: true, voz: true, musica: null, modelo: null },
-        origenPlan: plan.origen,
-        avisos: [...plan.avisos, ...(fichaConDatos(ficha) ? [] : ["No hay ficha del producto: revisa a mano que los prompts no digan nada del tamaño ni del uso que no sea cierto."])].slice(0, 8),
-        // Lo que ya se gastó en un plan anterior de esta versión no desaparece al rehacerlo.
-        gastos: previo?.gastos ?? {},
-        trabajosAbiertos: [],
-        registro: [
-          ...(previo?.registro ?? []),
-          { fecha: ahora, texto: `Plan de escenas ${plan.origen === "ia" ? "propuesto por IA" : g.referenciaTomas.length ? "armado desde la referencia (sin IA)" : "armado con la plantilla del formato (sin IA)"}${g.referenciaTomas.length ? ", clonando la estructura de la referencia" : ""}: ${plan.escenas.length} escenas (${x.profile.name}).` },
-        ],
-        creadoAt: ahora,
-        creadoPor: x.profile.name,
-      };
+      p = await armarProyecto({ admin: x.admin, g, version: x.version, formato: x.formato, fotos, ficha, directo: pedido?.directo === true, quien: x.profile.name, previo });
     }
     return guardar({ ...x, g }, p, undefined, undefined, true);
   });
@@ -278,6 +249,10 @@ export async function consultarProyecto(id: string): Promise<EstadoProyecto | { 
 export type PlanEditado = {
   escenas: unknown;
   opciones?: { subtitulos?: unknown; voz?: unknown; musica?: unknown; modelo?: unknown };
+  /** La voz del proyecto: motor, acento y descripción fija. */
+  vozProyecto?: unknown;
+  /** Tono de la música: neutro, energia, suspenso o emotivo. */
+  tonoMusica?: unknown;
 };
 
 /**
@@ -298,7 +273,7 @@ export async function guardarPlan(id: string, plan: PlanEditado): Promise<Estado
       return { ...o, imagen: anterior ? anterior.imagen : piezaNueva(), clip: anterior ? anterior.clip : piezaNueva() };
     });
     if (!crudas.length) return { error: "El plan no puede quedar sin escenas." };
-    const n = normalizarPlan(crudas, { guion: x.version.guion, formato: x.formato, fotos: p.contexto.fotos, fichaTexto: p.contexto.analisisProducto, producto: p.contexto.producto }, { verificarVoz: false });
+    const n = normalizarPlan(crudas, { guion: x.version.guion, formato: x.formato, fotos: p.contexto.fotos, fichaTexto: p.contexto.analisisProducto, producto: p.contexto.producto, voz: plan?.vozProyecto && typeof plan.vozProyecto === "object" ? leerVoz(plan.vozProyecto, p.contexto.pais) : p.contexto.voz }, { verificarVoz: false });
     const huella = (e: EscenaProyecto[]) => JSON.stringify(e.map((s) => [s.tipo, s.duracion, s.voz, s.fotoUrl, s.movimiento, s.imagen.url, s.clip.url]));
     const cambioElVideo = huella(n.escenas) !== huella(p.escenas);
     p.escenas = n.escenas;
@@ -317,6 +292,17 @@ export async function guardarPlan(id: string, plan: PlanEditado): Promise<Estado
         modelo: modelo || null,
       };
       if (JSON.stringify(p.opciones) !== antes) finalPorRehacer(p);
+    }
+    if ((TONOS_MUSICA as readonly string[]).includes(plan?.tonoMusica as string) && plan.tonoMusica !== p.tonoMusica) {
+      p.tonoMusica = plan.tonoMusica as TonoMusica;
+      finalPorRehacer(p);
+    }
+    if (plan?.vozProyecto && typeof plan.vozProyecto === "object") {
+      const nueva = leerVoz(plan.vozProyecto, p.contexto.pais);
+      if (JSON.stringify(nueva) !== JSON.stringify(p.contexto.voz)) {
+        p.contexto.voz = nueva;
+        anotar(p, `Voz del proyecto cambiada por ${x.profile.name}: ${nueva.motor === "clip" ? "la del clip" : "narración aparte"}, ${nueva.acento}.`);
+      }
     }
     if (cambioElVideo) finalPorRehacer(p);
     anotar(p, `Plan editado por ${x.profile.name}: ${p.escenas.length} escenas.`);

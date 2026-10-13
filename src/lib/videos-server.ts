@@ -1,6 +1,7 @@
 import "server-only";
 import { llamarClaude } from "@/lib/ia-claude";
-import { textoDeReferencia } from "@/lib/clonacion-video";
+import { textoDeCambios, textoDeReferencia } from "@/lib/clonacion-video";
+import { acentoDePais } from "@/lib/proyecto-video";
 import { lineaAnuncio } from "@/lib/investigacion-video/tipos";
 import { fichaConDatos, textoFicha } from "@/lib/proyecto-video";
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -166,7 +167,10 @@ POR COMPLETAR CON EL CLIENTE: la lista de todo lo que dejaste entre corchetes.
 
 Reglas que no se rompen:
 - La estructura emocional es la de Reditus: impacto, bajada, refuerzo, subida con el producto y CTA con la oferta local.
-- Diálogo entre comillas, frases cortas, como habla la gente del país indicado. Cada bloque hablado, de 20 a 24 palabras como máximo.
+- EL GANCHO Y EL DESARROLLO SALEN DE LOS DOLORES de la investigación («DOLORES EN PALABRAS DEL CLIENTE»): el paso 1 arranca sobre uno de esos dolores, dicho como lo diría esa persona; los pasos 2 y 3 lo desarrollan. Si la investigación no trae dolores, usa lo que dio el cliente y dilo en «POR COMPLETAR CON EL CLIENTE».
+- ARRANQUE RÁPIDO: el paso 1 es una sola frase corta que engancha en el primer segundo. Nada de saludos, presentaciones ni «hola, hoy te quiero hablar de».
+- Diálogo entre comillas, frases cortas, como habla la gente del país indicado (su acento, su vocabulario y su forma de tratar: «tú», «usted», «vos» o «vosotros» según el país). Cada bloque hablado, de 20 a 24 palabras como máximo.
+- La voz la genera el modelo de video dentro de cada clip de hasta 8 segundos: escribe ORACIONES COMPLETAS Y CORTAS, de 16 palabras o menos cada una, que se puedan decir enteras en un clip. Ninguna oración puede necesitar dos clips. Los números que se dicen van como se pronuncian.
 - PROHIBIDO inventar precios, descuentos, cifras, porcentajes, plazos, testimonios, nombres de clientes, certificaciones, ingredientes o resultados. Todo dato que no venga en «Datos del cliente» va entre corchetes para completar, por ejemplo [precio], [tiempo de entrega], [resultado que confirme el cliente].
 - Sin promesas de salud ni credenciales («soy el doctor…»). En temas sensibles el hook es una pregunta.
 - Solo conoces lo que te dan. No afirmes haber visto la tienda, el producto ni anuncios. Si hay «Investigación de mercado», úsala como apuntes del equipo; si dice que no hay referencias, no la menciones dentro del guion.
@@ -227,7 +231,9 @@ export type AnuncioReferencia = {
 export async function analizarAnuncioReferencia(datos: DatosVideo): Promise<AnuncioReferencia> {
   // La estructura toma por toma del formulario guiado y lo que se haya pegado (transcripción) van juntos.
   const tomas = datos.referenciaTomas.length ? `ESTRUCTURA TOMA POR TOMA (descrita por el equipo):\n${textoDeReferencia(datos.referenciaTomas)}` : "";
-  const texto = [tomas, datos.anuncioClon.trim()].filter(Boolean).join("\n\n");
+  const hayReferencia = !!tomas || !!datos.anuncioClon.trim();
+  const cambios = hayReferencia ? textoDeCambios(datos.clonCambios, { producto: datos.producto, oferta: datos.oferta, llamado: datos.llamado, acento: acentoDePais(datos.pais).acento }) : "";
+  const texto = [tomas, datos.anuncioClon.trim(), cambios].filter(Boolean).join("\n\n");
   return { fuente: texto ? "pegado" : "sin_referencia", texto, enlace: enlaceSeguro(datos.anuncioClonEnlace) ?? "" };
 }
 
