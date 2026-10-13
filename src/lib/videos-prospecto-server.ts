@@ -202,6 +202,10 @@ async function etapaLanzar(admin: Admin, c: CandidatoVideo, v: VideoProspecto): 
   if (escrito.origen !== "ia") return detener(v, "investigacion", `La IA no escribió el guion (${(escrito.aviso ?? "no está disponible").split(". ")[0]}). Vuelve a correrlo cuando la IA responda.`);
   let texto = escrito.texto;
   if (faltaEnElCierre(texto, datos).length) texto = (await regenerarCierreGuion(datos, texto)).texto;
+  // En un prospecto no hay cliente a quien preguntar: las situaciones de uso cotidianas que la IA marcó
+  // «[…, confirmado por el cliente]» se aceptan como supuestos (se revisan al aprobar el video). Lo que
+  // trae cifras o promesas medibles NO se acepta solo: sigue deteniendo.
+  texto = texto.replace(/\[([^\[\]]{3,120}?),\s*confirmado por el cliente\]/gi, (todo, uso: string) => (/\d|%|garant|cur|elimin|cl[ií]nic/i.test(uso) ? todo : uso.trim()));
   const sinCompletar = corchetes(pasosDelGuion(texto).map((p) => p.voz).join(" "));
   const quien = { id: v.decididoPorId, nombre: v.decididoPor || "Automático" };
   const g: GuionGuardado = {
