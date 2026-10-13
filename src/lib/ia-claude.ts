@@ -9,6 +9,8 @@ import { dobleDeIA } from "@/lib/ia-doble";
 
 export const MODELO_IA = "claude-sonnet-5";
 
+const MARGEN_PENSAR = 8000;
+
 export type ResultadoIA = { texto: string } | { error: string };
 
 /**
@@ -45,7 +47,10 @@ export async function llamarClaude(system: string, user: string | BloqueIA[], ma
       },
       body: JSON.stringify({
         model: MODELO_IA,
-        max_tokens: maxTokens,
+        // El modelo piensa antes de escribir y ese razonamiento gasta del mismo tope:
+        // con topes cortos (400–1700) la respuesta salía vacía. Se deja margen para pensar.
+        max_tokens: maxTokens + MARGEN_PENSAR,
+        output_config: { effort: "medium" },
         system,
         messages: [{ role: "user", content: user }],
       }),
@@ -60,7 +65,7 @@ export async function llamarClaude(system: string, user: string | BloqueIA[], ma
       .map((c: { text: string }) => c.text)
       .join("\n")
       .trim();
-    if (!texto) return { error: "La IA respondió vacío. Intenta de nuevo." };
+    if (!texto) return { error: `La IA respondió vacío (${data?.stop_reason ?? "sin motivo"}). Intenta de nuevo.` };
     return { texto };
   } catch (err) {
     return { error: `No se pudo contactar a la IA: ${err instanceof Error ? err.message : "error de red"}` };
