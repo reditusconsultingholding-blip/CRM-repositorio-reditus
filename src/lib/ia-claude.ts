@@ -26,7 +26,7 @@ export async function llamarClaudeConImagenes(system: string, user: string, imag
 
 type BloqueIA = { type: "text"; text: string } | { type: "image"; source: { type: "url"; url: string } };
 
-export async function llamarClaude(system: string, user: string | BloqueIA[], maxTokens: number): Promise<ResultadoIA> {
+export async function llamarClaude(system: string, user: string | BloqueIA[], maxTokens: number, opciones: { sinPensar?: boolean } = {}): Promise<ResultadoIA> {
   // Doble de prueba: SOLO con la cola de prueba y pedido a propósito (IA_DOBLE=1). Nunca en producción.
   const doble = dobleDeIA(system, user);
   if (doble) return doble;
@@ -49,8 +49,8 @@ export async function llamarClaude(system: string, user: string | BloqueIA[], ma
         model: MODELO_IA,
         // El modelo piensa antes de escribir y ese razonamiento gasta del mismo tope:
         // con topes cortos (400–1700) la respuesta salía vacía. Se deja margen para pensar.
-        max_tokens: maxTokens + MARGEN_PENSAR,
-        output_config: { effort: "medium" },
+        // `sinPensar`: para salidas largas y mecánicas (el plan en JSON), donde el razonamiento se comía todo el tope.
+        ...(opciones.sinPensar ? { max_tokens: maxTokens, thinking: { type: "disabled" } } : { max_tokens: maxTokens + MARGEN_PENSAR, output_config: { effort: "medium" } }),
         system,
         messages: [{ role: "user", content: user }],
       }),

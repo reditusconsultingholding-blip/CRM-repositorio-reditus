@@ -18,7 +18,7 @@ import { configVideos } from "./proyecto-actions";
 // guiones viven en Storage (no hay tabla), así que se leen con el cliente de
 // servicio DESPUÉS de validar el rol.
 // Las acciones de esta pantalla (investigación con anuncios, guion) pueden tardar más que el límite por defecto.
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export default async function VideosPage({
   searchParams,

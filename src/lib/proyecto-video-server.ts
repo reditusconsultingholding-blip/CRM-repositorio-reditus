@@ -200,7 +200,7 @@ export async function proponerPlan(d: DatosPlan, formato: FormatoVideo, pais: st
     "--- GUION ---",
     d.guion,
   ].join("\n");
-  const r = await llamarClaude(`${SISTEMA_PLAN}\n\n--- BASE DE CONOCIMIENTO DE REDITUS ---\n${REGLAS_COMUNES}\n\n--- FORMATO ---\n${fichaFormato(formato)}`, usuario, 9000);
+  const r = await llamarClaude(`${SISTEMA_PLAN}\n\n--- BASE DE CONOCIMIENTO DE REDITUS ---\n${REGLAS_COMUNES}\n\n--- FORMATO ---\n${fichaFormato(formato)}`, usuario, 9000, { sinPensar: true });
   if ("error" in r) return respaldo(r.error.replace(" Mientras tanto puedes escribirlo a mano.", ""));
   const crudo = primerJson(r.texto) as { escenas?: unknown; voz?: unknown; tonoMusica?: unknown } | null;
   const lista = Array.isArray(crudo?.escenas) ? crudo.escenas : null;
