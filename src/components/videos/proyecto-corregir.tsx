@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Wrench } from "lucide-react";
-import { MOVIMIENTOS, MOVIMIENTO_LABELS, NOMBRE_PASO, TOPE_INTENTOS_ESCENA, type Movimiento, type ProyectoVideo } from "@/lib/proyecto-video";
+import { MOVIMIENTOS, MOVIMIENTO_LABELS, NOMBRE_PASO, type Movimiento, type ProyectoVideo } from "@/lib/proyecto-video";
 import { planDeCorreccion, type CorreccionProyecto } from "@/lib/proyecto-video-plan";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -164,7 +164,7 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
                     {e.titulo || NOMBRE_PASO[e.paso]} · {e.duracion} s
                   </span>
                   <span className="font-mono text-[11px] text-muted-foreground">
-                    imagen {e.imagen.intentos}/{TOPE_INTENTOS_ESCENA} · clip {e.clip.intentos}/{TOPE_INTENTOS_ESCENA}
+                    imagen {e.imagen.intentos}/{proyecto.topeIntentos} · clip {e.clip.intentos}/{proyecto.topeIntentos}
                   </span>
                 </span>
                 <div className="flex flex-wrap gap-x-4 gap-y-1">

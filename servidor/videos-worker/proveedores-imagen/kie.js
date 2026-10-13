@@ -139,6 +139,7 @@ module.exports = {
       }
       if (!["waiting", "queuing", "generating"].includes(estado)) throw new Error(`Kie devolvió un estado que no se esperaba: ${String(estado).slice(0, 60)}`);
       if (Date.now() > limite) throw new Error(`Kie lleva más de ${k.limiteMinutosPorImagen || 10} minutos con la imagen de la escena ${escena.n}; al volver a pedirla se retoma la misma tarea (no se paga otra).`);
+      if (ctx.fase) ctx.fase(estado === "generating" ? "generando" : "cola");
       await ctx.latir(`Escena ${escena.n}: imagen ${estado === "generating" ? "generándose en Kie" : "en la cola de Kie"}`);
       await esperar(cada);
       cada = Math.min(cada + 2000, 15000);

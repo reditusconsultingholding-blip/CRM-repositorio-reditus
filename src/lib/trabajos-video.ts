@@ -16,7 +16,7 @@
 
 import { leerContexto, leerEscenas, type ContextoProyecto, type EscenaProyecto, type TipoPieza } from "@/lib/proyecto-video";
 
-/** Tope de videos que se pueden pedir por día (hora de Bogotá). Edítalo aquí. */
+/** Tope de videos por día cuando no hay configuración guardada. El vigente lo edita el CEO en la sección (`lib/videos-config.ts`). */
 export const TOPE_DIARIO_VIDEOS = 6;
 /** Veces que un trabajo puede tomarse antes de quedar en `fallo`. */
 export const MAX_INTENTOS_VIDEO = 3;
@@ -162,6 +162,8 @@ export type TrabajoVideo = {
   reportes: ReporteEscena[];
   /** Créditos totales que el trabajador dijo haber gastado al cerrar. */
   creditos: number;
+  /** El proyecto es una variación de otro (cuenta para el tope de variaciones, no para el de videos). */
+  variacion: boolean;
 
   estado: EstadoTrabajo;
   motivo: string;
@@ -232,14 +234,20 @@ const escenaFuera = (e: EscenaProyecto) => ({
 export function paraTrabajador(t: TrabajoVideo): Record<string, unknown> {
   if (!t.etapa) {
     const deAntes: Record<string, unknown> = { ...t };
-    for (const k of ["etapa", "contexto", "escenasEtapa", "todas", "reportes", "creditos"]) delete deAntes[k];
+    for (const k of ["etapa", "contexto", "escenasEtapa", "todas", "reportes", "creditos", "variacion"]) delete deAntes[k];
     return deAntes;
   }
   const resto: Record<string, unknown> = { ...t };
   delete resto.escenasEtapa;
   delete resto.reportes;
   const pendientes = t.etapa === "armado" ? t.escenasEtapa : escenasSinReportar(t);
-  return { ...resto, escenas: pendientes.map(escenaFuera), todas: t.todas.map(escenaFuera) };
+  // Armado directo: un clip que nadie revisó todavía se arma igual (la persona lo ve en el video).
+  // Al trabajador le llega como aprobado y marcado `sinRevisar`.
+  const paraArmar = (e: EscenaProyecto) => {
+    const fuera = escenaFuera(e);
+    return e.tipo === "generada" && e.clip.estado === "por-aprobar" && e.clip.url ? { ...fuera, clip: { ...fuera.clip, estado: "aprobada", sinRevisar: true } } : fuera;
+  };
+  return { ...resto, escenas: pendientes.map(escenaFuera), todas: t.todas.map(paraArmar) };
 }
 
 const txt = (v: unknown, max: number) => (typeof v === "string" ? v : "").slice(0, max);
@@ -307,6 +315,7 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
         };
       }),
     creditos: Math.max(0, num(o.creditos)),
+    variacion: o.variacion === true,
     pedidoPor: { id: txt(por.id, 40), nombre: txt(por.nombre, 160) },
     origen: o.origen === "correccion" ? "correccion" : "manual",
     cierre: {

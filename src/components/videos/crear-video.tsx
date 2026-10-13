@@ -18,8 +18,8 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { analizarProducto, consultarFuentesVideo, escribirGuion, regenerarCierre, guardarGuionVideo, misVideos, resumirMercado } from "@/app/(protected)/videos/actions";
-import { analizarFotos, crearProyecto, pedirEtapa } from "@/app/(protected)/videos/proyecto-actions";
+import { analizarProducto, consultarFuentesVideo, escribirGuion, guionesAlDia, regenerarCierre, guardarGuionVideo, misVideos, resumirMercado } from "@/app/(protected)/videos/actions";
+import { analizarFotos, crearProyecto, type EstadoConfig } from "@/app/(protected)/videos/proyecto-actions";
 import { FICHA_VACIA, fichaConDatos, hayTrabajoEnCurso } from "@/lib/proyecto-video";
 import { guardarGuion as guardarGuionProspecto } from "@/app/(protected)/prospectos/prospeccion-actions";
 import type { FormatoTarjeta } from "@/lib/video-formatos";
@@ -63,7 +63,14 @@ import type { EstadoFuente } from "@/lib/investigacion-video/tipos";
 import { corchetes, trabajoActivo, type TrabajoVista } from "@/lib/trabajos-video";
 import { FotosProducto, enlacesDeFotos } from "./fotos-producto";
 import { FichaProductoBloque } from "./ficha-producto";
-import { ConvertirEnProyecto, ProyectoVideoPanel } from "./proyecto-video";
+import { ConvertirEnProyecto } from "./proyecto-video";
+import { ClonarAnuncio } from "./clonar-anuncio";
+import { EstudioVideo } from "./estudio-video";
+import { resumenProyecto } from "@/lib/proyecto-video";
+import { Clapperboard, ScanSearch } from "lucide-react";
+import { BandejaAtencion } from "./bandeja-atencion";
+import { ConfigVideosTarjeta } from "./config-videos";
+import { LotesVideos, type ProspectoLote } from "./lotes-videos";
 
 export type ProspectoOrigen = { id: string; nombre: string };
 
@@ -81,6 +88,10 @@ type Props = {
   puedeAprobarVideo: boolean;
   /** El CEO puede reabrir los intentos de una escena que llegó al tope. */
   esCeo: boolean;
+  /** Topes y automatización vigentes, con lo usado hoy. */
+  config: EstadoConfig | null;
+  /** Prospectos del embudo que se pueden meter a un lote (solo equipo comercial). */
+  prospectosLote: ProspectoLote[];
   /** Guion que se abre al entrar (`/videos?guion=<id>`, el enlace de los avisos). */
   abrirGuionId: string | null;
   /** Lo que va debajo de «Guiones guardados» (la cola de videos del CEO). */
@@ -131,6 +142,7 @@ const VACIO: DatosVideo = {
   investigacionCache: "",
   fotosProducto: [],
   fichaProducto: FICHA_VACIA,
+  referenciaTomas: [],
 };
 
 /** Los campos del formulario tal como quedaron en un guion guardado. */
@@ -158,6 +170,7 @@ function datosDe(g: GuionGuardado): DatosVideo {
     investigacionCache: g.investigacionCache,
     fotosProducto: g.fotosProducto,
     fichaProducto: g.fichaProducto,
+    referenciaTomas: g.referenciaTomas,
   };
 }
 
@@ -242,8 +255,15 @@ export function CrearVideo(props: Props) {
     fotosRef.current = fotos;
   });
   const listaFotos = useMemo(() => enlacesDeFotos(fotos), [fotos]);
-  /** Los datos tal como se guardan y viajan al servidor: con las fotos puestas. */
-  const datosCompletos = useMemo<DatosVideo>(() => ({ ...datos, fotosProducto: listaFotos }), [datos, listaFotos]);
+  // Las dos entradas: «Crear video» (del producto al plan) y «Clonar anuncio» (de una referencia al plan).
+  const [modo, setModo] = useState<"crear" | "clonar">(deEnlace?.referenciaTomas.length ? "clonar" : "crear");
+  // El Estudio de video (pantalla completa) del guion abierto, cuando ya es un proyecto.
+  const [estudio, setEstudio] = useState(!!deEnlace && !!versionVigente(deEnlace)?.proyecto);
+  /** Los datos tal como se guardan y viajan al servidor: con las fotos puestas (y la referencia solo si se está clonando). */
+  const datosCompletos = useMemo<DatosVideo>(
+    () => ({ ...datos, fotosProducto: listaFotos, referenciaTomas: modo === "clonar" ? datos.referenciaTomas : [] }),
+    [datos, listaFotos, modo],
+  );
   const arriba = useRef<HTMLDivElement>(null);
 
   const formato = useMemo(() => formatos.find((f) => f.slug === datos.formato) ?? null, [formatos, datos.formato]);
@@ -334,7 +354,7 @@ export function CrearVideo(props: Props) {
   async function terminarTodo(d: DatosVideo, texto: string, origenTexto: OrigenGuion) {
     const lista = enlacesDeFotos(fotosRef.current);
     setFase("Guardando el guion");
-    const g = await guardarGuionVideo({ id: idGuardado, datos: { ...d, fotosProducto: lista }, guion: texto, origen: origenTexto, prospectoId });
+    const g = await guardarGuionVideo({ id: idGuardado, datos: { ...d, fotosProducto: lista, referenciaTomas: modo === "clonar" ? d.referenciaTomas : [] }, guion: texto, origen: origenTexto, prospectoId });
     if ("error" in g) {
       setFase(null);
       return void toast.error(g.error, { duration: 9000 });
@@ -352,36 +372,34 @@ export function CrearVideo(props: Props) {
       setAvisoRapido("El guion no cambió y ya tiene su proyecto por escenas: continúa en el paso 07.");
       return void alProyecto();
     }
-    setFase("Proponiendo el plan de escenas");
-    const p = await crearProyecto(g.guardado.id, { fotos: lista, ficha: g.guardado.fichaProducto });
+    setFase("Proponiendo el plan y arrancando el modo directo");
+    const p = await crearProyecto(g.guardado.id, { fotos: lista, ficha: g.guardado.fichaProducto, directo: true });
     if ("error" in p) {
       setFase(null);
       setAvisoRapido(`El guion quedó guardado, pero el plan de escenas no se pudo armar: ${p.error}`);
       return;
     }
     alGuardar(p.guardado, false);
-    if (!props.videoActivo) {
-      setFase(null);
-      setAvisoRapido("Investigación, guion y plan de escenas listos y guardados. La generación de imágenes y clips se activa al conectar el servidor de videos; mientras tanto puedes revisar y editar el plan en el paso 07.");
-      toast.success("Plan de escenas listo");
-      return void alProyecto();
-    }
-    setFase("Enviando las imágenes a la cola");
-    const v = await pedirEtapa(p.guardado.id, "imagenes");
+    setEstudio(true);
     setFase(null);
-    if ("error" in v) {
-      setAvisoRapido(`El plan de escenas quedó listo, pero las imágenes no se pudieron pedir: ${v.error}`);
-      return void alProyecto();
-    }
-    alGuardar(v.guardado, false);
-    setAvisoRapido("Plan de escenas listo e imágenes base en cola. Cuando lleguen, revísalas una por una en el paso 07: solo de las que apruebes se generan los clips.");
-    toast.success("Imágenes en cola. Te avisamos cuando estén para revisar.");
+    // De aquí en adelante el proyecto sigue solo (modo directo). Si se detuvo, se dice exactamente por qué.
+    const proyecto = versionVigente(p.guardado)?.proyecto;
+    const parada = proyecto?.auto.parada;
+    if (parada) setAvisoRapido(`Guion y plan listos. El modo directo se detuvo: ${parada.texto} En el paso 07 está el botón para seguir.`);
+    else if (proyecto?.auto.activo) {
+      setAvisoRapido("Guion y plan listos. El proyecto sigue solo: imágenes (las revisa la IA), clips y armado. Solo te pedirá algo si una imagen queda dudosa o se alcanza un tope; al final te avisa para que apruebes el video.");
+      toast.success("En marcha: te avisamos cuando el video esté por aprobar.");
+    } else setAvisoRapido("Guion y plan de escenas listos y guardados. Revisa el plan en el paso 07.");
     alProyecto();
   }
 
   /** El único OK: encadena todo lo que falte. */
   async function generarTodo() {
     if (!formato) return void toast.error("Elige un formato.");
+    if (modo === "clonar" && !datos.referenciaTomas.length && !datos.anuncioClon.trim()) {
+      setAvisoRapido("Para clonar hace falta la referencia: describe sus tomas (o pega su transcripción) en «Anuncio de referencia».");
+      return void document.getElementById("clonar-anuncio")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
     if (!datos.oferta.trim() || !datos.llamado.trim()) {
       setAvisoRapido("Antes de generar, escribe la oferta y el llamado a la acción: todo video cierra con los dos y no se inventan.");
       return;
@@ -410,7 +428,7 @@ export function CrearVideo(props: Props) {
     if (!d.analisisProducto.trim()) d = await investigar(d);
     if (!d) return void setOcupado(null);
     setFase("Escribiendo el guion");
-    const r = await escribirGuion(d, "");
+    const r = await escribirGuion({ ...d, referenciaTomas: modo === "clonar" ? d.referenciaTomas : [] }, "");
     if ("error" in r) {
       setFase(null);
       setOcupado(null);
@@ -465,6 +483,21 @@ export function CrearVideo(props: Props) {
     setOcupado(null);
   }
 
+
+  /** Un guion cambió (o es nuevo) sin que sea el que está abierto: solo se pone al día en la lista. */
+  function actualizarEnLista(gs: GuionGuardado[]) {
+    setGuiones((lista) => [...gs.filter((g) => !lista.some((x) => x.id === g.id)), ...lista.map((x) => gs.find((g) => g.id === x.id) ?? x)]);
+  }
+
+  async function refrescarGuiones() {
+    const r = await guionesAlDia();
+    if ("error" in r) return void toast.error(r.error, { duration: 9000 });
+    setGuiones((lista) => {
+      const abierto = lista.find((x) => x.id === idGuardado);
+      // El abierto lo mantiene al día su propio panel: no se pisa con una lectura más vieja.
+      return r.guiones.map((g) => (g.id === idGuardado && abierto ? abierto : g));
+    });
+  }
 
   /** Una acción del servidor devolvió el guion guardado (corrección, estado, restaurar…). */
   function alGuardar(g: GuionGuardado, cargar: boolean) {
@@ -552,6 +585,9 @@ export function CrearVideo(props: Props) {
     setFotos(g.fotosProducto.join("\n"));
     setGuion(g.guion);
     setOrigen(g.origen);
+    setModo(g.referenciaTomas.length ? "clonar" : "crear");
+    // Un guion que ya es proyecto se abre directo en el Estudio.
+    setEstudio(!duplicar && !!versionVigente(g)?.proyecto);
     setIdGuardado(duplicar ? null : g.id);
     setGuardadoTexto(duplicar ? null : g.guion);
     // Una copia no hereda el prospecto, salvo que sea el de esta visita.
@@ -578,11 +614,42 @@ export function CrearVideo(props: Props) {
             <ArrowLeft className="size-3.5" /> {prospecto.nombre}
           </Link>
         )}
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Crear video</h1>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">Estudio de video</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Elige el formato, pon el producto y lo que dio el cliente, mira qué anuncios están escalando y sal con el guion
-          listo para producir, con la estructura de video ganador de Reditus.
+          Dos formas de empezar; las dos terminan en el mismo estudio de cinco pasos (Plan · Activos · Escenas · Video · Exportar).
         </p>
+        <div role="radiogroup" aria-label="Cómo empezar" className="mt-3 grid gap-2 sm:grid-cols-2" id="entradas-estudio">
+          {(
+            [
+              { m: "crear", titulo: "Crear video", texto: "Del producto al plan: investigación de mercado, formato, guion y plan de escenas.", Icono: Clapperboard },
+              { m: "clonar", titulo: "Clonar anuncio", texto: "De un anuncio que ya escala: se clona su estructura (ritmo, tomas, cierre) con tu producto. Nunca su material.", Icono: ScanSearch },
+            ] as const
+          ).map(({ m, titulo, texto, Icono }) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={modo === m}
+              onClick={() => {
+                setModo(m);
+                // Clonar necesita un formato para los rótulos de la estructura: UGC es el más cercano a un anuncio real.
+                if (m === "clonar" && !datos.formato && formatos.some((f) => f.slug === "ugc")) set("formato", "ugc");
+              }}
+              className={cn(
+                "flex items-start gap-3 rounded-xl border p-3 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                modo === m ? "border-primary bg-primary/10" : "border-border bg-card hover:border-ring/60",
+              )}
+            >
+              <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", modo === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                <Icono className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-heading text-base font-semibold">{titulo}</span>
+                <span className="block text-xs leading-relaxed text-muted-foreground">{texto}</span>
+              </span>
+            </button>
+          ))}
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {prospecto && <Chip tono="azul">Viene del prospecto: {prospecto.nombre}</Chip>}
           {idGuardado && <Chip tono={sinGuardar ? "ambar" : "verde"}>{sinGuardar ? "Cambios sin guardar" : "Guardado"}</Chip>}
@@ -598,6 +665,14 @@ export function CrearVideo(props: Props) {
           </p>
         )}
       </div>
+
+      <BandejaAtencion
+        guiones={guiones}
+        puedeAprobar={props.puedeAprobarVideo}
+        onActualizado={(g) => (g.id === idGuardado ? alGuardar(g, false) : actualizarEnLista([g]))}
+        onAbrir={(g) => abrir(g, false)}
+        onRefrescar={refrescarGuiones}
+      />
 
       <MisVideos
         guiones={misGuiones}
@@ -617,7 +692,7 @@ export function CrearVideo(props: Props) {
         }}
       >
         <CardHeader>
-          <CardTitle>Todo en un solo OK</CardTitle>
+          <CardTitle>{modo === "clonar" ? "Clonar anuncio · todo en un solo OK" : "Todo en un solo OK"}</CardTitle>
           <CardDescription>
             Pon el producto, revisa la investigación, elige el formato y pulsa «Generar todo». Lo demás (guion, guardado
             y envío del video) se hace solo. Los pasos de abajo siguen ahí si quieres editar algo a mano.
@@ -627,8 +702,20 @@ export function CrearVideo(props: Props) {
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {modo === "clonar" && (
+            <ClonarAnuncio
+              enlace={datos.anuncioClonEnlace}
+              transcripcion={datos.anuncioClon}
+              tomas={datos.referenciaTomas}
+              anuncios={datos.anunciosHallados}
+              bloqueado={!!ocupado}
+              onEnlace={(v) => set("anuncioClonEnlace", v)}
+              onTranscripcion={(v) => set("anuncioClon", v)}
+              onTomas={(t) => set("referenciaTomas", t)}
+            />
+          )}
           <div className="grid gap-4 md:grid-cols-2">
-            <Campo etiqueta="Producto">
+            <Campo etiqueta={modo === "clonar" ? "Producto del cliente" : "Producto"}>
               <Input
                 value={datos.producto}
                 onChange={(e) => set("producto", e.target.value)}
@@ -842,7 +929,7 @@ export function CrearVideo(props: Props) {
             </Button>
             <span className="text-xs text-muted-foreground">
               {props.videoActivo
-                ? "Escribe el guion, lo guarda, propone el plan de escenas y manda a la cola solo las imágenes base. Tú apruebas antes de cada gasto."
+                ? "Modo directo: escribe el guion, propone el plan y sigue solo (imágenes revisadas por IA, clips y armado) hasta «Video por aprobar». Se detiene únicamente si hace falta una persona."
                 : "Genera la investigación, el guion y el plan de escenas. Las imágenes y clips se podrán pedir cuando el servidor de videos esté conectado."}
             </span>
           </div>
@@ -1421,7 +1508,7 @@ export function CrearVideo(props: Props) {
       <Card id="generar-video" className="scroll-mt-20">
         <CardHeader>
           <CardTitle>
-            <Paso n="07">Video por escenas</Paso>
+            <Paso n="07">Estudio de video</Paso>
           </CardTitle>
           <CardDescription>
             El guion se produce por etapas y tú apruebas antes de cada gasto: imágenes base, clips solo de lo aprobado y armado sin costo. Una corrección rehace solo la escena afectada.
@@ -1435,18 +1522,15 @@ export function CrearVideo(props: Props) {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {actual && vigenteActual?.proyecto ? (
-            <ProyectoVideoPanel
-              key={`${actual.id}:${vigenteActual.n}`}
-              guardado={actual}
-              activo={props.videoActivo}
-              puedeAprobar={props.puedeAprobarVideo}
-              esCeo={props.esCeo}
-              puedeUsarEnProspecto={props.puedeUsarEnProspecto}
-              fotos={listaFotos}
-              ficha={datos.fichaProducto}
-              bloqueado={!!ocupado}
-              onGuardado={alGuardar}
-            />
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3" id="abrir-estudio">
+              <Chip tono={resumenProyecto(vigenteActual.proyecto).tono}>{resumenProyecto(vigenteActual.proyecto).etiqueta}</Chip>
+              <span className="min-w-0 flex-1 basis-48 text-xs text-muted-foreground">
+                {resumenProyecto(vigenteActual.proyecto).detalle || "El proyecto por escenas de este guion se trabaja en el Estudio de video."}
+              </span>
+              <Button onClick={() => setEstudio(true)}>
+                <Clapperboard /> Abrir el Estudio de video
+              </Button>
+            </div>
           ) : (
             <ConvertirEnProyecto
               guardado={actual}
@@ -1458,6 +1542,7 @@ export function CrearVideo(props: Props) {
               onGuardado={(g, cargar) => {
                 alGuardar(g, cargar);
                 setDatos((x) => ({ ...x, fichaProducto: g.fichaProducto }));
+                if (versionVigente(g)?.proyecto) setEstudio(true);
               }}
             />
           )}
@@ -1558,6 +1643,35 @@ export function CrearVideo(props: Props) {
           )}
         </CardContent>
       </Card>
+
+      <LotesVideos
+        formatos={formatos.map((f) => ({ slug: f.slug, nombre: f.nombre }))}
+        prospectos={props.prospectosLote}
+        guiones={guiones}
+        onGuion={(g) => actualizarEnLista([g])}
+        onAbrir={(g) => abrir(g, false)}
+      />
+
+      <ConfigVideosTarjeta esCeo={props.esCeo} inicial={props.config} />
+
+      {/* El Estudio de video: el proyecto del guion abierto, a pantalla completa. */}
+      {estudio && actual && vigenteActual?.proyecto && (
+        <EstudioVideo
+          key={`${actual.id}:${vigenteActual.n}`}
+          modo={actual.referenciaTomas.length ? "clonar" : "crear"}
+          onSalir={() => setEstudio(false)}
+          guardado={actual}
+          activo={props.videoActivo}
+          puedeAprobar={props.puedeAprobarVideo}
+          esCeo={props.esCeo}
+          puedeUsarEnProspecto={props.puedeUsarEnProspecto}
+          fotos={listaFotos}
+          ficha={datos.fichaProducto}
+          bloqueado={!!ocupado}
+          onGuardado={alGuardar}
+          onOtros={actualizarEnLista}
+        />
+      )}
 
       {props.children}
     </div>

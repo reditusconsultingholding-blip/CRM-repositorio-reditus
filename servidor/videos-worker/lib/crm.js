@@ -10,9 +10,9 @@ class TrabajoSoltado extends Error {}
 function crearCrm(cfg) {
   const cabeceras = { authorization: `Bearer ${cfg.secreto}`, "content-type": "application/json" };
 
-  async function llamar(ruta, cuerpo) {
+  async function llamar(ruta, cuerpo, limiteMs = 60000) {
     try {
-      return await pedirJson(`${cfg.crmUrl}/api/servidor/trabajos/${ruta}`, { method: "POST", headers: cabeceras, body: JSON.stringify(cuerpo) });
+      return await pedirJson(`${cfg.crmUrl}/api/servidor/trabajos/${ruta}`, { method: "POST", headers: cabeceras, body: JSON.stringify(cuerpo), limiteMs });
     } catch (e) {
       if (e instanceof ErrorHttp && e.estado === 409 && e.cuerpo && e.cuerpo.soltar) {
         throw new TrabajoSoltado(e.cuerpo.error || "El CRM retiró este trabajo.");
@@ -23,8 +23,8 @@ function crearCrm(cfg) {
 
   return {
     /** El siguiente trabajo pendiente (ya tomado a nuestro nombre) o null. */
-    async tomar() {
-      const r = await llamar("tomar", { trabajador: cfg.nombre });
+    async tomar(extra = null) {
+      const r = await llamar("tomar", { trabajador: cfg.nombre, ...(extra || {}) });
       return r.trabajo || null;
     },
     progreso: (t, datos) => llamar(`${t.id}/progreso`, { toma: t.toma, ...datos }),
@@ -54,8 +54,12 @@ function crearCrm(cfg) {
       return subida.ruta;
     },
 
-    /** Cierra un trabajo de etapa «imagenes» o «clips» (las escenas ya se reportaron por `progreso`). */
-    cerrar: (t, datos) => llamar(`${t.id}/resultado`, { toma: t.toma, ...datos }),
+    /**
+     * Cierra un trabajo de etapa «imagenes» o «clips» (las escenas ya se reportaron por `progreso`).
+     * El CRM puede tardar hasta ~1 minuto en responder (hace avanzar el proyecto antes de contestar):
+     * se espera 150 s. Si se corta, repetir el cierre es seguro (el CRM responde lo mismo).
+     */
+    cerrar: (t, datos) => llamar(`${t.id}/resultado`, { toma: t.toma, ...datos }, 150000),
 
     /** Sube el MP4 con la URL firmada que entrega el CRM y reporta el resultado. */
     async entregar(t, archivo, datos, que = null) {

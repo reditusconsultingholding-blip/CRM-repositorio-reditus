@@ -23,7 +23,9 @@ const kieImagen = require("../proveedores-imagen/kie");
 const kieVideo = require("../proveedores/kie");
 const { procesar } = require("../lib/trabajo");
 const { disenarCierre } = require("../lib/rotulo");
-const { ENCABEZADO } = require("../lib/etapas");
+const { ENCABEZADO, ENCABEZADO_TIEMPOS } = require("../lib/etapas");
+const { crearLimites, crearSemaforo, crearPresupuesto, ajustesParalelo, prioridadDe } = require("../lib/limites");
+const { atenderCola } = require("../lib/cola");
 
 const SECRETO = "secreto-de-prueba-0123456789";
 const sha1 = (archivo) => crypto.createHash("sha1").update(fs.readFileSync(archivo)).digest("hex");
@@ -176,7 +178,16 @@ function crearCrmDeMentira(carpetaFijos) {
       return proyectos.get(guionId);
     },
     /** Encola un trabajo de la etapa, con SOLO las escenas pedidas (o todas las que tocan). */
-    encolar(guionId, etapa, numeros = null, opciones = {}) {
+    /** Proyecto «hijo» (variación): comparte las escenas ya aprobadas del padre, con las MISMAS direcciones. */
+    crearHijo(padreId, hijoId, cambiar = () => {}) {
+      const hijo = JSON.parse(JSON.stringify(proyectos.get(padreId)));
+      hijo.guionId = hijoId;
+      hijo.final = { estado: "pendiente", url: null, armados: 0 };
+      cambiar(hijo);
+      proyectos.set(hijoId, hijo);
+      return hijo;
+    },
+    encolar(guionId, etapa, numeros = null, opciones = {}, extra = {}) {
       const p = proyectos.get(guionId);
       const tipo = etapa === "imagenes" ? "imagen" : "clip";
       let escenas = [];
@@ -193,6 +204,7 @@ function crearCrmDeMentira(carpetaFijos) {
         escenas: escenas.map(copia),
         ...(etapa === "armado" ? { todas: p.escenas.map(copia) } : {}),
         opciones: { subtitulos: true, voz: true, musica: null, modelo: null, ...opciones },
+        ...extra,
       };
       trabajos.set(id, { trabajo, estado: "pendiente" });
       cola.push(trabajo);
@@ -370,8 +382,8 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   ok(r.ok && crmFalso.visto.descargas.length === bajadas && r.armado.stats.segmentosHechos === 0 && r.armado.stats.finalReutilizado && sha1(path.join(carpetas.entregados, `${r.trabajo.id}.mp4`)) === huellaV, `rearmado sin cambios: 0 descargas, 0 escenas codificadas, mismo archivo byte a byte (${r.armado.segundos} s)`);
 
   // ---- mismo proyecto desde cero (sin caché de segmentos): mismo resultado ----
-  const dirProyecto = path.join(carpetas.proyectos, `${V}-v1`);
-  for (const f of fs.readdirSync(dirProyecto)) if (/^(s|final)-/.test(f)) fs.rmSync(path.join(dirProyecto, f));
+  const dirCache = path.join(datos, "cache"); // la caché del armado es compartida por todos los proyectos
+  for (const f of fs.readdirSync(dirCache)) if (/^(s|final)-/.test(f)) fs.rmSync(path.join(dirCache, f));
   crmFalso.encolar(V, "armado");
   r = await atender();
   tiempos.push(["armado completo con todo ya descargado", r.armado.segundos]);
@@ -516,7 +528,8 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   ]);
   crmFalso.encolar("guion-kie-402", "imagenes");
   const creadasAntes = kieVisto.creadas.length;
-  r = await atender(depsKie);
+  // De a una, para ver el corte: con varias a la vez, las que ya salieron reciben cada una su 402.
+  r = await atender({ ...depsKie, limites: crearLimites({ ...cfgKie, config: { ...cfgKie.config, paralelo: { ...cfgKie.config.paralelo, imagenes: 1 } } }) });
   const p402 = crmFalso.proyectos.get("guion-kie-402");
   ok(r.ok && p402.escenas.every((e) => e.imagen.estado === "fallo" && /402/.test(e.imagen.nota)) && kieVisto.creadas.length === creadasAntes, "kie sin créditos (402 con HTTP 200): las escenas quedan en fallo con el motivo y no se sigue pidiendo a ciegas");
   kieFalso.close();
@@ -546,6 +559,176 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   await fotograma(finalH, 4 + 0.1, path.join(capturas, "horizontal-foto-real-alta-alejar-inicio.png"));
   await fotograma(finalH, 4 + 2.9, path.join(capturas, "horizontal-foto-real-alta-alejar-fin.png"));
   fs.copyFileSync(finalH, path.join(capturas, "horizontal-final.mp4"));
+
+  // =========================================== varios trabajos a la vez ====
+  // Piezas sueltas de lib/limites.js
+  {
+    const sem = crearSemaforo(1);
+    const orden = [];
+    const tarea = (nombre, prioridad, grupo) => sem.usar({ prioridad, grupo }, async () => (orden.push(nombre), new Promise((res) => setTimeout(res, 5))));
+    await Promise.all([tarea("A1", 0, "A"), tarea("A2", 0, "A"), tarea("A3", 0, "A"), tarea("B1", 0, "B"), tarea("B2", 0, "B"), tarea("urgente", 1, "C")]);
+    ok(orden.join(" ") === "A1 urgente B1 A2 B2 A3", `turnos: primero lo urgente y después se alterna entre proyectos (${orden.join(" ")})`);
+    const pr = crearPresupuesto(7);
+    const admitidas = [await pr.admitir()]; // la primera va sola: con ella se aprende cuánto cuesta una
+    pr.terminar(3);
+    admitidas.push(await pr.admitir());
+    const tercera = pr.admitir(); // 3 gastados + 3 en curso + 3 = 9 > 7: espera a ver cuánto cobra la que está en curso
+    pr.terminar(3);
+    admitidas.push(await tercera);
+    ok(admitidas.join() === "true,true,false" && crearPresupuesto(null).limite === null, "tope de gasto: con máximo 7 y tareas de 3 créditos se admiten 2 y la tercera no");
+    const d = ajustesParalelo(cfg);
+    ok(cfg.config.paralelo.trabajos === 3 && cfg.config.paralelo.imagenes === 4 && cfg.config.paralelo.clips === 3 && d.armados === (d.nucleos >= 8 ? 2 : 1) && d.hilosFfmpeg * d.armados <= Math.max(1, d.nucleos / 2), `límites por defecto: 3 trabajos, 4 imágenes, 3 clips; en este equipo (${d.nucleos} núcleos) ${d.armados} armado(s) con ${d.hilosFfmpeg} hilo(s) de ffmpeg cada uno (máximo la mitad de los núcleos)`);
+    ok(prioridadDe({ etapa: "armado" }) === 1 && prioridadDe({ etapa: "imagenes", escenas: [{}] }) === 1 && prioridadDe({ etapa: "imagenes", escenas: [{}, {}] }) === 0 && prioridadDe({ etapa: "imagenes", escenas: [{}, {}], prioridad: 5 }) === 5, "prioridad: armados y trabajos de una sola escena (correcciones) pasan primero; un lote no; si el trabajo trae «prioridad», manda");
+  }
+
+  // Kie de mentira con demora (cola → generando → listo), tres 429 al crear y cuenta de tareas simultáneas.
+  const kp = { creadas: [], pedidos: 0, rechazos429: 0, enCurso: new Set(), pico: 0, nacio: new Map() };
+  const kieLento = http.createServer((req, res) => {
+    let c = "";
+    req.on("data", (d) => (c += d));
+    req.on("end", () => {
+      const json = (o) => (res.writeHead(200, { "content-type": "application/json" }), res.end(JSON.stringify(o)));
+      if (req.url === "/imagen.png") return res.writeHead(200, { "content-type": "image/png" }), res.end(fs.readFileSync(path.join(fijos, "kie.png")));
+      if (req.method === "POST" && req.url === "/api/v1/jobs/createTask") {
+        kp.pedidos++;
+        if ([3, 4, 9].includes(kp.pedidos)) {
+          kp.rechazos429++;
+          return json({ code: 429, msg: "Too many requests" }); // HTTP 200 con code 429, como avisa su documentación
+        }
+        const cuerpo = JSON.parse(c);
+        kp.creadas.push(cuerpo.input.prompt.split("\n")[0]);
+        const taskId = `lento_${kp.creadas.length}`;
+        kp.nacio.set(taskId, Date.now());
+        kp.enCurso.add(taskId);
+        kp.pico = Math.max(kp.pico, kp.enCurso.size);
+        return json({ code: 200, msg: "success", data: { taskId } });
+      }
+      if (req.method === "GET" && req.url.startsWith("/api/v1/jobs/recordInfo?taskId=")) {
+        const taskId = req.url.split("=")[1];
+        const edad = Date.now() - kp.nacio.get(taskId);
+        if (edad < 150) return json({ code: 200, msg: "success", data: { taskId, state: "queuing" } });
+        if (edad < 450) return json({ code: 200, msg: "success", data: { taskId, state: "generating" } });
+        kp.enCurso.delete(taskId);
+        return json({ code: 200, msg: "success", data: { taskId, state: "success", resultJson: JSON.stringify({ resultUrls: [`http://127.0.0.1:${kieLento.address().port}/imagen.png`] }), creditsConsumed: 3 } });
+      }
+      json({ code: 404, msg: "not found" });
+    });
+  });
+  await new Promise((res) => kieLento.listen(0, "127.0.0.1", res));
+  const cfgP = {
+    ...base,
+    kieKey: "clave-kie-de-mentira",
+    kieBase: `http://127.0.0.1:${kieLento.address().port}`,
+    config: {
+      ...base.config,
+      simulado: { demoraSegundos: 1 },
+      kieImagen: { ...base.config.kieImagen, consultarCadaSegundos: 0.1 },
+      paralelo: { ...base.config.paralelo, trabajos: 6, armados: 2, hilosFfmpeg: ajustesParalelo(base).hilosFfmpeg, espera429: { inicialSegundos: 0.2, factor: 2, topeSegundos: 1, maxMinutos: 1 } },
+    },
+  };
+  const limitesP = crearLimites(cfgP);
+  const video = { enCurso: 0, pico: 0 };
+  const proveedorP = {
+    ...simVideo,
+    async generarEscena(c) {
+      video.pico = Math.max(video.pico, ++video.enCurso);
+      try {
+        return await simVideo.generarEscena(c);
+      } finally {
+        video.enCurso--;
+      }
+    },
+  };
+  const depsP = { cfg: cfgP, crm, ff, proveedor: proveedorP, proveedorImagen: kieImagen, registro, limites: limitesP };
+
+  const ctxP = () => ({ ...contexto(), fotos: ["https://tienda.test/producto.jpg"] });
+  const lote = (letra, cuantas) => Array.from({ length: cuantas }, (_, i) => ({ n: i + 1, tipo: "generada", duracion: 4, voz: "", promptImagen: `${letra}-${i + 1} persona con el producto`, promptVideo: "v" }));
+  crmFalso.crearProyecto("lote-A", "9:16", ctxP(), lote("LA", 8));
+  crmFalso.crearProyecto("lote-B", "9:16", ctxP(), lote("LB", 8));
+  crmFalso.crearProyecto("con-tope", "9:16", ctxP(), lote("TP", 5));
+  crmFalso.crearProyecto("correccion", "9:16", ctxP(), lote("CX", 3));
+  // Un proyecto con sus imágenes ya aprobadas, para la etapa de clips.
+  const pc = crmFalso.crearProyecto("lote-clips", "9:16", ctxP(), lote("LC", 3));
+  for (const e of pc.escenas) Object.assign(e.imagen, { estado: "aprobada", url: crmFalso.fijo("cuadrada.jpg"), intentos: 1 });
+  // Tres variaciones del proyecto vertical: comparten TODAS las escenas aprobadas (mismas direcciones) y cambian la oferta.
+  crmFalso.crearHijo(V, "variacion-1", (h) => (h.contexto.cierre.oferta = "Hoy 2x1 con envío gratis"));
+  crmFalso.crearHijo(V, "variacion-2", (h) => (h.contexto.cierre.oferta = "Lleva 3 y paga 2, solo esta semana"));
+  crmFalso.crearHijo(V, "variacion-3", (h) => (h.contexto.cierre.oferta = "Lleva 3 y paga 2, solo esta semana")); // idéntica a la 2, a propósito
+
+  const tLA = crmFalso.encolar("lote-A", "imagenes");
+  const tLB = crmFalso.encolar("lote-B", "imagenes");
+  const tLC = crmFalso.encolar("lote-clips", "clips");
+  const tTP = crmFalso.encolar("con-tope", "imagenes", null, {}, { gastoMaximoCreditos: 7 });
+  const tH1 = crmFalso.encolar("variacion-1", "armado");
+  let tCX, tH2, tH3;
+  const entraEnMedio = new Promise((res) =>
+    setTimeout(() => {
+      tCX = crmFalso.encolar("correccion", "imagenes", [2]); // una corrección: una sola escena, llega con el lote ya corriendo
+      tH2 = crmFalso.encolar("variacion-2", "armado");
+      tH3 = crmFalso.encolar("variacion-3", "armado");
+      res();
+    }, 300),
+  );
+  const empezo = {};
+  const termino = {};
+  const salio = {};
+  const fallosAntes = crmFalso.visto.fallos.length;
+  const bajadasAntes = crmFalso.visto.descargas.length;
+  const t0P = Date.now();
+  const ronda = await atenderCola({
+    tomar: (extra) => crm.tomar(extra).catch(() => null),
+    procesar: async (t) => {
+      empezo[t.id] = Date.now() - t0P;
+      salio[t.id] = await procesar(t, depsP);
+      termino[t.id] = Date.now() - t0P;
+    },
+    max: 6,
+    unaVez: true,
+    conTrabajoMs: 50,
+    registro,
+  });
+  await entraEnMedio;
+  const relojP = (Date.now() - t0P) / 1000;
+  const todos = [tLA, tLB, tLC, tTP, tH1, tCX, tH2, tH3];
+  ok(ronda.atendidos === 8 && ronda.picoSimultaneos === 6 && todos.every((t) => salio[t.id] && salio[t.id].ok) && crmFalso.visto.fallos.length === fallosAntes, `8 trabajos de etapas mezcladas, hasta 6 a la vez: todos cerraron bien en ${relojP.toFixed(1)} s de reloj`);
+
+  // Ni escenas duplicadas ni reportes perdidos.
+  const buenos = (t) => progresoDe(t.id).flatMap((p) => p.escenas || []).filter((e) => !e.error);
+  const unaPorEscena = (t, cuantas) => {
+    const ns = buenos(t).map((e) => e.n).sort((a, b) => a - b);
+    return ns.length === cuantas && new Set(ns).size === cuantas;
+  };
+  const estados = (id, tipo) => crmFalso.proyectos.get(id).escenas.map((e) => e[tipo].estado);
+  ok(unaPorEscena(tLA, 8) && unaPorEscena(tLB, 8) && unaPorEscena(tLC, 3) && unaPorEscena(tCX, 1) && estados("lote-A", "imagen").every((s) => s === "por-aprobar") && estados("lote-B", "imagen").every((s) => s === "por-aprobar") && estados("lote-clips", "clip").every((s) => s === "por-aprobar"), "sin reportes perdidos ni repetidos: cada escena de cada trabajo se reportó exactamente una vez y quedó por aprobar");
+  ok(new Set(kp.creadas).size === kp.creadas.length && kp.creadas.length === 8 + 8 + 1 + 2, `sin tareas duplicadas en el proveedor: ${kp.creadas.length} tareas creadas para 19 escenas pedidas (ninguna dos veces)`);
+  ok(kp.rechazos429 === 3 && kieVideo.freno.stats.frenadas >= 3, `429 simulado: Kie rechazó 3 creaciones; se esperó (${kieVideo.freno.stats.frenadas} frenadas, ${(kieVideo.freno.stats.esperadoMs / 1000).toFixed(1)} s en total) y se reintentó sin perder ni duplicar ninguna tarea`);
+  ok(kp.pico <= 4 && kp.pico >= 3 && video.pico === 3 && limitesP.armado.stats.picoEnUso <= 2, `límites respetados: máximo ${kp.pico} imágenes a la vez (tope 4), ${video.pico} clips a la vez (tope 3), ${limitesP.armado.stats.picoEnUso} armado(s) a la vez (tope 2)`);
+
+  // Tope de gasto.
+  const pt = crmFalso.proyectos.get("con-tope");
+  const porTope = pt.escenas.filter((e) => e.imagen.estado === "fallo" && /^tope de gasto/.test(e.imagen.nota)).length;
+  ok(pt.costo.creditos === 6 && pt.escenas.filter((e) => e.imagen.estado === "por-aprobar").length === 2 && porTope === 3 && salio[tTP.id].ok, `tope de gasto (máximo 7 créditos, 3 por imagen): se hicieron 2 imágenes (6 créditos), las otras 3 se reportaron como «tope de gasto» sin pedirse y el trabajo cerró limpio`);
+
+  // La corrección entró después y salió antes que los lotes.
+  ok(empezo[tCX.id] > empezo[tLA.id] && termino[tCX.id] < termino[tLA.id] && termino[tCX.id] < termino[tLB.id], `corrección urgente: entró a los ${(empezo[tCX.id] / 1000).toFixed(1)} s con dos lotes en curso y salió a los ${(termino[tCX.id] / 1000).toFixed(1)} s, antes que los lotes (${(termino[tLA.id] / 1000).toFixed(1)} s y ${(termino[tLB.id] / 1000).toFixed(1)} s)`);
+  const primeraLB = kp.creadas.findIndex((p) => p.startsWith("LB-"));
+  const ultimaLA = kp.creadas.map((p) => p.startsWith("LA-")).lastIndexOf(true);
+  ok(primeraLB >= 0 && primeraLB < 8 && primeraLB < ultimaLA, `se alterna entre proyectos: el lote B empezó (tarea n.º ${primeraLB + 1}) antes de que el lote A terminara las suyas (su última fue la n.º ${ultimaLA + 1})`);
+
+  // Variaciones: comparten caché con el proyecto original.
+  const sH = [tH1, tH2, tH3].map((t) => salio[t.id].armado.stats);
+  const hechasVar = sH.reduce((a, s) => a + s.segmentosHechos, 0);
+  ok(crmFalso.visto.descargas.length === bajadasAntes && sH.every((s) => s.descargas === 0) && sH[0].segmentosHechos === 1 && sH[0].segmentosReutilizados === 4 && hechasVar === 2, `tres variaciones que comparten escenas con el proyecto original: 0 descargas y ${hechasVar} escenas codificadas entre las tres (solo el cierre nuevo; dos variaciones idénticas a la vez lo codifican una sola vez)`);
+  ok(["variacion-1", "variacion-2", "variacion-3"].every((id) => crmFalso.proyectos.get(id).final.estado === "por-aprobar"), "cada variación subió su propio video final");
+
+  // Medición por trabajo.
+  const filasT = fs.readFileSync(path.join(carpetas.registro, "tiempos.csv"), "utf8").trim().split(/\r?\n/);
+  const tLAt = salio[tLA.id].tiempos;
+  ok(filasT[0] === ENCABEZADO_TIEMPOS && filasT.some((l) => l.includes(tLA.id)) && tLAt.cola > 0 && tLAt.generacion > 0 && tLAt.turno > 0 && salio[tH1.id].tiempos.armado > 0, "tiempos.csv: por trabajo quedan la espera de turno, la cola del proveedor, la generación, la subida, el armado y el total");
+  tiempos.push([`8 trabajos (2 lotes de 8 imágenes, 3 clips, tope, 1 corrección, 3 armados de variación), reloj total`, Number(relojP.toFixed(1))]);
+  tiempos.push(["  lote A (8 imágenes): reloj", tLAt.total], ["    espera de turno (suma de escenas)", tLAt.turno], ["    cola del proveedor de mentira (suma)", tLAt.cola], ["    generación en el proveedor de mentira (suma)", tLAt.generacion]);
+  tiempos.push(["  armado de una variación (1 escena nueva)", salio[tH1.id].armado.segundos], ["  corrección de una escena: de entrar a salir", Number(((termino[tCX.id] - empezo[tCX.id]) / 1000).toFixed(1))]);
+  kieLento.close();
 
   // ---- costos.csv con columnas por etapa; registro sin claves ----
   const csv = fs.readFileSync(path.join(carpetas.registro, "costos.csv"), "utf8").trim().split(/\r?\n/);

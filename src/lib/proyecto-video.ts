@@ -15,8 +15,9 @@
 // idempotente: si se repite no cambia nada, y nada reportado se pierde aunque
 // dos escrituras del guion se pisen.
 import type { TrabajoVideo } from "@/lib/trabajos-video";
+import type { Exigencia } from "@/lib/videos-config";
 
-/** Tope de intentos por escena y por tipo (imagen / clip). Edítalo aquí. */
+/** Tope de intentos por escena y por tipo (imagen / clip) cuando no hay configuración. El vigente lo pone el CEO y viaja en `proyecto.topeIntentos`. */
 export const TOPE_INTENTOS_ESCENA = 3;
 export const MAX_ESCENAS_PROYECTO = 20;
 export const MAX_FOTOS_PROYECTO = 4;
@@ -76,7 +77,49 @@ export type Pieza = {
   trabajoId: string | null;
   /** Quién la aprobó o rechazó. */
   revisadaPor: string;
+  /** Lo que dijo la revisión automática de la imagen (IA de visión). Null si no se revisó sola. */
+  revision: RevisionIA | null;
+  /** Ya se regeneró sola una vez por un rechazo automático: la siguiente decisión es de una persona. */
+  autoRegenerada: boolean;
 };
+
+export const VEREDICTOS = ["aprobada-auto", "dudosa", "rechazada-auto", "sin-ia"] as const;
+export type Veredicto = (typeof VEREDICTOS)[number];
+export const VEREDICTO_LABELS: Record<Veredicto, string> = {
+  "aprobada-auto": "Aprobada por IA",
+  dudosa: "Dudosa: decide una persona",
+  "rechazada-auto": "Rechazada por IA",
+  "sin-ia": "Sin revisión automática",
+};
+/** La lista corta y fija con la que la IA califica una imagen base. */
+export const CRITERIOS_IMAGEN = {
+  producto: "Producto reconocible y sin deformar (forma, color, etiqueta)",
+  texto: "Sin texto inventado o ilegible sobre el producto",
+  personas: "Manos y rostros sin defectos evidentes",
+  encuadre: "Encuadre correcto para el formato",
+  escena: "Coincide con lo pedido en la escena",
+} as const;
+export type Criterio = keyof typeof CRITERIOS_IMAGEN;
+export type NotaCriterio = "ok" | "duda" | "mal" | "no-aplica";
+export type RevisionIA = { veredicto: Veredicto; motivo: string; criterios: Partial<Record<Criterio, NotaCriterio>>; fecha: string };
+
+/** Por qué se detuvo el modo directo. Cada una dice qué falta y se resuelve con un botón. */
+export const CODIGOS_PARADA = ["imagen-dudosa", "revisar-clips", "tope-intentos", "tope-diario", "tope-gasto", "servidor", "fallo", "datos"] as const;
+export type CodigoParada = (typeof CODIGOS_PARADA)[number];
+export type Parada = { codigo: CodigoParada; texto: string; fecha: string };
+
+/** Cuánto avanza solo el proyecto. Los valores iniciales salen de la configuración global. */
+export type AutoProyecto = {
+  /** Modo directo: avanza solo hasta «Video por aprobar» y se detiene únicamente cuando hace falta una persona. */
+  activo: boolean;
+  /** La IA aprueba sola las imágenes que pasan la lista. */
+  imagenes: boolean;
+  exigencia: Exigencia;
+  /** Al terminar los clips se arma de una vez; la persona revisa el video armado. */
+  armarDirecto: boolean;
+  parada: Parada | null;
+};
+export const AUTO_APAGADO: AutoProyecto = { activo: false, imagenes: false, exigencia: "estricto", armarDirecto: false, parada: null };
 
 export type EscenaProyecto = {
   n: number;
@@ -246,11 +289,37 @@ export type ProyectoVideo = {
   gastos: Record<string, GastoTrabajo>;
   /** Trabajos encolados que todavía no se vieron terminados. */
   trabajosAbiertos: string[];
+  /** Registro de actividad: lo que fue pasando, lo más reciente al final. */
+  registro: EventoProyecto[];
+  /** Intentos permitidos por escena y tipo (lo fija la configuración del CEO). */
+  topeIntentos: number;
+  auto: AutoProyecto;
+  /** Es una variación: de qué guion salió (hereda sus piezas aprobadas sin volver a pagarlas). */
+  variacionDe: { guionId: string; producto: string; cambia: string } | null;
   creadoAt: string;
   creadoPor: string;
 };
 
-export const piezaNueva = (): Pieza => ({ estado: "pendiente", url: null, intentos: 0, nota: "", trabajoId: null, revisadaPor: "" });
+export type EventoProyecto = { fecha: string; texto: string };
+export const MAX_REGISTRO = 80;
+
+/** Anota algo en el registro de actividad del proyecto (se conservan los últimos). */
+export function anotar(p: Pick<ProyectoVideo, "registro">, texto: string, fecha = new Date().toISOString()) {
+  p.registro = [...p.registro, { fecha, texto: texto.slice(0, 240) }].slice(-MAX_REGISTRO);
+}
+
+export const piezaNueva = (): Pieza => ({ estado: "pendiente", url: null, intentos: 0, nota: "", trabajoId: null, revisadaPor: "", revision: null, autoRegenerada: false });
+
+function leerRevision(raw: unknown): RevisionIA | null {
+  const o = obj(raw);
+  if (!(VEREDICTOS as readonly string[]).includes(o.veredicto as string)) return null;
+  const criterios: RevisionIA["criterios"] = {};
+  for (const k of Object.keys(CRITERIOS_IMAGEN) as Criterio[]) {
+    const v = obj(o.criterios)[k];
+    if (v === "ok" || v === "duda" || v === "mal" || v === "no-aplica") criterios[k] = v;
+  }
+  return { veredicto: o.veredicto as Veredicto, motivo: txt(o.motivo, 600), criterios, fecha: txt(o.fecha, 40) };
+}
 
 function leerPieza(raw: unknown): Pieza {
   const o = obj(raw);
@@ -261,6 +330,8 @@ function leerPieza(raw: unknown): Pieza {
     nota: txt(o.nota, 600),
     trabajoId: txt(o.trabajoId, 40) || null,
     revisadaPor: txt(o.revisadaPor, 160),
+    revision: leerRevision(o.revision),
+    autoRegenerada: o.autoRegenerada === true,
   };
 }
 
@@ -299,6 +370,19 @@ export function leerContexto(raw: unknown): ContextoProyecto {
       .slice(0, MAX_FOTOS_PROYECTO),
     analisisProducto: txt(o.analisisProducto, 2400),
     cierre: { oferta: txt(c.oferta, 400), llamadoALaAccion: txt(c.llamadoALaAccion, 200) },
+  };
+}
+
+export function leerAuto(raw: unknown): AutoProyecto {
+  const o = obj(raw);
+  const pa = obj(o.parada);
+  const codigo = txt(pa.codigo, 20);
+  return {
+    activo: o.activo === true,
+    imagenes: o.imagenes === true,
+    exigencia: o.exigencia === "normal" ? "normal" : "estricto",
+    armarDirecto: o.armarDirecto === true,
+    parada: (CODIGOS_PARADA as readonly string[]).includes(codigo) ? { codigo: codigo as CodigoParada, texto: txt(pa.texto, 500), fecha: txt(pa.fecha, 40) } : null,
   };
 }
 
@@ -342,6 +426,15 @@ export function leerProyecto(raw: unknown): ProyectoVideo | null {
       .map((x) => txt(x, 40))
       .filter(Boolean)
       .slice(-40),
+    registro: lista(o.registro)
+      .slice(-MAX_REGISTRO)
+      .map((r) => ({ fecha: txt(obj(r).fecha, 40), texto: txt(obj(r).texto, 240) }))
+      .filter((r) => r.texto),
+    topeIntentos: Math.min(6, Math.max(1, Math.floor(num(o.topeIntentos, TOPE_INTENTOS_ESCENA)))),
+    auto: leerAuto(o.auto),
+    variacionDe: /^[0-9a-f-]{36}$/i.test(txt(obj(o.variacionDe).guionId, 40))
+      ? { guionId: txt(obj(o.variacionDe).guionId, 40), producto: txt(obj(o.variacionDe).producto, 240), cambia: txt(obj(o.variacionDe).cambia, 300) }
+      : null,
     creadoAt: txt(o.creadoAt, 40),
     creadoPor: txt(o.creadoPor, 160),
   };
@@ -380,7 +473,7 @@ export function contar(p: ProyectoVideo, tipo: TipoPieza): ConteoPiezas {
     else if (piezaEnCurso(x)) c.enCurso++;
     else {
       c.porGenerar++;
-      if (x.intentos >= TOPE_INTENTOS_ESCENA) c.enTope++;
+      if (x.intentos >= p.topeIntentos) c.enTope++;
     }
   }
   return c;
@@ -392,14 +485,22 @@ export function hayTrabajoEnCurso(p: ProyectoVideo): boolean {
 
 /** Escenas a las que hoy se les puede pedir la imagen (falta, se rechazó o falló, y no llegaron al tope). */
 export function escenasParaImagen(p: ProyectoVideo): EscenaProyecto[] {
-  return p.escenas.filter((e) => e.tipo === "generada" && piezaPorGenerar(e.imagen) && e.imagen.intentos < TOPE_INTENTOS_ESCENA);
+  return p.escenas.filter((e) => e.tipo === "generada" && piezaPorGenerar(e.imagen) && e.imagen.intentos < p.topeIntentos);
 }
 
 /** Escenas a las que hoy se les puede pedir el clip: SOLO con imagen aprobada. */
 export function escenasParaClip(p: ProyectoVideo): EscenaProyecto[] {
   return p.escenas.filter(
-    (e) => e.tipo === "generada" && e.imagen.estado === "aprobada" && !!e.imagen.url && piezaPorGenerar(e.clip) && e.clip.intentos < TOPE_INTENTOS_ESCENA,
+    (e) => e.tipo === "generada" && e.imagen.estado === "aprobada" && !!e.imagen.url && piezaPorGenerar(e.clip) && e.clip.intentos < p.topeIntentos,
   );
+}
+
+/**
+ * El clip de una escena sirve para armar: aprobado, o (con «armar al terminar
+ * los clips») recién llegado y sin revisar: la persona lo ve ya dentro del video.
+ */
+export function clipListo(p: Pick<ProyectoVideo, "auto">, e: EscenaProyecto): boolean {
+  return !!e.clip.url && (e.clip.estado === "aprobada" || (p.auto.armarDirecto && e.clip.estado === "por-aprobar"));
 }
 
 /** Qué falta para poder armar (vacío = se puede). */
@@ -408,7 +509,7 @@ export function faltaParaArmar(p: ProyectoVideo): string[] {
   if (!p.escenas.length) return ["el plan de escenas"];
   for (const e of p.escenas) {
     if (e.tipo === "generada") {
-      if (e.clip.estado !== "aprobada" || !e.clip.url) falta.push(`el clip aprobado de la escena ${e.n}`);
+      if (!clipListo(p, e)) falta.push(`el clip ${p.auto.armarDirecto ? "" : "aprobado "}de la escena ${e.n}`);
     } else if (!e.fotoUrl) falta.push(`la foto de la escena ${e.n}`);
   }
   const ultima = p.escenas[p.escenas.length - 1];
@@ -416,9 +517,12 @@ export function faltaParaArmar(p: ProyectoVideo): string[] {
   return falta;
 }
 
-export type FaseProyecto = "plan" | "imagenes" | "revisar-imagenes" | "clips" | "revisar-clips" | "armar" | "armando" | "final" | "aprobado" | "corregir";
+export type FaseProyecto = "detenido" | "plan" | "imagenes" | "revisar-imagenes" | "clips" | "revisar-clips" | "armar" | "armando" | "final" | "aprobado" | "corregir";
 
 export type ResumenProyecto = { fase: FaseProyecto; etiqueta: string; tono: Tono; detalle: string; imagenes: ConteoPiezas; clips: ConteoPiezas };
+
+/** El modo directo está detenido esperando a una persona (y no es solo «hay imágenes por revisar»). */
+export const detenido = (p: ProyectoVideo) => !!p.auto.parada && p.auto.parada.codigo !== "imagen-dudosa" && p.auto.parada.codigo !== "revisar-clips";
 
 /** En qué va el proyecto, dicho en claro, y qué toca hacer. */
 export function resumenProyecto(p: ProyectoVideo): ResumenProyecto {
@@ -429,17 +533,19 @@ export function resumenProyecto(p: ProyectoVideo): ResumenProyecto {
   if (f === "en-cola" || f === "generando") return { ...base, fase: "armando", etiqueta: "Armando el video", tono: "azul", detalle: "El servidor está uniendo las escenas. No cuesta." };
   if (f === "aprobada") return { ...base, fase: "aprobado", etiqueta: "Aprobado", tono: "verde", detalle: "" };
   if (f === "por-aprobar") return { ...base, fase: "final", etiqueta: "Video por aprobar", tono: "ambar", detalle: "Míralo completo y apruébalo, o marca qué corregir." };
+  if (detenido(p) && !imagenes.enCurso && !clips.enCurso) return { ...base, fase: "detenido", etiqueta: "Detenido", tono: "rojo", detalle: p.auto.parada?.texto ?? "" };
+  const directo = p.auto.armarDirecto;
   if (imagenes.enCurso) return { ...base, fase: "imagenes", etiqueta: "Generando imágenes", tono: "azul", detalle: `${imagenes.enCurso} en proceso.` };
   if (imagenes.porAprobar) return { ...base, fase: "revisar-imagenes", etiqueta: `${imagenes.porAprobar} ${imagenes.porAprobar === 1 ? "imagen" : "imágenes"} por revisar`, tono: "ambar", detalle: "Apruébalas o recházalas con una nota." };
   if (clips.enCurso) return { ...base, fase: "clips", etiqueta: "Generando clips", tono: "azul", detalle: `${clips.enCurso} en proceso.` };
-  if (clips.porAprobar) return { ...base, fase: "revisar-clips", etiqueta: `${clips.porAprobar} ${clips.porAprobar === 1 ? "clip" : "clips"} por revisar`, tono: "ambar", detalle: "Apruébalos o pide regenerar." };
+  if (clips.porAprobar && !directo) return { ...base, fase: "revisar-clips", etiqueta: `${clips.porAprobar} ${clips.porAprobar === 1 ? "clip" : "clips"} por revisar`, tono: "ambar", detalle: "Apruébalos o pide regenerar." };
   if (imagenes.aprobadas < imagenes.total) {
     const nunca = p.escenas.every((e) => e.tipo !== "generada" || (e.imagen.estado === "pendiente" && e.imagen.intentos === 0));
     return nunca
       ? { ...base, fase: "plan", etiqueta: "Plan de escenas listo", tono: "neutro", detalle: "Revisa el plan y genera las imágenes base." }
       : { ...base, fase: "imagenes", etiqueta: "Faltan imágenes", tono: "ambar", detalle: `${imagenes.porGenerar} por regenerar${imagenes.enTope ? ` (${imagenes.enTope} en el tope de intentos)` : ""}.` };
   }
-  if (clips.aprobadas < clips.total) {
+  if (clips.aprobadas + (directo ? clips.porAprobar : 0) < clips.total) {
     return { ...base, fase: "clips", etiqueta: "Imágenes aprobadas", tono: "azul", detalle: `Faltan ${clips.porGenerar} ${clips.porGenerar === 1 ? "clip" : "clips"}${clips.enTope ? ` (${clips.enTope} en el tope de intentos)` : ""}.` };
   }
   if (f === "fallo") return { ...base, fase: "armar", etiqueta: "Falló el armado", tono: "rojo", detalle: p.final.nota || "Vuelve a armar: no cuesta." };
@@ -513,6 +619,7 @@ export function plegarTrabajos(original: ProyectoVideo, trabajos: TrabajoVideo[]
     final: { ...original.final },
     gastos: { ...original.gastos },
     trabajosAbiertos: [...original.trabajosAbiertos],
+    registro: [...original.registro],
   };
   let guardar = false;
   let finalNuevo: string | null = null;
@@ -525,10 +632,12 @@ export function plegarTrabajos(original: ProyectoVideo, trabajos: TrabajoVideo[]
           p.final.url = t.resultado.videoUrl;
           p.final.nota = "";
           finalNuevo = t.resultado.videoUrl;
+          anotar(p, "Video armado: queda por aprobar.", t.terminadoAt ?? undefined);
           guardar = true;
         } else if (TERMINADO(t)) {
           p.final.estado = "fallo";
           p.final.nota = (t.motivo || "El servidor terminó sin entregar el video.").slice(0, 600);
+          anotar(p, `Falló el armado: ${p.final.nota}`);
           guardar = true;
         } else if (TOMADO(t)) p.final.estado = "generando";
       }
@@ -547,10 +656,13 @@ export function plegarTrabajos(original: ProyectoVideo, trabajos: TrabajoVideo[]
           pieza.url = rep.url;
           pieza.nota = "";
           pieza.revisadaPor = "";
+          pieza.revision = null;
+          anotar(p, `Escena ${e.n}: llegó ${campo === "imagen" ? "la imagen" : "el clip"} (intento ${pieza.intentos}).`, rep.fecha || undefined);
           guardar = true;
         } else if (rep?.error) {
           pieza.estado = "fallo";
           pieza.nota = rep.error.slice(0, 600);
+          anotar(p, `Escena ${e.n}: falló ${campo === "imagen" ? "la imagen" : "el clip"}: ${pieza.nota}`, rep.fecha || undefined);
           guardar = true;
         } else if (TERMINADO(t)) {
           pieza.estado = "fallo";

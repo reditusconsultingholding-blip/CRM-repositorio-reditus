@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES, type Profile } from "@/lib/auth";
@@ -9,7 +10,7 @@ import { VIDEOS_ROLES, enlaceSeguro, leerDatosVideo, versionVigente, type GuionG
 import { ID_VALIDO, escribirGuionArchivo, leerGuionArchivo } from "@/lib/videos-server";
 import {
   MAX_FOTOS_PROYECTO,
-  TOPE_INTENTOS_ESCENA,
+  anotar,
   escenasParaClip,
   escenasParaImagen,
   faltaParaArmar,
@@ -25,10 +26,12 @@ import {
   type ProyectoVideo,
   type TipoPieza,
 } from "@/lib/proyecto-video";
-import { heredarProyecto, normalizarPlan, planDeCorreccion, vozSinCompletar, type CorreccionProyecto } from "@/lib/proyecto-video-plan";
-import { analizarFotosProducto, datosDePlan, ponerAlDiaProyecto, proponerPlan, type AnalisisFotos } from "@/lib/proyecto-video-server";
+import { heredarProyecto, normalizarPlan, planDeCorreccion, proyectoDeVariacion, type CorreccionProyecto, type PedidoVariacion } from "@/lib/proyecto-video-plan";
+import { alDiaYAvanzar, analizarFotosProducto, avanzar, conCandado, datosDePlan, encolarEtapa, marcarEnMarcha, ponerAlDiaProyecto, proponerPlan, type AnalisisFotos } from "@/lib/proyecto-video-server";
 import { ID_TRABAJO, type EtapaTrabajo, type TrabajoVista } from "@/lib/trabajos-video";
-import { cancelarTrabajo, crearTrabajoEtapa, servidorVideoActivo } from "@/lib/trabajos-video-server";
+import { cancelarTrabajo, creditosDeHoy, servidorVideoActivo, topeDeHoy, type TopeDiario } from "@/lib/trabajos-video-server";
+import { leerConfigVideos, type ConfigVideos } from "@/lib/videos-config";
+import { escribirConfig, leerConfig } from "@/lib/videos-config-server";
 
 // Acciones del PROYECTO DE VIDEO POR ESCENAS (`lib/proyecto-video.ts`).
 //
@@ -61,10 +64,22 @@ async function seguro<T extends object>(fn: () => Promise<T>): Promise<T | { err
   }
 }
 
+/**
+ * Una acción que escribe el proyecto: corre con el candado del guion, para no pisarse con el
+ * modo directo (que también lo escribe cuando el servidor cierra un trabajo).
+ */
+async function bajoCandado<T extends object>(id: string, fn: () => Promise<T | { error: string }>): Promise<T | { error: string }> {
+  return seguro<T | { error: string }>(async () => {
+    if (typeof id !== "string" || !ID_VALIDO.test(id)) return { error: "Guion inválido." };
+    const r = await conCandado(createAdminClient(), id, 12_000, fn);
+    return r ?? { error: "El proyecto está avanzando solo en este momento (revisión automática o encolado). Espera unos segundos y vuelve a intentarlo." };
+  });
+}
+
 type Abierto = { profile: Profile; admin: Almacen; g: GuionGuardado; formato: FormatoVideo; version: VersionGuion; trabajos: TrabajoVista[] };
 
 /** Valida a quien llama y trae el guion AL DÍA con lo que reportó el trabajador. */
-async function abrir(id: string): Promise<Abierto | { error: string }> {
+async function abrir(id: string, escribir = true): Promise<Abierto | { error: string }> {
   const profile = await requireProfile();
   if (!VIDEOS_ROLES.includes(profile.role)) return { error: "No tienes permiso para hacer esto." };
   if (typeof id !== "string" || !ID_VALIDO.test(id)) return { error: "Guion inválido." };
@@ -73,7 +88,7 @@ async function abrir(id: string): Promise<Abierto | { error: string }> {
   if (!leido) return { error: "No se encontró el guion." };
   const formato = buscarFormato(leido.formato);
   if (!formato) return { error: "El formato de este guion ya no existe en la biblioteca." };
-  const alDia = await ponerAlDiaProyecto(admin, leido);
+  const alDia = await ponerAlDiaProyecto(admin, leido, escribir);
   const version = versionVigente(alDia.g);
   if (!version) return { error: "Este guion no tiene versiones." };
   return { profile, admin, g: alDia.g, formato, version, trabajos: alDia.trabajos };
@@ -86,15 +101,24 @@ async function abrirProyecto(id: string): Promise<ConProyecto | { error: string 
   const x = await abrir(id);
   if ("error" in x) return x;
   if (!x.version.proyecto) return { error: "Esta versión del guion todavía no es un proyecto por escenas: conviértela primero." };
-  return { ...x, p: structuredClone(x.version.proyecto) };
+  const p = structuredClone(x.version.proyecto);
+  // El tope de intentos vigente es el de la configuración del CEO.
+  p.topeIntentos = (await leerConfig(x.admin)).intentosPorEscena;
+  return { ...x, p };
 }
+
+const contexto = (x: Abierto) => ({ admin: x.admin, g: x.g, versionN: x.version.n, formato: x.formato, quien: { id: x.profile.id, nombre: x.profile.name } });
 
 /** Guarda el proyecto en su versión y devuelve el estado para la pantalla. */
 async function guardar(x: Abierto, p: ProyectoVideo, aviso?: string, extra?: Partial<VersionGuion>, revalidar = false): Promise<EstadoProyecto | { error: string }> {
+  // Modo directo: después de lo que hizo la persona, el proyecto sigue solo hasta donde pueda.
+  if (p.auto.activo) await avanzar(contexto(x), p);
   const ahora = new Date().toISOString();
   const g: GuionGuardado = { ...x.g, versiones: x.g.versiones.map((v) => (v.n === x.version.n ? { ...v, ...extra, proyecto: p } : v)), actualizadoAt: ahora };
   const w = await escribirGuionArchivo(x.admin, g);
   if (w.error) return { error: w.error };
+  // En modo directo queda una marca mientras espera al servidor: así se retoma aunque nadie mire.
+  if (p.auto.activo) await marcarEnMarcha(x.admin, g.id, hayTrabajoEnCurso(p));
   if (revalidar) revalidatePath("/videos");
   // Tras encolar, la pantalla necesita ver los trabajos nuevos.
   const alDia = p.trabajosAbiertos.length ? await ponerAlDiaProyecto(x.admin, g) : { g, trabajos: [] as TrabajoVista[] };
@@ -139,6 +163,8 @@ export type PedidoProyecto = {
   reemplazar?: boolean;
   /** Trae el proyecto de otra versión del mismo guion, con todo lo ya aprobado. */
   heredarDe?: number;
+  /** Modo directo desde el principio («Generar todo» y lotes): avanza solo hasta «Video por aprobar». */
+  directo?: boolean;
 };
 
 /**
@@ -147,7 +173,7 @@ export type PedidoProyecto = {
  * plantilla del formato). No encola nada.
  */
 export async function crearProyecto(id: string, pedido: PedidoProyecto): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrir(id);
     if ("error" in x) return x;
     const previo = x.version.proyecto;
@@ -178,8 +204,24 @@ export async function crearProyecto(id: string, pedido: PedidoProyecto): Promise
       const h = heredarProyecto(origen.proyecto, origen.guion, x.version.guion, contexto);
       p = { ...h.proyecto, avisos: [`Proyecto traído de la v${origen.n}: lo aprobado se conserva.`, ...h.avisos].slice(0, 8) };
     } else {
-      const plan = await proponerPlan(datosDePlan(g, x.version, x.formato, fotos, ficha), x.formato, g.pais);
+      const plan = await proponerPlan(datosDePlan(g, x.version, x.formato, fotos, ficha), x.formato, g.pais, g.referenciaTomas);
+      const cfg = await leerConfig(x.admin);
+      // Un plan de plantilla (sin IA) con escenas que cuestan no arranca solo: sus prompts son genéricos.
+      const hayGeneradas = plan.escenas.some((e) => e.tipo === "generada");
+      const arranca = pedido?.directo === true && (plan.origen === "ia" || !hayGeneradas);
       p = {
+        topeIntentos: cfg.intentosPorEscena,
+        auto: {
+          activo: arranca,
+          imagenes: cfg.autoImagenes,
+          exigencia: cfg.exigencia,
+          armarDirecto: cfg.armarAlTerminarClips,
+          parada:
+            pedido?.directo === true && !arranca
+              ? { codigo: "datos", texto: `El plan salió ${g.referenciaTomas.length ? "de la referencia, toma por toma," : "de la plantilla del formato"} sin IA (no está disponible): sus prompts son genéricos. Revísalos en «Plan» y pulsa «Seguir» para que el proyecto avance solo.`, fecha: ahora }
+              : null,
+        },
+        variacionDe: null,
         contexto,
         escenas: plan.escenas,
         costo: { creditos: 0, segundosGenerados: 0, imagenes: 0 },
@@ -190,6 +232,10 @@ export async function crearProyecto(id: string, pedido: PedidoProyecto): Promise
         // Lo que ya se gastó en un plan anterior de esta versión no desaparece al rehacerlo.
         gastos: previo?.gastos ?? {},
         trabajosAbiertos: [],
+        registro: [
+          ...(previo?.registro ?? []),
+          { fecha: ahora, texto: `Plan de escenas ${plan.origen === "ia" ? "propuesto por IA" : g.referenciaTomas.length ? "armado desde la referencia (sin IA)" : "armado con la plantilla del formato (sin IA)"}${g.referenciaTomas.length ? ", clonando la estructura de la referencia" : ""}: ${plan.escenas.length} escenas (${x.profile.name}).` },
+        ],
         creadoAt: ahora,
         creadoPor: x.profile.name,
       };
@@ -203,8 +249,26 @@ export async function crearProyecto(id: string, pedido: PedidoProyecto): Promise
 /** Cómo va el proyecto. La pantalla la llama cada pocos segundos mientras hay algo en proceso. */
 export async function consultarProyecto(id: string): Promise<EstadoProyecto | { error: string }> {
   return seguro(async () => {
-    const x = await abrir(id);
+    // Sin candado: solo lee. Lo que haya que guardar se guarda dentro del candado, más abajo.
+    const x = await abrir(id, false);
     if ("error" in x) return x;
+    // Modo directo: la consulta también empuja (revisión con IA de lo recién llegado, etapa siguiente).
+    const p0 = x.version.proyecto;
+    if (p0?.auto.activo && !hayTrabajoEnCurso(p0)) {
+      // Si otro ya lo está empujando (el servidor acaba de cerrar un trabajo), aquí solo se muestra.
+      const r = await conCandado(x.admin, x.g.id, 0, async () => {
+        const fresco = await leerGuionArchivo(x.admin, x.g.id);
+        return fresco ? alDiaYAvanzar(x.admin, fresco, { id: x.profile.id, nombre: x.profile.name }) : null;
+      });
+      if (r) return { guardado: r.g, trabajos: r.trabajos.length ? r.trabajos : x.trabajos, servidorActivo: servidorVideoActivo() };
+      return estado(x);
+    }
+    // Sin modo directo: lo que reportó el servidor se guarda aquí (bajo candado; si está ocupado, en la próxima consulta).
+    const guardado = await conCandado(x.admin, x.g.id, 0, async () => {
+      const fresco = await leerGuionArchivo(x.admin, x.g.id);
+      return fresco ? ponerAlDiaProyecto(x.admin, fresco) : null;
+    });
+    if (guardado) return { guardado: guardado.g, trabajos: guardado.trabajos.length ? guardado.trabajos : x.trabajos, servidorActivo: servidorVideoActivo() };
     return estado(x);
   });
 }
@@ -222,7 +286,7 @@ export type PlanEditado = {
  * conservan (se reconocen por su número anterior). No encola nada.
  */
 export async function guardarPlan(id: string, plan: PlanEditado): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     const { p } = x;
@@ -255,56 +319,18 @@ export async function guardarPlan(id: string, plan: PlanEditado): Promise<Estado
       if (JSON.stringify(p.opciones) !== antes) finalPorRehacer(p);
     }
     if (cambioElVideo) finalPorRehacer(p);
+    anotar(p, `Plan editado por ${x.profile.name}: ${p.escenas.length} escenas.`);
     return guardar(x, p, n.avisos.length ? n.avisos.join(" ") : undefined);
   });
 }
 
 // ------------------------------------------------------------ encolar ----
 
-/**
- * Encola una etapa para las escenas dadas y deja marcadas las piezas (o el
- * final). Modifica `x.p`. Devuelve el motivo si no se pudo.
- */
+/** Encola una etapa (ver `encolarEtapa`). Modifica `x.p`. Devuelve el motivo si no se pudo. */
 async function encolar(x: ConProyecto, etapa: EtapaTrabajo, escenas: EscenaProyecto[]): Promise<string | null> {
-  const { p } = x;
-  if (etapa !== "imagenes") {
-    const faltan = vozSinCompletar(p);
-    if (faltan.length && (p.opciones.voz || p.opciones.subtitulos)) {
-      return `Todavía hay datos por completar en lo que se dice: ${faltan.slice(0, 4).join(", ")}${faltan.length > 4 ? "…" : ""}. Complétalos en el plan antes de gastar en clips o armar.`;
-    }
-  }
-  const campo: TipoPieza = etapa === "imagenes" ? "imagen" : "clip";
-  if (etapa !== "armado") {
-    const enTope = escenas.filter((e) => e[campo].intentos >= TOPE_INTENTOS_ESCENA);
-    if (enTope.length) {
-      return `La escena ${enTope.map((e) => e.n).join(", ")} ya llegó al tope de ${TOPE_INTENTOS_ESCENA} intentos de ${campo === "imagen" ? "imagen" : "clip"}. Para no seguir gastando: cámbiala a «Foto real animada», o reescribe su prompt y pide al CEO que reabra los intentos.`;
-    }
-  }
-  const r = await crearTrabajoEtapa(x.admin, {
-    g: x.g,
-    version: x.version.n,
-    formato: x.formato,
-    proyecto: p,
-    etapa,
-    escenas,
-    quien: { id: x.profile.id, nombre: x.profile.name },
-  });
-  if ("error" in r) return r.error;
-  const idTrabajo = r.trabajo.id;
-  if (etapa === "armado") {
-    p.final = { ...p.final, estado: "en-cola", trabajoId: idTrabajo, armados: p.final.armados + 1, nota: "" };
-  } else {
-    const ns = new Set(escenas.map((e) => e.n));
-    p.escenas = p.escenas.map((e) => {
-      if (!ns.has(e.n)) return e;
-      const pieza = { ...e[campo], estado: "en-cola" as const, intentos: e[campo].intentos + 1, trabajoId: idTrabajo, revisadaPor: "" };
-      // Una imagen nueva deja sin valor el clip que salió de la anterior.
-      return campo === "imagen" ? { ...e, imagen: pieza, clip: { ...e.clip, estado: "pendiente" as const, url: null, trabajoId: null, revisadaPor: "" } } : { ...e, clip: pieza };
-    });
-    finalPorRehacer(p);
-  }
-  p.trabajosAbiertos = [...p.trabajosAbiertos, idTrabajo].slice(-40);
-  return null;
+  const r = await encolarEtapa(contexto(x), x.p, etapa, escenas);
+  if (!r) x.p.auto.parada = null;
+  return r?.error ?? null;
 }
 
 /** Si el guion no se pudo guardar tras encolar, el trabajo no debe quedar huérfano en la cola. */
@@ -323,7 +349,7 @@ async function guardarTrasEncolar(x: ConProyecto, antes: string[], aviso?: strin
  *  · `armado`: cuando todos los clips están aprobados. No cuesta ni cuenta para el tope diario.
  */
 export async function pedirEtapa(id: string, etapa: EtapaTrabajo): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     const { p } = x;
@@ -348,7 +374,7 @@ export async function pedirEtapa(id: string, etapa: EtapaTrabajo): Promise<Estad
 
 /** Regenera UNA pieza (imagen o clip) de una escena, con la nota de qué corregir. Cuenta como intento. */
 export async function regenerarPieza(id: string, n: number, tipo: TipoPieza, nota: string): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     const { p } = x;
@@ -369,7 +395,7 @@ export async function regenerarPieza(id: string, n: number, tipo: TipoPieza, not
 
 /** Cancela un trabajo del proyecto que el servidor todavía no tomó. El intento no se cuenta. */
 export async function cancelarTrabajoProyecto(id: string, trabajoId: string): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     const { p } = x;
@@ -383,7 +409,10 @@ export async function cancelarTrabajoProyecto(id: string, trabajoId: string): Pr
     p.escenas = p.escenas.map((e) => ({ ...e, imagen: soltar(e.imagen), clip: soltar(e.clip) }));
     if (p.final.trabajoId === trabajoId) p.final = { ...p.final, estado: "pendiente", trabajoId: null, armados: Math.max(0, p.final.armados - 1) };
     p.trabajosAbiertos = p.trabajosAbiertos.filter((t) => t !== trabajoId);
-    return guardar(x, p);
+    // Cancelar es querer parar: el modo directo queda en pausa (si no, lo volvería a encolar enseguida).
+    const pausado = p.auto.activo;
+    p.auto = { ...p.auto, activo: false, parada: null };
+    return guardar(x, p, pausado ? "Cancelado. El modo directo quedó en pausa: enciéndelo de nuevo o sigue a mano." : undefined);
   });
 }
 
@@ -393,7 +422,7 @@ export type Decision = "aprobar" | "rechazar";
 
 /** El sí o el no de una persona a una imagen o a un clip. Rechazar exige decir por qué. */
 export async function revisarPieza(id: string, n: number, tipo: TipoPieza, decision: Decision, nota?: string): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     if (!APROBAR_ROLES.includes(x.profile.role)) return { error: "Solo el CEO, el gerente comercial o la directora operativa pueden aprobar o rechazar." };
@@ -406,12 +435,14 @@ export async function revisarPieza(id: string, n: number, tipo: TipoPieza, decis
       if (pieza.estado === "aprobada") return estado(x);
       if (pieza.estado !== "por-aprobar" || !pieza.url) return { error: "Esa pieza no está por aprobar." };
       e[campo] = { ...pieza, estado: "aprobada", nota: "", revisadaPor: x.profile.name };
+      anotar(p, `Escena ${e.n}: ${campo === "imagen" ? "imagen aprobada" : "clip aprobado"} por ${x.profile.name}.`);
     } else {
       if (pieza.estado !== "por-aprobar" && pieza.estado !== "aprobada") return { error: "Esa pieza no se puede rechazar ahora." };
       if (campo === "imagen" && piezaEnCurso(e.clip)) return { error: "El clip de esa escena se está generando: espera a que termine." };
       const limpia = String(nota ?? "").trim().slice(0, 600);
       if (!limpia) return { error: "Escribe qué está mal: esa nota es la que recibe el generador al regenerar." };
       e[campo] = { ...pieza, estado: "rechazada", nota: limpia, revisadaPor: x.profile.name };
+      anotar(p, `Escena ${e.n}: ${campo === "imagen" ? "imagen rechazada" : "clip rechazado"} por ${x.profile.name}: ${limpia}`);
       // Sin imagen válida, el clip que salió de ella tampoco vale.
       if (campo === "imagen" && e.clip.url) e.clip = { ...e.clip, estado: "pendiente", url: null, trabajoId: null, revisadaPor: "" };
       finalPorRehacer(p);
@@ -422,7 +453,7 @@ export async function revisarPieza(id: string, n: number, tipo: TipoPieza, decis
 
 /** Aprueba varias piezas de una vez. La pantalla solo lo ofrece después de haberlas visto todas. */
 export async function aprobarPiezas(id: string, tipo: TipoPieza, ns: number[]): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     if (!APROBAR_ROLES.includes(x.profile.role)) return { error: "Solo el CEO, el gerente comercial o la directora operativa pueden aprobar." };
@@ -442,7 +473,7 @@ export async function aprobarPiezas(id: string, tipo: TipoPieza, ns: number[]): 
 
 /** Solo el CEO: vuelve a cero los intentos de una pieza que llegó al tope. */
 export async function reabrirIntentos(id: string, n: number, tipo: TipoPieza): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     if (x.profile.role !== "ceo") return { error: "Solo el CEO puede reabrir los intentos de una escena." };
@@ -464,7 +495,7 @@ export async function reabrirIntentos(id: string, n: number, tipo: TipoPieza): P
  * a generar y el armado espera a que una persona apruebe lo nuevo.
  */
 export async function corregirProyecto(id: string, correccion: CorreccionProyecto): Promise<EstadoProyecto | { error: string }> {
-  return seguro(async () => {
+  return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
     const { p } = x;
@@ -519,6 +550,7 @@ export async function corregirProyecto(id: string, correccion: CorreccionProyect
           e[campo] = { ...e[campo], nota: notas.find((y) => y.n === e.n)?.nota ?? e[campo].nota };
           return e;
         });
+    // Una corrección la manda una persona: lo regenerado vuelve a ella, no se «regenera solo» otra vez.
     if (plan.imagenes.length) {
       const error = await encolar(x, "imagenes", conNota(plan.imagenes, "imagen", c.imagenes));
       if (error) return { error };
@@ -538,5 +570,148 @@ export async function corregirProyecto(id: string, correccion: CorreccionProyect
       }
     }
     return guardarTrasEncolar(x, antes, aviso);
+  });
+}
+
+// ------------------------------------------------------- modo directo ----
+
+export type AjustesAuto = { activo?: boolean; imagenes?: boolean; exigencia?: string; armarDirecto?: boolean };
+
+/** Interruptores del proyecto: modo directo, aprobación automática de imágenes, exigencia y armar al terminar los clips. */
+export async function ajustarAuto(id: string, ajustes: AjustesAuto): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    const b = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
+    p.auto = {
+      activo: b(ajustes?.activo, p.auto.activo),
+      imagenes: b(ajustes?.imagenes, p.auto.imagenes),
+      exigencia: ajustes?.exigencia === "normal" ? "normal" : ajustes?.exigencia === "estricto" ? "estricto" : p.auto.exigencia,
+      armarDirecto: b(ajustes?.armarDirecto, p.auto.armarDirecto),
+      parada: ajustes?.activo === true ? null : p.auto.parada,
+    };
+    return guardar(x, p);
+  });
+}
+
+/** «Seguir»: la persona ya resolvió lo que detuvo al proyecto. Enciende el modo directo y avanza. */
+export async function seguirProyecto(id: string): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    if (p.final.estado === "fallo") p.final = { ...p.final, estado: "pendiente" };
+    p.auto = { ...p.auto, activo: true, parada: null };
+    const r = await guardar(x, p);
+    if ("error" in r) return r;
+    const parada = versionVigente(r.guardado)?.proyecto?.auto.parada;
+    return { ...r, aviso: parada ? undefined : "El proyecto sigue solo: se detiene únicamente si hace falta una persona." };
+  });
+}
+
+// --------------------------------------------------------- variaciones ----
+
+export type VariacionesCreadas = EstadoProyecto & { variaciones: GuionGuardado[] };
+
+/**
+ * «Crear variaciones»: N proyectos hijos que cambian SOLO el gancho (escena 1)
+ * y/o el cierre, y reutilizan todo lo demás ya aprobado sin volver a pagarlo.
+ * Cada hijo es un guion nuevo en modo directo: encola únicamente lo nuevo y
+ * su armado. Si el tope diario de variaciones no alcanza, las que sobran
+ * quedan detenidas «en espera para mañana».
+ */
+export async function crearVariaciones(id: string, pedidos: PedidoVariacion[]): Promise<VariacionesCreadas | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    if (hayTrabajoEnCurso(p)) return { error: "Espera a que termine lo que se está generando antes de crear variaciones." };
+    const falta = faltaParaArmar({ ...p, auto: { ...p.auto, armarDirecto: true } });
+    if (falta.length) return { error: `Las variaciones reutilizan las escenas ya hechas: todavía falta ${falta.slice(0, 3).join(", ")}.` };
+    const t = (v: unknown, max: number) => (typeof v === "string" ? v : "").trim().slice(0, max);
+    const limpios: PedidoVariacion[] = (Array.isArray(pedidos) ? pedidos : []).slice(0, 10).map((v) => ({
+      gancho: t(v?.gancho, 400),
+      regenerarGancho: v?.regenerarGancho === true,
+      notaGancho: t(v?.notaGancho, 400),
+      oferta: t(v?.oferta, 400),
+      llamado: t(v?.llamado, 200),
+    }));
+    if (!limpios.length) return { error: "Elige al menos una variación." };
+    const sinCambio = limpios.findIndex((v) => !v.gancho && !v.regenerarGancho && !v.oferta && !v.llamado);
+    if (sinCambio >= 0) return { error: `La variación ${sinCambio + 1} no cambia nada: ponle otro gancho, otra oferta u otro llamado a la acción.` };
+    const ahora = new Date().toISOString();
+    const quien = { id: x.profile.id, nombre: x.profile.name };
+    const variaciones: GuionGuardado[] = [];
+    for (const [i, v] of limpios.entries()) {
+      const proyecto = proyectoDeVariacion(p, v, { guionId: x.g.id, producto: x.g.producto }, ahora, x.profile.name);
+      const hijo: GuionGuardado = {
+        ...x.g,
+        id: randomUUID(),
+        oferta: proyecto.contexto.cierre.oferta,
+        llamado: proyecto.contexto.cierre.llamadoALaAccion,
+        estado: "borrador",
+        correcciones: [],
+        autorId: x.profile.id,
+        autorNombre: x.profile.name,
+        creadoAt: ahora,
+        actualizadoAt: ahora,
+        versiones: [
+          { ...x.version, n: 1, queCambio: `Variación ${i + 1} de «${x.g.producto}»: cambia ${proyecto.variacionDe?.cambia}.`, correccionId: null, correccion: "", restauradaDe: null, autorId: x.profile.id, autorNombre: x.profile.name, fecha: ahora, videoUrl: null, videoTrabajoId: null, videoAprobado: null, proyecto },
+        ],
+      };
+      const w = await escribirGuionArchivo(x.admin, hijo);
+      if (w.error) return { error: `Se crearon ${variaciones.length} de ${limpios.length} variaciones. La siguiente falló: ${w.error}` };
+      // Cada hija arranca sola: encola lo nuevo (o va directo al armado si solo cambió texto).
+      variaciones.push((await alDiaYAvanzar(x.admin, hijo, quien)).g);
+    }
+    revalidatePath("/videos");
+    const detenidas = variaciones.filter((g) => g.versiones[0].proyecto?.auto.parada).length;
+    return { ...estado(x), variaciones, aviso: `${variaciones.length} ${variaciones.length === 1 ? "variación creada" : "variaciones creadas"}${detenidas ? `; ${detenidas} quedaron detenidas (mira por qué en «Necesitan tu atención»)` : ""}. Aparecen en «Guiones guardados».` };
+  });
+}
+
+// ------------------------------------------------- topes y automatización ----
+
+export type EstadoConfig = { config: ConfigVideos; tope: TopeDiario; creditosHoy: number };
+
+/** La configuración vigente y lo usado hoy. La ve cualquiera que opere videos; la cambia solo el CEO. */
+export async function configVideos(): Promise<EstadoConfig | { error: string }> {
+  return seguro(async () => {
+    const profile = await requireProfile();
+    if (!VIDEOS_ROLES.includes(profile.role)) return { error: "No tienes permiso para hacer esto." };
+    const admin = createAdminClient();
+    const [config, tope, creditosHoy] = await Promise.all([leerConfig(admin), topeDeHoy(admin), servidorVideoActivo() ? creditosDeHoy(admin) : Promise.resolve(0)]);
+    return { config, tope, creditosHoy };
+  });
+}
+
+export async function guardarConfigVideos(raw: unknown): Promise<EstadoConfig | { error: string }> {
+  return seguro(async () => {
+    const profile = await requireProfile();
+    if (profile.role !== "ceo") return { error: "Solo el CEO puede cambiar los topes y la automatización." };
+    const admin = createAdminClient();
+    const config: ConfigVideos = { ...leerConfigVideos(raw), actualizadoPor: profile.name, actualizadoAt: new Date().toISOString() };
+    const w = await escribirConfig(admin, config);
+    if (w.error) return { error: w.error };
+    return { config, tope: await topeDeHoy(admin), creditosHoy: servidorVideoActivo() ? await creditosDeHoy(admin) : 0 };
+  });
+}
+
+// ------------------------------------------------------------- activos ----
+
+/** Suma una foto real del producto al proyecto (ya subida con la subida firmada de siempre). */
+export async function agregarFotoProyecto(id: string, url: string): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    const limpia = enlaceSeguro(String(url ?? ""));
+    if (!limpia?.startsWith("https://")) return { error: "La foto debe ser un enlace https." };
+    if (p.contexto.fotos.includes(limpia)) return estado(x);
+    if (p.contexto.fotos.length >= MAX_FOTOS_PROYECTO) return { error: `Un proyecto lleva hasta ${MAX_FOTOS_PROYECTO} fotos del producto.` };
+    p.contexto.fotos = [...p.contexto.fotos, limpia];
+    anotar(p, `Foto real del producto agregada por ${x.profile.name}.`);
+    return guardar({ ...x, g: { ...x.g, fotosProducto: p.contexto.fotos } }, p);
   });
 }

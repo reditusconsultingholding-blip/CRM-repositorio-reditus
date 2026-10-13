@@ -16,7 +16,8 @@ const fs = require("fs");
 const path = require("path");
 const { tamano } = require("./ffmpeg");
 const { TrabajoSoltado } = require("./crm");
-const { carpetaProyecto, huella, claveUrl, tareaPendiente, recordarTarea } = require("./proyecto");
+const { carpetaProyecto, carpetaCache, huella, claveUrl, tareaPendiente, recordarTarea } = require("./proyecto");
+const { crearLimites, prioridadDe, crearPresupuesto } = require("./limites");
 const { armar, modoAudio } = require("./armado");
 
 const ETAPAS = ["imagenes", "clips", "armado"];
@@ -114,6 +115,24 @@ async function procesarEtapa(trabajo, deps) {
   }
 
   const nombreProveedor = etapa === "imagenes" ? (deps.proveedorImagen || {}).nombre || "sin-proveedor" : etapa === "clips" ? deps.proveedor.nombre : "armado";
+
+  // Paralelismo: los límites son de TODO el proceso (los comparte cada trabajo en curso).
+  const limites = deps.limites || crearLimites(cfg);
+  const prioridad = prioridadDe(trabajo);
+  const grupo = String(trabajo.guionId || trabajo.id);
+  // Medición (ms, sumados sobre las escenas del trabajo): turno = esperando cupo aquí; cola = en la
+  // cola del proveedor; generacion = el proveedor generando; subida = subir y reportar al CRM.
+  const T = { inicio: Date.now(), turno: 0, cola: 0, generacion: 0, subida: 0, armado: 0 };
+  const anotarTiempos = (resultado, escenas) => anotarTiempo(cfg, { trabajo, etapa, escenas, prioridad, T, resultado });
+  // Latido de fondo: mientras el trabajo espera turno, el CRM debe seguir viéndolo vivo.
+  let ultimoDetalle = "En espera de turno";
+  let retirado = null;
+  const latidoFondo = setInterval(() => {
+    reportar(ultimoDetalle).catch((e) => {
+      if (e instanceof TrabajoSoltado) retirado = e;
+    });
+  }, 45000);
+  if (latidoFondo.unref) latidoFondo.unref();
   try {
     if (!ETAPAS.includes(etapa)) throw new Error(`Etapa desconocida: «${String(etapa).slice(0, 40)}». Este trabajador conoce: ${ETAPAS.join(", ")}.`);
     registro.info(`Trabajo ${trabajo.id}: etapa «${etapa}» de ${trabajo.guionId || "?"} v${trabajo.version ?? "?"}, ${etapa === "armado" ? (trabajo.todas || lista).length : lista.length} escena(s), ${trabajo.relacionAspecto}, proveedor ${nombreProveedor}`);
@@ -122,8 +141,19 @@ async function procesarEtapa(trabajo, deps) {
 
     // ================================================== armado ====
     if (etapa === "armado") {
-      const r = await armar({ cfg, ff, registro, trabajo, carpeta: proyecto, latir: (d) => reportar(d) });
+      // Un armado a la vez (o dos, según los núcleos): config.json → paralelo.armados. La caché es compartida.
+      const r = await limites.armado.usar({ prioridad, grupo }, async (espera) => {
+        T.turno += espera;
+        if (retirado) throw retirado;
+        const t0 = Date.now();
+        try {
+          return await armar({ cfg, ff, registro, trabajo, carpeta: carpetaCache(cfg), conCerrojo: limites.conCerrojo, latir: (d) => ((ultimoDetalle = d), reportar(d)) });
+        } finally {
+          T.armado += Date.now() - t0;
+        }
+      });
       hecho = 1;
+      const tSubida = Date.now();
       await reportar("Subiendo el video al CRM", true);
       const respuesta = await conCrm(
         crm.entregar(
@@ -144,8 +174,10 @@ async function procesarEtapa(trabajo, deps) {
       fs.copyFileSync(r.archivo, path.join(cfg.carpetas.entregados, `${trabajo.id}.mp4`));
       anotarCosto(cfg, { trabajo, etapa, proveedor: "armado", modelos: [], resultado: "listo", segundosVideo: r.duracion, segundosGenerados: 0, costoUsd: 0 });
       fs.rmSync(carpeta, { recursive: true, force: true });
-      registro.info(`Trabajo ${trabajo.id}: video armado y entregado (${redondo(r.duracion)} s). Queda por aprobar en el CRM.`);
-      return { ok: true, respuesta, armado: r };
+      T.subida += Date.now() - tSubida;
+      const tiempos = anotarTiempos("listo", (trabajo.todas || lista).length);
+      registro.info(`Trabajo ${trabajo.id}: video armado y entregado (${redondo(r.duracion)} s). Queda por aprobar en el CRM. Tiempos: turno ${tiempos.turno} s, armado ${tiempos.armado} s, subida ${tiempos.subida} s, total ${tiempos.total} s.`);
+      return { ok: true, respuesta, armado: r, tiempos };
     }
 
     // ======================================= imagenes y clips ====
@@ -164,35 +196,87 @@ async function procesarEtapa(trabajo, deps) {
     })() : "ninguno";
     let cortar = null; // motivo de cuenta (clave, saldo): las escenas que faltan fallarían igual y no se piden
     let buenas = 0;
+    let fatal = null; // el CRM retiró el trabajo o no responde: las escenas que no han empezado ya no empiezan
+    // Tope de gasto opcional del trabajo (créditos). Cuenta lo ya gastado en intentos anteriores.
+    const presupuesto = crearPresupuesto(trabajo.gastoMaximoCreditos, estado.creditos);
+    const semaforo = tipo === "imagen" ? limites.imagen : limites.video;
 
-    for (const escena of lista) {
+    /**
+     * Pide al proveedor la imagen o el clip de una escena, con cupo y con tope de gasto.
+     * `pedir(ctxExtra)` hace la llamada; `clave` identifica la tarea pendiente (para no pagarla dos veces).
+     */
+    async function generar(n, clave, pedir) {
+      // Retomar una tarea ya creada no es gasto nuevo: el tope solo frena las que se crearían ahora.
+      const pendiente = tareaPendiente(proyecto, clave);
+      const nueva = !(pendiente && pendiente.taskId);
+      // El permiso de gasto se pide ANTES de ocupar cupo del proveedor, para no quitárselo a otros trabajos mientras se espera.
+      if (nueva && !(await presupuesto.admitir())) {
+        throw Object.assign(new Error(`tope de gasto: este trabajo tiene un máximo de ${presupuesto.limite} créditos y ya lleva ${redondo(presupuesto.consumido(), 2)}; esta escena no se pidió.`), { yaDicho: true, porTope: true });
+      }
+      let creditos = null;
+      const turno = semaforo.usar({ prioridad, grupo }, async (espera) => {
+        T.turno += espera;
+        if (fatal || retirado) throw fatal || retirado;
+        if (cortar) throw Object.assign(new Error(cortar), { yaDicho: true });
+        const memoria = tareaPendiente(proyecto, clave);
+        ultimoDetalle = `Escena ${n}: ${tipo === "imagen" ? "imagen base" : "clip"}`;
+        await reportar(ultimoDetalle, true);
+        // Fases que avisa el proveedor (ctx.fase): «cola» o «generando». Si no avisa, todo cuenta como generación.
+        let faseActual = "generacion";
+        let desde = Date.now();
+        const fase = (f) => {
+          const ahora = Date.now();
+          T[faseActual] += ahora - desde;
+          desde = ahora;
+          faseActual = f === "cola" ? "cola" : "generacion";
+        };
+        try {
+          const r = await pedir({ memoria, recordar: (m) => recordarTarea(proyecto, clave, m), latir: (d) => ((ultimoDetalle = d), reportar(d)), fase });
+          creditos = typeof r.creditos === "number" ? r.creditos : null;
+          return r;
+        } catch (e) {
+          // Clave o saldo: se marca ANTES de soltar el cupo, para que la escena que sigue en la fila ya no se pida.
+          if (e && (e.deLaCuenta || e.code === 401 || e.code === 402)) cortar = `No se pidió: ${registro.limpiar(e.message || String(e)).slice(0, 300)}`;
+          throw e;
+        } finally {
+          fase("fin");
+        }
+      });
+      try {
+        return await turno;
+      } finally {
+        if (nueva) presupuesto.terminar(creditos);
+      }
+    }
+
+    async function unaEscena(escena) {
       const n = escena.n;
       let memo = estado.escenas[n] || {};
       if (memo.reportada) {
         hecho++;
         if (!memo.error) buenas++;
-        continue;
+        return;
       }
       try {
+        if (fatal || retirado) throw fatal || retirado;
         if (cortar) throw Object.assign(new Error(cortar), { yaDicho: true });
         if (escena.tipo && escena.tipo !== "generada") throw new Error(`La escena ${n} es de tipo «${escena.tipo}»: su clip lo fabrica el armado, no se genera.`);
 
         let archivo = memo.archivo && fs.existsSync(path.join(carpeta, memo.archivo)) ? memo.archivo : null;
         if (!archivo) {
-          await reportar(`Escena ${n}: ${tipo === "imagen" ? "imagen base" : "clip"} (${hecho + 1} de ${total})`, true);
           let r;
           if (tipo === "imagen") {
             const prompt = String(escena.promptImagen || "").trim();
             if (!prompt) throw new Error(`La escena ${n} no trae el texto de la imagen (promptImagen).`);
             // La clave NO lleva el número de escena (el CRM puede reordenar): va por lo que se pidió.
             const clave = `imagen:${huella(prompt, fotos.map((u) => claveUrl(u)), trabajo.relacionAspecto)}`;
-            r = await deps.proveedorImagen.generarImagen({
-              cfg, registro, ff, trabajo, escena, prompt, referencias: fotos, analisis: String(contexto.analisisProducto || ""),
-              carpeta, base: `imagen-${dos(n)}`, ancho, alto, relacion: trabajo.relacionAspecto,
-              memoria: tareaPendiente(proyecto, clave),
-              recordar: (m) => recordarTarea(proyecto, clave, m),
-              latir: (d) => reportar(d),
-            });
+            r = await generar(n, clave, (extra) =>
+              deps.proveedorImagen.generarImagen({
+                cfg, registro, ff, trabajo, escena, prompt, referencias: fotos, analisis: String(contexto.analisisProducto || ""),
+                carpeta, base: `imagen-${dos(n)}`, ancho, alto, relacion: trabajo.relacionAspecto,
+                ...extra,
+              }),
+            );
             archivo = r.archivo;
             if (!archivo || !fs.existsSync(path.join(carpeta, archivo)) || fs.statSync(path.join(carpeta, archivo)).size < 500) throw new Error(`El proveedor no dejó una imagen válida para la escena ${n}.`);
             estado.imagenes++;
@@ -214,17 +298,18 @@ async function procesarEtapa(trabajo, deps) {
             if (!prompt) throw new Error(`La escena ${n} no trae el texto del clip (promptVideo).`);
             const clave = `clip:${huella(prompt, claveUrl(imagen.url, imagen.intentos || 0), trabajo.relacionAspecto, audio, audio === "veo" ? escena.voz || "" : "")}`;
             archivo = `clip-${dos(n)}.mp4`;
-            r = await deps.proveedor.generarEscena({
-              cfg, registro, ff,
-              // El proveedor de video recibe la imagen aprobada como «foto» de la escena: es su primer fotograma.
-              trabajo: { ...trabajo, imagenesProducto: [imagen.url], opciones: { ...(trabajo.opciones || {}) } },
-              escena: { n, nombre: escena.nombre || `Escena ${n}`, prompt, duracion: Number(escena.duracion) > 0 ? Number(escena.duracion) : 4, usaImagenProducto: true, voz: escena.voz || "" },
-              primerFotograma: true,
-              carpeta, salida: archivo, ancho, alto, relacion: trabajo.relacionAspecto, audio,
-              memoria: tareaPendiente(proyecto, clave),
-              recordar: (m) => recordarTarea(proyecto, clave, m),
-              latir: (d) => reportar(d),
-            });
+            const salida = archivo;
+            r = await generar(n, clave, (extra) =>
+              deps.proveedor.generarEscena({
+                cfg, registro, ff,
+                // El proveedor de video recibe la imagen aprobada como «foto» de la escena: es su primer fotograma.
+                trabajo: { ...trabajo, imagenesProducto: [imagen.url], opciones: { ...(trabajo.opciones || {}) } },
+                escena: { n, nombre: escena.nombre || `Escena ${n}`, prompt, duracion: Number(escena.duracion) > 0 ? Number(escena.duracion) : 4, usaImagenProducto: true, voz: escena.voz || "" },
+                primerFotograma: true,
+                carpeta, salida, ancho, alto, relacion: trabajo.relacionAspecto, audio,
+                ...extra,
+              }),
+            );
             if ((await ff.duracion(archivo, carpeta)) <= 0.5) throw new Error(`El proveedor no dejó un clip válido para la escena ${n}.`);
             estado.segundosGenerados += r.segundos || 0;
           }
@@ -240,6 +325,7 @@ async function procesarEtapa(trabajo, deps) {
         }
 
         hecho++;
+        const tSubida = Date.now();
         // Subir y reportar. El CRM contesta por escena si la registró (`ok`); si dice que no
         // (el archivo aún no estaba, la ruta no era la entregada), se sube y se reporta UNA vez más.
         for (let vuelta = 1; ; vuelta++) {
@@ -259,22 +345,38 @@ async function procesarEtapa(trabajo, deps) {
           if (vuelta >= 2) throw Object.assign(new Error(`El CRM no registró ${tipo === "imagen" ? "la imagen" : "el clip"} de la escena ${n}: ${String(acuse.error || "sin motivo").slice(0, 200)}`), { delCrm: true });
           registro.aviso(`Trabajo ${trabajo.id}: el CRM no registró la escena ${n} (${String(acuse.error || "sin motivo").slice(0, 120)}); se sube de nuevo.`);
         }
+        T.subida += Date.now() - tSubida;
         memo.reportada = true;
         estado.escenas[n] = memo;
         guardar();
         buenas++;
       } catch (e) {
         // El CRM retiró el trabajo o no responde: eso sí es del trabajo entero.
-        if (e instanceof TrabajoSoltado || (e && e.delCrm)) throw e;
+        if (e instanceof TrabajoSoltado || (e && e.delCrm)) {
+          fatal = fatal || e;
+          throw e;
+        }
         const motivo = registro.limpiar(e && e.message ? e.message : String(e)).slice(0, 400);
         if (!e.yaDicho) registro.error(`Trabajo ${trabajo.id}: falló ${tipo === "imagen" ? "la imagen" : "el clip"} de la escena ${n}: ${motivo}`);
+        else if (e.porTope) registro.aviso(`Trabajo ${trabajo.id}: escena ${n} sin pedir por el tope de gasto.`);
         if (e && (e.deLaCuenta || e.code === 401 || e.code === 402)) cortar = `No se pidió: ${motivo}`;
         hecho++;
-        await reportar(`Escena ${n}: falló`, true, [{ n, tipo, error: motivo }]);
+        try {
+          await reportar(`Escena ${n}: ${e.porTope ? "tope de gasto" : "falló"}`, true, [{ n, tipo, error: motivo }]);
+        } catch (e2) {
+          fatal = fatal || e2;
+          throw e2;
+        }
         estado.escenas[n] = { ...memo, reportada: true, error: motivo };
         guardar();
       }
     }
+
+    // Todas las escenas a la vez; cuántas corren de verdad lo decide el cupo del proveedor (config.json → paralelo).
+    const cierres = await Promise.allSettled(lista.map((e) => unaEscena(e)));
+    const roto = cierres.find((c) => c.status === "rejected");
+    if (roto) throw fatal || roto.reason;
+    if (retirado) throw retirado;
 
     await conCrm(crm.cerrar(trabajo, { etapa, ...(estado.creditos ? { creditos: redondo(estado.creditos, 2) } : {}), ...(etapa === "clips" ? { segundosGenerados: redondo(estado.segundosGenerados) } : {}) }));
     anotarCosto(cfg, {
@@ -282,9 +384,14 @@ async function procesarEtapa(trabajo, deps) {
       imagenes: estado.imagenes, segundosGenerados: etapa === "clips" ? estado.segundosGenerados : "", costoUsd: estado.costoDesconocido ? null : estado.costoUsd, creditos: estado.creditos,
     });
     fs.rmSync(carpeta, { recursive: true, force: true });
-    registro.info(`Trabajo ${trabajo.id}: etapa «${etapa}» cerrada: ${buenas} de ${lista.length} escena(s) por aprobar${buenas < lista.length ? `, ${lista.length - buenas} con fallo` : ""}${estado.creditos ? `, ${redondo(estado.creditos, 2)} créditos` : ""}.`);
-    return { ok: true, buenas, fallidas: lista.length - buenas };
+    const tiempos = anotarTiempos(buenas === lista.length ? "listo" : buenas ? "parcial" : "fallo", lista.length);
+    registro.info(
+      `Trabajo ${trabajo.id}: etapa «${etapa}» cerrada: ${buenas} de ${lista.length} escena(s) por aprobar${buenas < lista.length ? `, ${lista.length - buenas} sin hacer` : ""}${estado.creditos ? `, ${redondo(estado.creditos, 2)} créditos` : ""}. ` +
+        `Tiempos (suma de escenas): turno ${tiempos.turno} s, cola del proveedor ${tiempos.cola} s, generación ${tiempos.generacion} s, subida ${tiempos.subida} s; total de reloj ${tiempos.total} s.`,
+    );
+    return { ok: true, buenas, fallidas: lista.length - buenas, tiempos };
   } catch (e) {
+    anotarTiempos(e instanceof TrabajoSoltado ? "retirado" : "fallo", etapa === "armado" ? (trabajo.todas || lista).length : lista.length);
     if (e instanceof TrabajoSoltado) {
       registro.aviso(`Trabajo ${trabajo.id}: el CRM lo retiró (${e.message}). Se deja; lo ya generado queda guardado.`);
       guardarEstado(carpeta, { ...estado, enCurso: false });
@@ -306,7 +413,29 @@ async function procesarEtapa(trabajo, deps) {
       registro.error(`Trabajo ${trabajo.id}: no se pudo reportar el fallo al CRM (${registro.limpiar(e2.message)}). El CRM lo recuperará al vencer la toma.`);
     }
     return { ok: false };
+  } finally {
+    clearInterval(latidoFondo);
   }
+}
+
+const ENCABEZADO_TIEMPOS = "fecha,trabajo,guion,etapa,escenas,prioridad,turno_s,cola_proveedor_s,generacion_s,subida_s,armado_s,total_s,resultado";
+
+/**
+ * Una línea por trabajo en `registro/tiempos.csv`. turno, cola, generación y subida son la SUMA sobre
+ * las escenas (van varias a la vez); `total_s` es el tiempo de reloj del trabajo.
+ */
+function anotarTiempo(cfg, { trabajo, etapa, escenas, prioridad, T, resultado }) {
+  const s = (ms) => redondo(ms / 1000, 1);
+  const fila = { turno: s(T.turno), cola: s(T.cola), generacion: s(T.generacion), subida: s(T.subida), armado: s(T.armado), total: s(Date.now() - T.inicio) };
+  try {
+    fs.mkdirSync(cfg.carpetas.registro, { recursive: true });
+    const archivo = path.join(cfg.carpetas.registro, "tiempos.csv");
+    if (!fs.existsSync(archivo)) fs.writeFileSync(archivo, ENCABEZADO_TIEMPOS + "\n");
+    fs.appendFileSync(archivo, [new Date().toISOString(), trabajo.id, trabajo.guionId || "", etapa, escenas, prioridad, fila.turno, fila.cola, fila.generacion, fila.subida, fila.armado, fila.total, resultado].join(",") + "\n");
+  } catch {
+    /* la medición no debe tumbar un trabajo */
+  }
+  return fila;
 }
 
 /**
@@ -338,4 +467,4 @@ async function unaImagen(deps, prompt, fotos = [], relacion = "9:16") {
   return { ...r, archivo: path.join(carpeta, r.archivo), ...d };
 }
 
-module.exports = { procesarEtapa, unaImagen, anotarCosto, ENCABEZADO };
+module.exports = { procesarEtapa, unaImagen, anotarCosto, anotarTiempo, ENCABEZADO, ENCABEZADO_TIEMPOS };

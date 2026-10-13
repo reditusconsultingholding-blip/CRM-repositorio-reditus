@@ -6,7 +6,9 @@ import {
   ESTADO_PIEZA_LABELS,
   NOMBRE_PASO,
   TONO_PIEZA,
-  TOPE_INTENTOS_ESCENA,
+  CRITERIOS_IMAGEN,
+  VEREDICTO_LABELS,
+  type Criterio,
   piezaEnCurso,
   type EscenaProyecto,
   type TipoPieza,
@@ -24,6 +26,8 @@ type Props = {
   /** Escena en la que se abre. */
   inicial: number;
   puedeAprobar: boolean;
+  /** Intentos permitidos por escena y tipo (configuración del CEO). */
+  tope: number;
   /** Hay servidor para regenerar. */
   activo: boolean;
   ocupado: boolean;
@@ -41,7 +45,7 @@ type Props = {
  * A aprueba, R rechaza con nota, G regenera. En celular se desliza a los
  * lados. «Aprobar todas» solo se enciende cuando ya se vieron todas.
  */
-export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, activo, ocupado, onCerrar, onTipo, onAprobar, onRechazar, onRegenerar, onAprobarTodas }: Props) {
+export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, activo, ocupado, onCerrar, onTipo, onAprobar, onRechazar, onRegenerar, onAprobarTodas }: Props) {
   const lista = useMemo(() => escenas.filter((e) => e.tipo === "generada"), [escenas]);
   const [n, setN] = useState(inicial);
   const [modo, setModo] = useState<"ver" | "rechazar" | "regenerar">("ver");
@@ -54,7 +58,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, activo, o
   const pieza = escena?.[tipo] ?? null;
   const porAprobar = lista.filter((e) => e[tipo].estado === "por-aprobar");
   const todasVistas = porAprobar.length > 0 && porAprobar.every((e) => vistas.has(e.n));
-  const enTope = !!pieza && pieza.intentos >= TOPE_INTENTOS_ESCENA;
+  const enTope = !!pieza && pieza.intentos >= tope;
   const nombre = tipo === "imagen" ? "imagen" : "clip";
   const enCurso = !!pieza && piezaEnCurso(pieza);
   // Lo mismo que encienden los botones: el teclado no abre nada que el botón tenga apagado.
@@ -174,10 +178,31 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, activo, o
             <div className="flex flex-wrap items-center gap-1.5">
               <Chip tono={TONO_PIEZA[pieza.estado]}>{ESTADO_PIEZA_LABELS[pieza.estado]}</Chip>
               <Chip tono={enTope ? "rojo" : "neutro"}>
-                Intento {pieza.intentos} de {TOPE_INTENTOS_ESCENA}
+                Intento {pieza.intentos} de {tope}
               </Chip>
               {pieza.revisadaPor && pieza.estado !== "por-aprobar" && <span className="text-xs text-muted-foreground">por {pieza.revisadaPor}</span>}
             </div>
+            {tipo === "imagen" && pieza.revision && (
+              <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs" data-revision={pieza.revision.veredicto}>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Chip tono={pieza.revision.veredicto === "aprobada-auto" ? "verde" : pieza.revision.veredicto === "rechazada-auto" ? "rojo" : "ambar"}>{VEREDICTO_LABELS[pieza.revision.veredicto]}</Chip>
+                  {pieza.revision.veredicto === "aprobada-auto" && pieza.estado === "aprobada" && <span className="text-muted-foreground">Puedes revertirlo: «Rechazar».</span>}
+                </span>
+                {pieza.revision.motivo && <span className="leading-relaxed break-words">{pieza.revision.motivo}</span>}
+                {Object.keys(pieza.revision.criterios).length > 0 && (
+                  <ul className="flex flex-col gap-0.5 text-muted-foreground">
+                    {(Object.keys(CRITERIOS_IMAGEN) as Criterio[]).map((k) => {
+                      const v = pieza.revision?.criterios[k];
+                      return v ? (
+                        <li key={k}>
+                          {v === "ok" ? "✓" : v === "mal" ? "✗" : v === "duda" ? "?" : "–"} {CRITERIOS_IMAGEN[k]}
+                        </li>
+                      ) : null;
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
             {pieza.nota && (
               <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs leading-relaxed break-words text-amber-700 dark:text-amber-300">
                 <strong className="font-medium">{pieza.estado === "fallo" ? "Motivo del fallo: " : "Nota: "}</strong>
@@ -200,7 +225,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, activo, o
               <div className="mt-auto flex flex-col gap-2">
                 {enTope && pieza.estado !== "aprobada" && (
                   <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs leading-relaxed text-destructive">
-                    Esta escena llegó al tope de {TOPE_INTENTOS_ESCENA} intentos de {nombre}: ya no se regenera. Apruébala, cámbiala a «Foto real animada» en el plan o pide al CEO que la reabra.
+                    Esta escena llegó al tope de {tope} intentos de {nombre}: ya no se regenera. Apruébala, cámbiala a «Foto real animada» en el plan o pide al CEO que la reabra.
                   </p>
                 )}
                 <div className="grid grid-cols-3 gap-2">
@@ -241,7 +266,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, activo, o
                 <p className="text-xs text-muted-foreground">
                   {modo === "rechazar"
                     ? "Queda rechazada con tu nota. No se gasta nada hasta que alguien pida regenerarla."
-                    : `Se genera de nuevo SOLO ${tipo === "imagen" ? "esta imagen" : "este clip"}: intento ${pieza.intentos + 1} de ${TOPE_INTENTOS_ESCENA}. Cuesta${tipo === "imagen" && escena.clip.url ? "; su clip actual deja de valer" : ""}.`}
+                    : `Se genera de nuevo SOLO ${tipo === "imagen" ? "esta imagen" : "este clip"}: intento ${pieza.intentos + 1} de ${tope}. Cuesta${tipo === "imagen" && escena.clip.url ? "; su clip actual deja de valer" : ""}.`}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button variant={modo === "rechazar" ? "destructive" : "default"} disabled={ocupado || (modo === "rechazar" && !nota.trim())} onClick={() => void confirmar()}>

@@ -11,7 +11,6 @@ import {
   MOVIMIENTOS,
   NOMBRE_PASO,
   TIPOS_ESCENA,
-  TOPE_INTENTOS_ESCENA,
   piezaEnCurso,
   piezaNueva,
   type EscenaProyecto,
@@ -269,11 +268,97 @@ export function heredarProyecto(
       contexto: { ...contexto, fotos: contexto.fotos.length ? contexto.fotos : p.contexto.fotos },
       escenas,
       final: { estado: "pendiente", url: null, armados: 0, trabajoId: null, nota: "" },
+      auto: { ...p.auto, parada: null },
       gastos: { ...p.gastos },
       trabajosAbiertos: [...p.trabajosAbiertos],
       avisos,
     },
     avisos,
+  };
+}
+
+/** Los ganchos que ya propuso la investigación (bloque «GANCHOS A PROBAR»), uno por línea. */
+export function ganchosDeInvestigacion(analisis: string): string[] {
+  const i = analisis.search(/GANCHOS A PROBAR/i);
+  if (i < 0) return [];
+  const resto = analisis.slice(i).split("\n").slice(0, 14);
+  const salida: string[] = [];
+  resto.forEach((linea, k) => {
+    const sinTitulo = k === 0 ? linea.replace(/^.*GANCHOS A PROBAR\s*:?/i, "") : linea;
+    if (k > 0 && /^[A-ZÁÉÍÓÚÑ¿ ]{6,}:/.test(sinTitulo.trim())) resto.length = 0; // empieza el bloque siguiente
+    const t = sinTitulo.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, "").replace(/\[A\d+\]/g, "").replace(/^["“«]|["”»]$/g, "").trim();
+    if (resto.length && t.length >= 8 && t.length <= 220) salida.push(t);
+  });
+  return [...new Set(salida)].slice(0, 5);
+}
+
+/** Lo que una variación cambia respecto del proyecto del que sale. */
+export type PedidoVariacion = {
+  /** Texto nuevo de la escena 1 (el gancho). Vacío = no cambia. */
+  gancho: string;
+  /** Además del texto, se genera de nuevo la imagen y el clip de la escena 1. */
+  regenerarGancho: boolean;
+  /** Qué debe verse en el gancho nuevo (va al generador). */
+  notaGancho: string;
+  /** Otra oferta u otro llamado a la acción. Vacío = no cambia. */
+  oferta: string;
+  llamado: string;
+};
+
+export type CostoVariaciones = { imagenes: number; clips: number; segundos: number; armados: number; texto: string };
+
+/** Lo que cuestan N variaciones ANTES de crearlas: solo lo nuevo; todo lo demás se reutiliza. */
+export function costoDeVariaciones(p: ProyectoVideo, pedidos: PedidoVariacion[]): CostoVariaciones {
+  const primera = p.escenas[0];
+  const conGeneracion = primera?.tipo === "generada" ? pedidos.filter((v) => v.regenerarGancho).length : 0;
+  const c = { imagenes: conGeneracion, clips: conGeneracion, segundos: conGeneracion * (primera?.duracion ?? 0), armados: pedidos.length };
+  const n = pedidos.length;
+  const partes = [
+    c.clips ? `${c.imagenes} ${c.imagenes === 1 ? "imagen nueva" : "imágenes nuevas"} + ${c.clips} ${c.clips === 1 ? "clip nuevo" : "clips nuevos"} (${c.segundos} s)` : "",
+    `${c.armados} ${c.armados === 1 ? "armado" : "armados"} (sin costo)`,
+  ].filter(Boolean);
+  return { ...c, texto: `${n} ${n === 1 ? "variación" : "variaciones"} = ${partes.join(" + ")}` };
+}
+
+/**
+ * El proyecto de una variación: copia del original con TODAS sus piezas
+ * aprobadas (no se vuelven a pagar) y solo el cambio pedido. El costo empieza
+ * en cero: lo heredado ya está pagado en el original.
+ */
+export function proyectoDeVariacion(p: ProyectoVideo, v: PedidoVariacion, origen: { guionId: string; producto: string }, ahora: string, quien: string): ProyectoVideo {
+  const cambia: string[] = [];
+  const escenas = p.escenas.map((e, i) => {
+    const copia: EscenaProyecto = { ...e, imagen: { ...e.imagen, trabajoId: null }, clip: { ...e.clip, trabajoId: null } };
+    if (i !== 0) return copia;
+    if (v.gancho.trim()) {
+      copia.voz = v.gancho.trim();
+      cambia.push("gancho");
+    }
+    if (v.regenerarGancho && e.tipo === "generada") {
+      const nota = [v.notaGancho.trim(), v.gancho.trim() ? `Gancho nuevo que se dice: «${v.gancho.trim()}»` : ""].filter(Boolean).join(" · ");
+      copia.imagen = { ...piezaNueva(), nota };
+      copia.clip = piezaNueva();
+      cambia.push("imagen y clip del gancho");
+    }
+    return copia;
+  });
+  const cierre = { oferta: v.oferta.trim() || p.contexto.cierre.oferta, llamadoALaAccion: v.llamado.trim() || p.contexto.cierre.llamadoALaAccion };
+  if (v.oferta.trim() && v.oferta.trim() !== p.contexto.cierre.oferta) cambia.push("oferta");
+  if (v.llamado.trim() && v.llamado.trim() !== p.contexto.cierre.llamadoALaAccion) cambia.push("llamado a la acción");
+  return {
+    ...p,
+    contexto: { ...p.contexto, cierre },
+    escenas,
+    costo: { creditos: 0, segundosGenerados: 0, imagenes: 0 },
+    final: { estado: "pendiente", url: null, armados: 0, trabajoId: null, nota: "" },
+    gastos: {},
+    trabajosAbiertos: [],
+    registro: [{ fecha: ahora, texto: `Variación creada por ${quien}: cambia ${cambia.join(", ") || "nada"}. Las demás escenas se reutilizan del original.` }],
+    avisos: [],
+    auto: { ...p.auto, activo: true, parada: null },
+    variacionDe: { ...origen, cambia: cambia.join(", ") || "nada" },
+    creadoAt: ahora,
+    creadoPor: quien,
   };
 }
 
@@ -336,11 +421,11 @@ export function planDeCorreccion(p: ProyectoVideo, c: CorreccionProyecto): PlanC
     const e = de(x.n);
     if (!e || e.tipo !== "generada") continue;
     if (piezaEnCurso(e.imagen) || piezaEnCurso(e.clip)) bloqueos.push(`La escena ${e.n} ya se está generando: espera a que termine.`);
-    else if (e.imagen.intentos >= TOPE_INTENTOS_ESCENA) bloqueos.push(`La imagen de la escena ${e.n} ya llegó al tope de ${TOPE_INTENTOS_ESCENA} intentos. Cámbiala a foto real o reescribe su prompt y pide al CEO reabrirla.`);
+    else if (e.imagen.intentos >= p.topeIntentos) bloqueos.push(`La imagen de la escena ${e.n} ya llegó al tope de ${p.topeIntentos} intentos. Cámbiala a foto real o reescribe su prompt y pide al CEO reabrirla.`);
     else if (!x.nota.trim()) bloqueos.push(`Escribe qué está mal en la imagen de la escena ${e.n}.`);
     else {
       imagenes.push(e.n);
-      pasos.push({ texto: `Imagen de la escena ${e.n}: se genera de nuevo (intento ${e.imagen.intentos + 1} de ${TOPE_INTENTOS_ESCENA}).`, cuesta: true });
+      pasos.push({ texto: `Imagen de la escena ${e.n}: se genera de nuevo (intento ${e.imagen.intentos + 1} de ${p.topeIntentos}).`, cuesta: true });
       pasos.push({ texto: `Clip de la escena ${e.n}: se genera después de que apruebes la imagen nueva (${e.duracion} s).`, cuesta: true });
     }
   }
@@ -349,11 +434,11 @@ export function planDeCorreccion(p: ProyectoVideo, c: CorreccionProyecto): PlanC
     if (!e || e.tipo !== "generada" || imagenes.includes(e.n) || c.imagenes.some((y) => y.n === e.n)) continue;
     if (piezaEnCurso(e.clip) || piezaEnCurso(e.imagen)) bloqueos.push(`La escena ${e.n} ya se está generando: espera a que termine.`);
     else if (e.imagen.estado !== "aprobada") bloqueos.push(`La escena ${e.n} no tiene imagen aprobada: primero aprueba su imagen.`);
-    else if (e.clip.intentos >= TOPE_INTENTOS_ESCENA) bloqueos.push(`El clip de la escena ${e.n} ya llegó al tope de ${TOPE_INTENTOS_ESCENA} intentos. Cámbiala a foto real o pide al CEO reabrirla.`);
+    else if (e.clip.intentos >= p.topeIntentos) bloqueos.push(`El clip de la escena ${e.n} ya llegó al tope de ${p.topeIntentos} intentos. Cámbiala a foto real o pide al CEO reabrirla.`);
     else if (!x.nota.trim()) bloqueos.push(`Escribe qué está mal en el clip de la escena ${e.n}.`);
     else {
       clips.push(e.n);
-      pasos.push({ texto: `Clip de la escena ${e.n}: se genera de nuevo desde su imagen aprobada (${e.duracion} s, intento ${e.clip.intentos + 1} de ${TOPE_INTENTOS_ESCENA}).`, cuesta: true });
+      pasos.push({ texto: `Clip de la escena ${e.n}: se genera de nuevo desde su imagen aprobada (${e.duracion} s, intento ${e.clip.intentos + 1} de ${p.topeIntentos}).`, cuesta: true });
     }
   }
   for (const x of c.textos) {

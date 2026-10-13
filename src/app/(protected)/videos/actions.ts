@@ -231,6 +231,18 @@ export async function misVideos(): Promise<{ trabajos: Record<string, TrabajoVis
   });
 }
 
+/** Todos los guiones recientes con sus proyectos al día (para «Necesitan tu atención» y los lotes). Solo lee. */
+export async function guionesAlDia(): Promise<{ guiones: GuionGuardado[] } | { error: string }> {
+  return seguro(async () => {
+    const a = await entrar();
+    if ("error" in a) return a;
+    const admin = createAdminClient();
+    const { guiones, error } = await listarGuiones(admin);
+    if (error) return { error };
+    return { guiones: await Promise.all(guiones.map(async (g) => (await ponerAlDiaProyecto(admin, g, false)).g)) };
+  });
+}
+
 // ------------------------------------------------------------ guion ----
 
 export async function escribirGuion(
@@ -602,7 +614,17 @@ export async function aprobarVideo(id: string, n: number): Promise<ConGuion> {
         ? {
             ...y,
             videoAprobado: { porId: x.profile.id, por: x.profile.name, fecha: ahora },
-            proyecto: y.proyecto ? { ...y.proyecto, final: { ...y.proyecto.final, estado: "aprobada" as const } } : null,
+            proyecto: y.proyecto
+              ? {
+                  ...y.proyecto,
+                  final: { ...y.proyecto.final, estado: "aprobada" as const },
+                  auto: { ...y.proyecto.auto, parada: null },
+                  // Los clips que se armaron sin revisar uno por uno quedan aprobados con el video.
+                  escenas: y.proyecto.escenas.map((e) =>
+                    e.tipo === "generada" && e.clip.estado === "por-aprobar" && e.clip.url ? { ...e, clip: { ...e.clip, estado: "aprobada" as const, revisadaPor: `${x.profile.name} (con el video armado)` } } : e,
+                  ),
+                }
+              : null,
           }
         : y,
     );

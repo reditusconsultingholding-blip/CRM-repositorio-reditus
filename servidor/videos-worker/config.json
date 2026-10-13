@@ -5,6 +5,28 @@
   "diasParaBorrarRestos": 3,
   "diasParaBorrarProyectos": 30,
   "_diasParaBorrarProyectos": "Cada proyecto por escenas guarda en datos\\proyectos\\ lo que ya descargó y armó, para que un rearmado sea rápido. Se borra cuando pasa este número de días sin tocarse.",
+  "diasParaBorrarCache": 21,
+  "_diasParaBorrarCache": "La caché del armado (datos\\cache\\: clips y fotos descargados, escenas ya codificadas, voces) es compartida por todos los proyectos, para que las variaciones no bajen ni codifiquen lo mismo. Un archivo se borra cuando pasa este número de días sin usarse.",
+  "paralelo": {
+    "_nota": "Cuánto se hace a la vez. trabajos = trabajos del CRM en curso a la vez. imagenes / clips = tareas simultáneas contra el proveedor de imagen / de video (sumando todos los trabajos). armados = armados simultáneos; hilosFfmpeg = hilos de cada ffmpeg. En 0, armados e hilosFfmpeg se calculan solos según los núcleos del equipo (8 núcleos o más: 2 armados; entre todos usan como mucho la mitad de los núcleos). ffmpeg corre siempre con prioridad baja para no quitarle CPU a los demás procesos del servidor.",
+    "trabajos": 3,
+    "imagenes": 4,
+    "clips": 3,
+    "armados": 0,
+    "hilosFfmpeg": 0,
+    "prioridadBaja": true,
+    "consultarConTrabajoSegundos": 10,
+    "_consultarConTrabajoSegundos": "Cada cuánto se mira la cola del CRM mientras hay trabajos en curso y quedan puestos libres.",
+    "espera429": {
+      "inicialSegundos": 5,
+      "factor": 2,
+      "topeSegundos": 120,
+      "maxMinutos": 20
+    },
+    "_espera429": "Cuando el proveedor responde 429 (demasiadas peticiones): todas las llamadas esperan inicialSegundos, y con cada 429 seguido la espera se multiplica por factor hasta topeSegundos. Se insiste hasta maxMinutos; la tarea ya creada no se pierde. VERIFICAR los límites reales de la cuenta en Kie: si salen muchos 429, baja imagenes o clips.",
+    "cupoUrgentes": 0,
+    "_cupoUrgentes": "NO activar hasta que el CRM lo soporte (propuesto en el contrato): puestos extra reservados para correcciones y armados cuando los de «trabajos» están llenos."
+  },
   "salida": {
     "_nota": "ladoCorto 1080 = 1080x1920 en 9:16. crf más bajo = más calidad y más peso (18–23 es lo normal).",
     "ladoCorto": 1080,

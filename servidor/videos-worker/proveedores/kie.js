@@ -39,6 +39,7 @@
 //     kie.ai/pricing, no en la documentación. El consumo real sí lo reporta cada tarea.
 const path = require("path");
 const { descargar, esperar } = require("../lib/red");
+const { crearFreno, ajustesParalelo } = require("../lib/limites");
 
 const BASE = "https://api.kie.ai";
 
@@ -51,13 +52,28 @@ class ErrorKie extends Error {
   }
 }
 
-/** Una llamada a Kie. Mira el `code` del cuerpo (el HTTP puede ser 200 aunque falle). */
+// Freno compartido por TODAS las llamadas a Kie (imagen y video usan la misma cuenta): cuando
+// Kie responde 429, todas esperan; la espera crece con cada 429 seguido, hasta un tope.
+const freno = crearFreno();
+
+/**
+ * Una llamada a Kie. Mira el `code` del cuerpo (el HTTP puede ser 200 aunque falle).
+ *
+ * 429 («vas muy rápido») y 455 (mantenimiento) son rechazos explícitos: Kie NO hizo nada, así
+ * que repetir es seguro también al CREAR una tarea. Se espera (config.json → paralelo.espera429)
+ * y se insiste hasta `maxMinutos`. Lo que NO se repite a ciegas es un corte de red al crear:
+ * ahí la tarea pudo quedar creada y cobrada.
+ */
 async function llamar(cfg, metodo, ruta, cuerpo, { repetir = true } = {}) {
   const base = cfg.kieBase || BASE; // `kieBase` solo lo ponen las pruebas locales (nunca el .env ni config.json)
-  let ultimo;
+  const espera429 = ajustesParalelo(cfg).espera429;
+  const limite = Date.now() + (espera429.maxMinutos || 20) * 60000;
   const esperas = repetir ? [0, 3000, 10000, 30000] : [0];
-  for (const espera of esperas) {
-    if (espera) await esperar(espera);
+  let ultimo;
+  let intento = 0;
+  for (;;) {
+    if (esperas[intento]) await esperar(esperas[intento]);
+    await freno.pasar();
     try {
       const res = await fetch(base + ruta, {
         method: metodo,
@@ -70,15 +86,25 @@ async function llamar(cfg, metodo, ruta, cuerpo, { repetir = true } = {}) {
       try {
         j = JSON.parse(texto);
       } catch {
+        if (res.status === 429) throw new ErrorKie(429, "Too Many Requests");
         throw Object.assign(new Error(`Kie devolvió algo que no es JSON (HTTP ${res.status}).`), { reintentable: res.status >= 500 });
       }
       const code = typeof j.code === "number" ? j.code : res.status;
-      if (code === 200) return j.data;
+      if (code === 200) {
+        freno.bien();
+        return j.data;
+      }
       throw new ErrorKie(code, j.msg);
     } catch (e) {
       ultimo = e;
+      if (e instanceof ErrorKie && (e.code === 429 || e.code === 455)) {
+        if (Date.now() > limite) break;
+        freno.frenar(espera429); // no gasta intentos: se insiste hasta el tope de tiempo
+        continue;
+      }
       // Un fallo de red al CREAR no se repite a ciegas: la tarea pudo quedar creada y cobrada.
       if (e instanceof ErrorKie ? !e.reintentable : e.reintentable === false) break;
+      if (++intento >= esperas.length) break;
     }
   }
   throw ultimo;
@@ -180,6 +206,7 @@ module.exports = {
   daAudio: true,
   llamar,
   ErrorKie,
+  freno,
   modeloPara,
   armarEntrada,
   segundosPara,
@@ -231,6 +258,7 @@ module.exports = {
       }
       if (!["waiting", "queuing", "generating"].includes(estado)) throw new Error(`Kie devolvió un estado que no se esperaba: ${String(estado).slice(0, 60)}`);
       if (Date.now() > limite) throw new Error(`Kie lleva más de ${kie.limiteMinutosPorEscena || 25} minutos con la escena ${escena.n}; se retomará la misma tarea en el próximo intento.`);
+      if (ctx.fase) ctx.fase(estado === "generating" ? "generando" : "cola"); // para medir cuánto es cola del proveedor y cuánto generación
       await ctx.latir(`Escena ${escena.n}: ${estado === "generating" ? "generándose en Kie" : "en la cola de Kie"}`);
       await esperar(cada);
       cada = Math.min(cada + 5000, 30000);

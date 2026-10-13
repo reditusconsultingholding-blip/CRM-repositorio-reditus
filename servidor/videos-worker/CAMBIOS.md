@@ -1,3 +1,19 @@
+# Cambios del 13-oct: volumen (varios trabajos a la vez)
+
+Se monta encima de la versión «proyecto por escenas» de abajo. Para actualizar: mismos pasos de la sección «Cómo actualizar el servidor»; `.env` no cambia. `config.json` trae la sección nueva `paralelo` y `diasParaBorrarCache`.
+
+- **Paralelismo con límites** (`config.json` → `paralelo`): 3 trabajos a la vez, 4 imágenes y 3 clips contra el proveedor, armados según los núcleos (2 con 8 o más). ffmpeg corre con prioridad baja y con los hilos acotados: entre todos los armados usan como mucho la mitad de los núcleos. Archivos: `lib/limites.js` (nuevo), `lib/cola.js` (nuevo), `lib/ffmpeg.js`, `lib/etapas.js`, `trabajador.js`.
+- **Turnos justos**: armados y correcciones (una escena) pasan primero; entre iguales se alterna por proyecto.
+- **429 de Kie**: freno compartido con espera creciente y tope; también al crear (un 429 no crea nada), sin perder la tarea ya creada (`proveedores/kie.js`).
+- **Caché compartida** entre proyectos en `datos\cache\` (antes era por proyecto): las variaciones no bajan ni codifican otra vez lo que comparten. La caché vieja de cada proyecto en `datos\proyectos\` queda sin uso y se borra sola a los 30 días; el primer armado de cada proyecto tras actualizar vuelve a bajar y codificar una vez.
+- **Tope de gasto** por trabajo: campo opcional `gastoMaximoCreditos`.
+- **Medición**: `datos\registro\tiempos.csv` (turno, cola del proveedor, generación, subida, armado, total). Estimación de capacidad en el README, sección 0b.
+- El cierre de etapa espera hasta 150 s la respuesta del CRM (allá ahora se revisan las imágenes antes de contestar).
+- Pruebas: 8 trabajos mezclados con hasta 6 a la vez, corrección que se adelanta, 429 simulado, tope de gasto y tres variaciones (`pruebas/etapas.js`).
+- **Sin probar**: nada de esto ha corrido contra Kie real ni en el servidor; los límites de peticiones de la cuenta de Kie no se conocen.
+
+---
+
 # Cambios desde la versión con Kie del 12-oct (la que ya está copiada en el servidor)
 
 **Qué trae:** el video como **proyecto por escenas**, en tres etapas: imágenes base que una persona aprueba → clips solo de lo aprobado → armado en el servidor sin costo. Una corrección rehace solo la escena tocada. Además: escenas con la **foto real** del producto animada (costo cero), **rótulo de cierre** con la oferta y el llamado a la acción, y **música**. Los trabajos de antes (un pedido = un video completo) siguen funcionando igual.

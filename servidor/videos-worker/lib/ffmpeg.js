@@ -2,11 +2,24 @@
 // Envoltura mínima de ffmpeg/ffprobe. Siempre con lista de argumentos (sin
 // consola de por medio) y con la carpeta del trabajo como carpeta actual, para
 // poder nombrar archivos sin rutas (los filtros de ffmpeg se enredan con `C:\`).
+//
+// ffmpeg corre con PRIORIDAD BAJA y con los hilos acotados (config.json → "paralelo"):
+// un armado nunca debe dejar sin CPU a los demás procesos del servidor.
 const { spawn } = require("child_process");
+const os = require("os");
+const { ajustesParalelo } = require("./limites");
 
-function correr(programa, args, cwd, limiteMs = 15 * 60000) {
+function correr(programa, args, cwd, limiteMs = 15 * 60000, prioridadBaja = false) {
   return new Promise((resolver, rechazar) => {
     const hijo = spawn(programa, args, { cwd, windowsHide: true });
+    if (prioridadBaja && hijo.pid) {
+      try {
+        // En Windows: «por debajo de lo normal». En Linux: nice 10.
+        os.setPriority(hijo.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
+      } catch {
+        /* si no se puede bajar la prioridad, corre igual */
+      }
+    }
     let salida = "";
     let errores = "";
     const reloj = setTimeout(() => hijo.kill("SIGKILL"), limiteMs);
@@ -26,7 +39,11 @@ function correr(programa, args, cwd, limiteMs = 15 * 60000) {
 }
 
 function crear(cfg) {
-  const ffmpeg = (args, cwd, limiteMs) => correr(cfg.ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", ...args], cwd, limiteMs);
+  const paralelo = ajustesParalelo(cfg);
+  const hilos = String(paralelo.hilosFfmpeg);
+  // `-threads` va justo antes del archivo de salida (acota el codificador) y los de filtros son globales.
+  const ffmpeg = (args, cwd, limiteMs) =>
+    correr(cfg.ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", "-filter_threads", hilos, "-filter_complex_threads", hilos, ...args.slice(0, -1), "-threads", hilos, args[args.length - 1]], cwd, limiteMs, paralelo.prioridadBaja);
 
   /** Duración en segundos de un archivo de audio o video (0 si no se puede leer). */
   async function duracion(archivo, cwd) {

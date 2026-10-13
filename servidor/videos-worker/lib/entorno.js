@@ -45,6 +45,7 @@ function cargar() {
       datos,
       trabajos: path.join(datos, "trabajos"),
       proyectos: path.join(datos, "proyectos"),
+      cache: path.join(datos, "cache"),
       entregados: path.join(datos, "entregados"),
       registro: path.join(datos, "registro"),
     },

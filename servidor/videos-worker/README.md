@@ -28,9 +28,51 @@ Lo que conviene saber:
 - **Rótulo de cierre**: en la escena `cierre` se dibujan la oferta (grande, sobre un panel oscuro) y el llamado a la acción (botón) durante toda la escena, **tal cual llegan** del CRM. El cuadro se reparte para que nada se pise: en vertical, oferta arriba · producto · botón · subtítulos; en horizontal, producto a la izquierda y textos a la derecha. Si un texto es muy largo se achica (y se avisa), no se recorta. Colores y fuente en `config.json` → `rotulo`.
 - **Música**: solo si el trabajo trae una pista (`opciones.musica`, un enlace). Se repite hasta el final, baja sola mientras hay voz y se apaga al cierre. Sin pista no se inventa una. Niveles en `config.json` → `musica`.
 - **Voz**: igual que antes (audio del clip / ElevenLabs / ninguno, según `config.json` → `audio`). Las escenas `foto-real` y `cierre` con texto se narran con ElevenLabs si hay clave; si no, salen sin voz y queda en los avisos del resultado. Una narración ya hecha no se vuelve a pedir.
-- **Armado rápido y repetible**: cada proyecto guarda en `datos\proyectos\` lo que descargó y cada escena ya codificada. Volver a armar sin cambios no baja ni codifica nada; cambiar un texto (la oferta, un subtítulo) recodifica solo esa escena; poner o quitar música solo rehace el audio. El mismo proyecto da siempre el mismo archivo. La carpeta de un proyecto se borra sola a los 30 días sin uso (`diasParaBorrarProyectos`).
+- **Armado rápido y repetible**: lo descargado y cada escena ya codificada quedan en `datos\cache\`, compartida por todos los proyectos. Volver a armar sin cambios no baja ni codifica nada; cambiar un texto (la oferta, un subtítulo) recodifica solo esa escena; poner o quitar música solo rehace el audio. El mismo proyecto da siempre el mismo archivo (mientras no se cambie `paralelo.hilosFfmpeg`). Lo que lleve 21 días sin usarse se borra solo (`diasParaBorrarCache`).
 - **Imágenes base con Kie**: `config.json` → `kieImagen` (modelo por defecto «GPT Image 2.5 Sunburst» a 1K; alternativas Nano Banana 2 y Pro). Qué se verificó contra docs.kie.ai y qué falta por verificar: al inicio de `proveedores-imagen\kie.js`. **El precio en créditos no está en la documentación**: sale de la primera prueba real (`.\probar.ps1 -UnaImagen`).
 - Otro proveedor de imagen: copia `proveedores-imagen\simulado.js`, respeta la interfaz descrita en `proveedores-imagen\index.js` y pon su nombre en `PROVEEDOR_IMAGEN`.
+
+## 0b. Volumen: varios trabajos a la vez
+
+Todo se ajusta en `config.json` → `paralelo` (sin tocar el `.env`):
+
+| Ajuste | Por defecto | Qué limita |
+|---|---|---|
+| `trabajos` | 3 | Trabajos del CRM en curso a la vez |
+| `imagenes` | 4 | Imágenes pidiéndose a la vez al proveedor (sumando todos los trabajos) |
+| `clips` | 3 | Clips pidiéndose a la vez al proveedor (sumando todos los trabajos) |
+| `armados` | 0 = automático | Armados a la vez: 2 si el equipo tiene 8 núcleos o más; si no, 1 |
+| `hilosFfmpeg` | 0 = automático | Hilos de cada ffmpeg. Entre todos los armados se usa como mucho **la mitad de los núcleos** (en 8 núcleos: 2 armados × 2 hilos) |
+| `prioridadBaja` | sí | ffmpeg corre con prioridad «por debajo de lo normal»: cualquier otro proceso del servidor pasa primero |
+| `espera429` | 5 s → ×2 → tope 120 s, hasta 20 min | Qué hacer cuando el proveedor dice «demasiadas peticiones» |
+
+Cómo se comporta:
+
+- **Dentro de un trabajo** las escenas van a la vez, hasta donde dejen `imagenes` / `clips`. Cada una se reporta al CRM apenas termina.
+- **Quién pasa primero**: los armados y los trabajos de una sola escena (correcciones) toman el siguiente cupo libre aunque haya un lote grande esperando. Entre trabajos de igual urgencia se alterna por proyecto: un lote no agota la fila él solo. Si el CRM manda `prioridad` en el trabajo, manda ese número.
+- **429 del proveedor**: todas las llamadas a Kie esperan (5 s, 10 s, 20 s… hasta 120 s) y se insiste hasta 20 minutos. Un 429 al crear significa que Kie no creó nada, así que repetir no paga dos veces; una tarea ya creada nunca se pierde. Si salen muchos 429, baja `imagenes` o `clips`. (Solo Kie tiene este freno; `veo` y `fal` conservan sus reintentos de antes.)
+- **Variaciones**: la caché del armado (`datos\cache\`) es de todos los proyectos y va por la dirección del archivo sin la firma. Un proyecto «hijo» que comparte clips con el original no baja ni codifica esas escenas otra vez: solo trabaja la que cambió. Dos armados que necesitan el mismo archivo a la vez lo hacen una sola vez.
+- **Tope de gasto**: si el trabajo trae `gastoMaximoCreditos`, no se crean tareas pagas que lo harían pasarse; las escenas que falten se reportan con el motivo «tope de gasto» y el trabajo cierra normal. Mientras no se sabe cuánto cuesta una tarea, ese trabajo va de a una (aprende con la primera). El tope usa los créditos que reporta el proveedor: con un proveedor que no los reporta no puede frenar.
+- **Medición**: `datos\registro\tiempos.csv`, una línea por trabajo de etapa: espera de turno aquí, cola del proveedor, generación, subida, armado y total de reloj (las cuatro primeras son la suma sobre las escenas, porque van varias a la vez). Con eso se ve si el cuello de botella es el proveedor o el servidor. La separación entre «cola» y «generación» depende de cada cuánto se consulta a Kie, así que es aproximada.
+- Los videos completos de antes (sin `etapa`) siguen generando sus escenas una tras otra; lo único que cambia para ellos es que pueden ir varios trabajos a la vez y que ffmpeg corre con prioridad baja.
+
+### Capacidad por hora (estimación)
+
+**Medido** (con el simulado, en el equipo de desarrollo de 12 núcleos, ffmpeg a 3 hilos y prioridad baja; **no** en el servidor):
+
+- Armar un video de 20 s y 5 escenas desde cero: 4–6 s. Volver a armar sin cambios: 0,6 s. Cambiar un texto: ~2 s. Una variación que comparte escenas: ~3 s, con otros trabajos corriendo a la vez.
+- 8 trabajos mezclados (2 lotes de 8 imágenes, 3 clips, un trabajo con tope, 1 corrección, 3 armados de variación), hasta 6 a la vez: 12 s de reloj con un proveedor de mentira que tarda ~2 s por imagen. La corrección entró con los lotes en curso y salió antes que ellos.
+- Lo que añade el trabajador por cada imagen o clip (subir y reportar): décimas de segundo.
+
+Con eso, **el armado no es el límite**: aun suponiendo que el servidor (8 núcleos, 2 hilos por armado) vaya a la mitad de velocidad y que los clips reales pesen más que los simulados, dos armados a la vez dan del orden de cientos de videos por hora.
+
+**No medido: depende del proveedor real** (Kie no se ha probado con clave). El límite es cuánto tarda Kie en cada tarea y cuántas deja correr a la vez:
+
+- Clips por hora ≈ `clips` × 3600 ÷ (segundos que tarde un clip). Con 3 a la vez: si un clip tarda 2 min, ~90 por hora; si tarda 4 min, ~45.
+- Imágenes por hora ≈ `imagenes` × 3600 ÷ (segundos por imagen). Con 4 a la vez: si tarda 30 s, ~480 por hora; si tarda 60 s, ~240.
+- Un video con 3 escenas generadas y el resto en foto real: entre **15 y 30 videos nuevos por hora** con esos supuestos. Una variación que solo cambia la oferta o una escena cuesta casi nada más.
+
+Esos tiempos por tarea son supuestos, no datos. El primer día con clave real mira `tiempos.csv`: las columnas `cola_proveedor_s` y `generacion_s` dicen cuánto tarda Kie de verdad; si aparecen 429 en el registro, baja `imagenes` o `clips` (o pide a Kie un límite mayor). Tampoco está medido cuántas peticiones por minuto aguanta la cuenta de Kie.
 
 ## 1. Instalar
 
@@ -164,7 +206,7 @@ Otro proveedor: copia `proveedores/simulado.js`, respeta la interfaz descrita en
 - Con imagen-a-video el clip **arranca en la foto del producto** tal cual se pegó en el CRM.
 - Con audio de Veo, los subtítulos se reparten sobre la duración de la escena: no hay forma de saber en qué instante exacto dice cada palabra.
 - Los prompts salen de los del formato más lo que dice el guion en cada paso; los campos genéricos entre [corchetes] del formato llegan al modelo sin completar (el CRM lo avisa en el trabajo).
-- Un trabajo a la vez por servidor.
+- Un solo proceso del trabajador por carpeta (lleva varios trabajos a la vez por dentro; ver la sección 0b). Los límites de paralelismo y la caché viven en ese proceso: no se deben correr dos trabajadores sobre la misma carpeta `datos\`.
 - Rótulo de cierre: el ancho del texto se calcula con las medidas de Arial Bold (no hay librería de fuentes). Con otra fuente en `rotulo.fuente` el ajuste es aproximado: mira un fotograma antes de dejarla.
 - Fotos reales: PNG con fondo transparente salen con el fondo negro (conviene JPG o PNG con fondo). De un GIF o WebP animado se usa el primer cuadro.
 - En el armado, un clip rehecho debe llegar con otra dirección o con otro número de intento; si no, se usa el que ya estaba descargado (ver el contrato, «Cambios», punto 3).

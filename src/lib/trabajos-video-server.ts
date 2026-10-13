@@ -2,8 +2,10 @@ import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notify";
+import { RAIZ_COLA } from "@/lib/cola-raiz";
+import { leerConfig } from "@/lib/videos-config-server";
 import { buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
-import { duracionTotal, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
+import { duracionTotal, gastoDeTrabajo, type CodigoParada, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
 import { corchetes, escenasParaVideo, pasosDelGuion } from "@/lib/trabajos-video";
 import {
   BUCKET_TRABAJOS,
@@ -18,7 +20,6 @@ import {
   ID_TRABAJO,
   MAX_IMAGENES_PRODUCTO,
   MAX_INTENTOS_VIDEO,
-  TOPE_DIARIO_VIDEOS,
   VENCIMIENTO_TOMA_MS,
   leerTrabajo,
   selloBogota,
@@ -43,16 +44,13 @@ import { escribirGuionArchivo, leerGuionArchivo } from "@/lib/videos-server";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-// Carpeta raíz de la cola dentro del bucket. En producción es siempre «videos». Solo las pruebas la
-// cambian (COLA_VIDEOS_CARPETA) para que un trabajo de prueba jamás lo tome el servidor real.
-const RAIZ_COLA = /^[a-z0-9-]{1,40}$/.test(process.env.COLA_VIDEOS_CARPETA ?? "") ? (process.env.COLA_VIDEOS_CARPETA as string) : "videos";
 const CARPETAS = { pendientes: `${RAIZ_COLA}/pendientes`, enCurso: `${RAIZ_COLA}/en-curso`, listos: `${RAIZ_COLA}/listos`, fallos: `${RAIZ_COLA}/fallos` } as const;
 type Carpeta = (typeof CARPETAS)[keyof typeof CARPETAS];
 const ORDEN_BUSQUEDA: Carpeta[] = [CARPETAS.enCurso, CARPETAS.pendientes, CARPETAS.listos, CARPETAS.fallos];
 const ruta = (carpeta: Carpeta, id: string) => `${carpeta}/${id}.json`;
 
 /** Aviso a una persona (campana y push). Mejor esfuerzo; `AVISOS_VIDEO_APAGADOS=1` lo apaga (pruebas). */
-async function avisar(admin: Admin, userId: string, titulo: string, enlace: string) {
+export async function avisar(admin: Admin, userId: string, titulo: string, enlace: string) {
   if (!userId || process.env.AVISOS_VIDEO_APAGADOS === "1") return;
   try {
     await notify(admin, userId, "terminado", titulo.slice(0, 240), enlace);
@@ -165,14 +163,15 @@ function enFila<T>(fn: () => Promise<T>): Promise<T> {
 
 // ------------------------------------------------------------ tope diario ----
 
-export type TopeDiario = { usados: number; max: number };
+export type TopeDiario = { usados: number; max: number; variaciones: { usados: number; max: number } };
 
 // Qué cuenta cada trabajo para el tope diario. La etapa y el guion de un
 // trabajo no cambian nunca, así que se recuerda (por proceso) para no releerlo.
 //   · video completo de los de antes → cuenta 1;
 //   · etapa `clips` → cuenta 1 por PROYECTO y día (regenerar un clip no gasta otro cupo:
 //     para eso está el tope de intentos por escena);
-//   · etapas `imagenes` y `armado` → no cuentan.
+//   · etapas `imagenes` y `armado` → no cuentan;
+//   · cualquier etapa de una VARIACIÓN → cuenta 1 por variación y día, en su propio tope.
 const claveTope = new Map<string, string | null>();
 
 async function claveDeTope(carpeta: Carpeta, id: string): Promise<string | null> {
@@ -182,7 +181,8 @@ async function claveDeTope(carpeta: Carpeta, id: string): Promise<string | null>
   const t = await leerEn(carpeta, id);
   if (!t) return `v:${id}`; // se está moviendo: cuenta como siempre y no se recuerda
   let clave: string | null;
-  if (t.etapa === "imagenes" || t.etapa === "armado") clave = null;
+  if (t.variacion) clave = `x:${t.guionId}`;
+  else if (t.etapa === "imagenes" || t.etapa === "armado") clave = null;
   // Un trabajo que falló sin gastar no cuenta.
   else if (carpeta === CARPETAS.fallos && t.segundosGenerados <= 0 && !t.reportes.length) clave = null;
   else clave = t.etapa === "clips" ? `p:${t.guionId}` : `v:${id}`;
@@ -200,9 +200,41 @@ async function clavesDeHoy(admin: Admin): Promise<Set<string>> {
   return new Set(claves.filter((c): c is string => !!c));
 }
 
-/** Videos pedidos hoy (hora de Bogotá). Imágenes base y armados no cuentan; un proyecto cuenta una vez. */
+const esVariacion = (clave: string) => clave.startsWith("x:");
+
+/** Videos pedidos hoy (hora de Bogotá). Imágenes base y armados no cuentan; un proyecto cuenta una vez; las variaciones van aparte. */
 export async function topeDeHoy(admin: Admin): Promise<TopeDiario> {
-  return { usados: (await clavesDeHoy(admin)).size, max: TOPE_DIARIO_VIDEOS };
+  const [claves, cfg] = await Promise.all([clavesDeHoy(admin), leerConfig(admin)]);
+  const variaciones = [...claves].filter(esVariacion).length;
+  return { usados: claves.size - variaciones, max: cfg.videosPorDia, variaciones: { usados: variaciones, max: cfg.variacionesPorDia } };
+}
+
+// Lo gastado hoy en créditos, sumando lo que reportó cada trabajo. Los terminados se recuerdan.
+const gastoTerminado = new Map<string, number>();
+
+export async function creditosDeHoy(admin: Admin): Promise<number> {
+  const { dia } = selloBogota(new Date());
+  const carpetas = [CARPETAS.enCurso, CARPETAS.listos, CARPETAS.fallos];
+  const listas = await Promise.all(carpetas.map((x) => nombres(admin, x, { busca: `${dia}-` })));
+  const partes = await Promise.all(
+    listas.flatMap((l, i) =>
+      l.ids
+        .filter((id) => id.startsWith(`${dia}-`))
+        .map(async (id) => {
+          const sabido = gastoTerminado.get(id);
+          if (sabido !== undefined) return sabido;
+          const t = await leerEn(carpetas[i], id);
+          if (!t) return 0;
+          const g = gastoDeTrabajo(t).creditos;
+          if (carpetas[i] !== CARPETAS.enCurso) {
+            if (gastoTerminado.size > 2000) gastoTerminado.clear();
+            gastoTerminado.set(id, g);
+          }
+          return g;
+        }),
+    ),
+  );
+  return Math.round(partes.reduce((a, b) => a + b, 0) * 100) / 100;
 }
 
 // ------------------------------------------------------------------ crear ----
@@ -286,7 +318,7 @@ export async function crearTrabajoVideo(
   const tope = await topeDeHoy(admin);
   if (tope.usados >= tope.max) {
     return {
-      error: `Hoy ya se pidieron ${tope.usados} de ${tope.max} videos, que es el tope diario. Mañana se libera; si hace falta subirlo, lo cambia el CEO (TOPE_DIARIO_VIDEOS).`,
+      error: `Hoy ya se pidieron ${tope.usados} de ${tope.max} videos, que es el tope diario. Mañana se libera; si hace falta subirlo, lo cambia el CEO en «Topes y automatización».`,
     };
   }
 
@@ -318,6 +350,7 @@ export async function crearTrabajoVideo(
     todas: [],
     reportes: [],
     creditos: 0,
+    variacion: false,
     estado: "pendiente",
     motivo: "",
     intentos: 0,
@@ -363,8 +396,12 @@ const conNota = (prompt: string, nota: string) => (nota.trim() ? `${prompt.trim(
  * (imagen aprobada antes del clip, tope de intentos) las aplica quien llama;
  * aquí se vuelven a comprobar las que cuestan dinero.
  */
-export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{ trabajo: TrabajoVideo } | { error: string }> {
-  if (!servidorVideoActivo()) return { error: "La generación no está conectada: falta SERVIDOR_SECRET. El plan queda guardado y se podrá generar cuando el servidor de videos esté conectado." };
+export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{ trabajo: TrabajoVideo } | { error: string; codigo?: CodigoParada }> {
+  if (!servidorVideoActivo()) {
+    return { codigo: "servidor", error: "La generación no está conectada: falta SERVIDOR_SECRET. El plan queda guardado y se podrá generar cuando el servidor de videos esté conectado." };
+  }
+  const cfg = await leerConfig(admin);
+  const esVariante = !!p.proyecto.variacionDe;
   const b = await asegurarBucketTrabajos(admin);
   if (b.error) return { error: b.error };
   const { proyecto, etapa } = p;
@@ -376,10 +413,27 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     if (etapa === "clips") {
       const sinImagen = escenas.filter((e) => e.imagen.estado !== "aprobada" || !e.imagen.url);
       if (sinImagen.length) return { error: `No se genera ningún clip sin su imagen aprobada. Falta aprobar la imagen de la escena ${sinImagen.map((e) => e.n).join(", ")}.` };
-      const claves = await clavesDeHoy(admin);
-      if (!claves.has(`p:${p.g.id}`) && claves.size >= TOPE_DIARIO_VIDEOS) {
-        return { error: `Hoy ya se pidieron ${claves.size} de ${TOPE_DIARIO_VIDEOS} videos, que es el tope diario. Mañana se libera; si hace falta subirlo, lo cambia el CEO (TOPE_DIARIO_VIDEOS).` };
+    }
+    // Topes de gasto: se detiene AL LLEGAR al máximo (el precio de lo que falta no se conoce antes).
+    if (cfg.creditosPorProyecto !== null && proyecto.costo.creditos >= cfg.creditosPorProyecto) {
+      return { codigo: "tope-gasto", error: `Este proyecto ya gastó ${proyecto.costo.creditos} créditos y el máximo por proyecto es ${cfg.creditosPorProyecto}. No se genera nada más: usa foto real en lo que falte o pide al CEO subir el máximo en «Topes y automatización».` };
+    }
+    if (cfg.creditosPorDia !== null) {
+      const hoy = await creditosDeHoy(admin);
+      if (hoy >= cfg.creditosPorDia) {
+        return { codigo: "tope-gasto", error: `Hoy ya se gastaron ${hoy} créditos y el máximo por día es ${cfg.creditosPorDia}. Mañana se libera, o el CEO lo sube en «Topes y automatización».` };
       }
+    }
+  }
+  // Topes de cantidad: un video nuevo cuenta al pedir sus clips; una variación, en cualquier etapa.
+  if (esVariante || etapa === "clips") {
+    const claves = await clavesDeHoy(admin);
+    const variaciones = [...claves].filter(esVariacion).length;
+    if (esVariante && !claves.has(`x:${p.g.id}`) && variaciones >= cfg.variacionesPorDia) {
+      return { codigo: "tope-diario", error: `Hoy ya se hicieron ${variaciones} de ${cfg.variacionesPorDia} variaciones, que es el tope diario. Queda en espera para mañana.` };
+    }
+    if (!esVariante && !claves.has(`p:${p.g.id}`) && claves.size - variaciones >= cfg.videosPorDia) {
+      return { codigo: "tope-diario", error: `Hoy ya se pidieron ${claves.size - variaciones} de ${cfg.videosPorDia} videos, que es el tope diario. Queda en espera para mañana; si hace falta subirlo, lo cambia el CEO en «Topes y automatización».` };
     }
   }
   const ahora = new Date();
@@ -416,6 +470,7 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     todas: etapa === "armado" ? proyecto.escenas : [],
     reportes: [],
     creditos: 0,
+    variacion: esVariante,
     estado: "pendiente",
     motivo: "",
     intentos: 0,

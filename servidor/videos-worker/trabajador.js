@@ -15,11 +15,13 @@ const { cargar, secretos } = require("./lib/entorno");
 const { crearRegistro } = require("./lib/registro");
 const { crearCrm } = require("./lib/crm");
 const { crear: crearFf } = require("./lib/ffmpeg");
-const { esperar, ErrorHttp } = require("./lib/red");
+const { ErrorHttp } = require("./lib/red");
 const { cargarProveedor } = require("./proveedores");
 const { cargarProveedorImagen } = require("./proveedores-imagen");
 const { procesar, pendientesEnDisco, limpiarRestos, unClip } = require("./lib/trabajo");
 const { unaImagen } = require("./lib/etapas");
+const { crearLimites } = require("./lib/limites");
+const { atenderCola } = require("./lib/cola");
 
 const modo = process.argv.includes("--una-imagen") ? "una-imagen" : process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
 
@@ -87,7 +89,11 @@ async function principal() {
   else if (proveedorImagen.nombre === "simulado" && proveedor.nombre !== "simulado") registro.aviso("PROVEEDOR_IMAGEN=simulado: las imágenes base son de PRUEBA.");
 
   const crm = crearCrm(cfg);
-  const deps = { cfg, crm, ff, proveedor, proveedorImagen: faltaImagen && !proveedorImagen ? null : proveedorImagen, faltaImagen, registro };
+  // Límites de paralelismo, compartidos por todos los trabajos en curso (config.json → paralelo).
+  const limites = crearLimites(cfg);
+  const P = limites.ajustes;
+  registro.info(`Paralelismo: ${P.trabajos} trabajos a la vez · ${P.imagenes} imágenes · ${P.clips} clips · ${P.armados} armado(s) · ffmpeg con ${P.hilosFfmpeg} hilo(s)${P.prioridadBaja ? " y prioridad baja" : ""} · equipo de ${P.nucleos} núcleos`);
+  const deps = { cfg, crm, ff, proveedor, proveedorImagen: faltaImagen && !proveedorImagen ? null : proveedorImagen, faltaImagen, registro, limites };
 
   if (modo === "una-imagen") {
     const i = process.argv.indexOf("--una-imagen");
@@ -123,20 +129,16 @@ async function principal() {
     }
   }
 
-  /** Una vuelta: pide trabajo. Devuelve true si atendió uno (para pedir el siguiente enseguida). */
-  async function vuelta() {
-    let trabajo;
+  /** Pide el siguiente trabajo al CRM. Nunca lanza: si algo falla, lo registra y devuelve null. */
+  async function tomar(extra) {
     try {
-      trabajo = await crm.tomar();
+      return await crm.tomar(extra);
     } catch (e) {
       if (e instanceof ErrorHttp && e.estado === 401) registro.error("El CRM rechazó el secreto (401): SERVIDOR_SECRET no coincide con el de Vercel.");
       else if (e instanceof ErrorHttp && e.estado === 503) registro.error("El CRM responde 503: allá no está configurado SERVIDOR_SECRET.");
       else registro.error(`No se pudo consultar la cola: ${e.message}`);
-      return false;
+      return null;
     }
-    if (!trabajo) return false;
-    await procesar(trabajo, deps);
-    return true;
   }
 
   if (modo === "comprobar") {
@@ -181,28 +183,26 @@ async function principal() {
   for (const s of ["SIGINT", "SIGTERM", "SIGBREAK"]) process.on(s, () => process.exit(0));
   process.on("unhandledRejection", (e) => registro.error("Error no atendido:", e instanceof Error ? e : String(e)));
 
-  // ------------------------------------ retomar lo que quedó a medias ----
-  for (const t of pendientesEnDisco(cfg)) {
-    registro.info(`Retomando el trabajo ${t.id}, que quedó a medias cuando se cerró el proceso.`);
-    await procesar(t, deps);
-  }
-  limpiarRestos(cfg);
-
   // ------------------------------------------------------- el ciclo ----
-  const intervalo = Math.max(10, cfg.config.intervaloSegundos || 60) * 1000;
+  // Varios trabajos a la vez. Lo que quedó a medias en disco cuando se cerró el proceso va primero.
+  const aMedias = pendientesEnDisco(cfg);
+  for (const t of aMedias) registro.info(`Retomando el trabajo ${t.id}, que quedó a medias cuando se cerró el proceso.`);
+  limpiarRestos(cfg);
   let vueltas = 0;
-  for (;;) {
-    let atendio = false;
-    try {
-      atendio = await vuelta();
-    } catch (e) {
-      registro.error("Error inesperado en la vuelta:", e instanceof Error ? e : String(e));
-    }
-    if (atendio) continue; // puede haber más en la cola
-    if (modo === "una-vez") break;
-    if (++vueltas % 60 === 0) limpiarRestos(cfg);
-    await esperar(intervalo);
-  }
+  await atenderCola({
+    tomar,
+    procesar: (t) => procesar(t, deps),
+    max: P.trabajos,
+    cupoUrgentes: P.cupoUrgentes,
+    iniciales: aMedias,
+    unaVez: modo === "una-vez",
+    intervaloMs: Math.max(10, cfg.config.intervaloSegundos || 60) * 1000,
+    conTrabajoMs: P.consultarConTrabajoSegundos * 1000,
+    cadaVuelta: () => {
+      if (++vueltas % 60 === 0) limpiarRestos(cfg);
+    },
+    registro,
+  });
   registro.info("Cola atendida. Fin (--una-vez).");
   process.exit(0);
 }

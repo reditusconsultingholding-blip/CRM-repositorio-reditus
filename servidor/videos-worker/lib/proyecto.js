@@ -40,7 +40,7 @@ const EXTENSIONES = ["mp4", "mov", "webm", "jpg", "jpeg", "png", "webp", "mp3", 
  * Deja en la carpeta del proyecto el archivo de `url` y devuelve su nombre.
  * Si ya estaba (misma clave), no descarga nada.
  */
-async function traer(carpeta, url, { prefijo = "f", extra = "", ext = "bin", stats = null, local = false } = {}) {
+async function traer(carpeta, url, { prefijo = "f", extra = "", ext = "bin", stats = null, local = false, conCerrojo = (c, f) => f() } = {}) {
   if (typeof url !== "string" || !(/^https:\/\//.test(url) || (local && /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(url)))) {
     throw new Error(`Dirección no válida (debe ser un enlace https): ${String(url).slice(0, 80)}`);
   }
@@ -48,14 +48,17 @@ async function traer(carpeta, url, { prefijo = "f", extra = "", ext = "bin", sta
   const extension = e && EXTENSIONES.includes(e.toLowerCase()) ? e.toLowerCase() : ext;
   const nombre = `${prefijo}-${claveUrl(url, extra)}.${extension}`;
   const destino = path.join(carpeta, nombre);
-  if (fs.existsSync(destino) && fs.statSync(destino).size >= 1024) {
-    if (stats) stats.reutilizados++;
+  // Con cerrojo por archivo: si otro armado lo está bajando, se espera y se usa el suyo.
+  return conCerrojo(nombre, async () => {
+    if (fs.existsSync(destino) && fs.statSync(destino).size >= 1024) {
+      if (stats) stats.reutilizados++;
+      return nombre;
+    }
+    await descargar(url, `${destino}.tmp`);
+    fs.renameSync(`${destino}.tmp`, destino);
+    if (stats) stats.descargas++;
     return nombre;
-  }
-  await descargar(url, `${destino}.tmp`);
-  fs.renameSync(`${destino}.tmp`, destino);
-  if (stats) stats.descargas++;
-  return nombre;
+  });
 }
 
 // ------------------------------------------------ tareas pendientes ----
@@ -82,8 +85,32 @@ function recordarTarea(carpeta, clave, memoria) {
   fs.renameSync(`${archivo}.tmp`, archivo);
 }
 
-/** Borra los proyectos que llevan mucho sin tocarse y, dentro de los vivos, lo que ya no se usa. */
+/** Carpeta de la caché del armado, compartida por todos los proyectos. */
+function carpetaCache(cfg) {
+  const carpeta = cfg.carpetas.cache || path.join(cfg.carpetas.datos, "cache");
+  fs.mkdirSync(carpeta, { recursive: true });
+  return carpeta;
+}
+
+/** Borra de la caché lo que lleva `diasParaBorrarCache` días sin usarse (cada armado marca lo que usa). */
+function limpiarCache(cfg) {
+  const carpeta = cfg.carpetas.cache || (cfg.carpetas.datos && path.join(cfg.carpetas.datos, "cache"));
+  if (!carpeta || !fs.existsSync(carpeta)) return;
+  const limite = Date.now() - (cfg.config.diasParaBorrarCache || 21) * 86400000;
+  for (const f of fs.readdirSync(carpeta)) {
+    try {
+      const ruta = path.join(carpeta, f);
+      const viejo = fs.statSync(ruta).mtimeMs < (/^(tmp-|lista-)/.test(f) || /\.tmp$/.test(f) ? Date.now() - 86400000 : limite);
+      if (viejo) fs.rmSync(ruta, { force: true });
+    } catch {
+      /* se intenta en la próxima limpieza */
+    }
+  }
+}
+
+/** Borra los proyectos que llevan mucho sin tocarse (y la caché vieja). */
 function limpiarProyectos(cfg) {
+  limpiarCache(cfg);
   const raiz = cfg.carpetas.proyectos;
   if (!raiz || !fs.existsSync(raiz)) return;
   const limite = Date.now() - (cfg.config.diasParaBorrarProyectos || 30) * 86400000;
@@ -100,4 +127,4 @@ function limpiarProyectos(cfg) {
   }
 }
 
-module.exports = { huella, carpetaProyecto, claveUrl, traer, tareaPendiente, recordarTarea, limpiarProyectos };
+module.exports = { huella, carpetaProyecto, carpetaCache, limpiarCache, claveUrl, traer, tareaPendiente, recordarTarea, limpiarProyectos };

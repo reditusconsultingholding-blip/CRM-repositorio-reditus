@@ -11,6 +11,7 @@ import { listarTrabajos, servidorVideoActivo, topeDeHoy } from "@/lib/trabajos-v
 import { CrearVideo, type ProspectoOrigen } from "@/components/videos/crear-video";
 import { ColaVideos } from "@/components/videos/cola-videos";
 import { misVideos } from "./actions";
+import { configVideos } from "./proyecto-actions";
 
 // «Crear video»: formato → datos del producto → investigación de mercado →
 // guion → guardar. La ven los roles de Ingresos y quien edita video. Los
@@ -84,6 +85,19 @@ export default async function VideosPage({
         }))
       : null;
 
+  // Topes y automatización (los ve todo el que opera; los cambia el CEO).
+  const cfg = await configVideos();
+
+  // Prospectos del embudo que se pueden meter a un lote (solo equipo comercial; solo datos de producción).
+  let prospectosLote: { id: string; nombre: string; producto: string; pais: string }[] = [];
+  if (esIngresos) {
+    const { data } = await admin.from("prospectos").select("id, nombre, origen, respuestas_calificacion").eq("origen", ORIGEN_PROSPECCION).order("created_at", { ascending: false }).limit(40);
+    prospectosLote = (data ?? []).flatMap((f) => {
+      const pros = leerProspeccion(f.respuestas_calificacion);
+      return pros?.producto ? [{ id: f.id as string, nombre: f.nombre as string, producto: pros.producto, pais: pros.pais }] : [];
+    });
+  }
+
   // «Mis videos»: en qué va lo que pidió esta persona.
   const mios = await misVideos();
   const misTrabajos = "error" in mios ? {} : mios.trabajos;
@@ -100,6 +114,8 @@ export default async function VideosPage({
       videoActivo={videoActivo}
       puedeAprobarVideo={esIngresos}
       esCeo={profile.role === "ceo"}
+      config={"error" in cfg ? null : cfg}
+      prospectosLote={prospectosLote}
       abrirGuionId={abrirGuionId}
       userId={profile.id}
       misTrabajos={misTrabajos}

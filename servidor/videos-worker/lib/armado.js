@@ -2,7 +2,9 @@
 // Etapa «armado» del proyecto por escenas. No cuesta: todo lo hace ffmpeg aquí.
 //
 //   1. Trae lo que falte (clips aprobados, fotos reales, música). Lo que ya está en
-//      la carpeta del proyecto no se vuelve a bajar.
+//      la caché (`datos/cache/`, COMPARTIDA por todos los proyectos) no se vuelve a bajar.
+//      Cada archivo se identifica por su dirección sin la firma: las variaciones de un
+//      proyecto, que comparten clips con el original, no bajan ni codifican lo mismo otra vez.
 //   2. Cada escena se codifica UNA vez a su «segmento» final (tamaño, fps y audio
 //      iguales, con sus subtítulos y, en el cierre, el rótulo ya dibujados). El
 //      nombre del segmento es la huella de todo lo que lo define: si nada de esa
@@ -17,6 +19,7 @@ const { tamano } = require("./ffmpeg");
 const { armarAss } = require("./subtitulos");
 const { disenarCierre } = require("./rotulo");
 const { huella, traer } = require("./proyecto");
+const { ajustesParalelo, crearCerrojos } = require("./limites");
 const voz = require("./voz");
 
 // Si cambia la forma de codificar un segmento, se sube este número: invalida la caché.
@@ -81,8 +84,9 @@ function filtroLienzo({ W, H, caja, ampliar, oscurecer }) {
  *   { cfg, ff, registro, trabajo, carpeta, latir }
  * Devuelve { archivo, duracion, sinVoz, avisos, stats, segundos, cierres }.
  */
-async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => {} }) {
+async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => {}, conCerrojo = crearCerrojos() }) {
   const t0 = Date.now();
+  const hilos = ajustesParalelo(cfg).hilosFfmpeg; // el resultado de x264 depende del número de hilos: va en la huella
   const A = cfg.config.armado || {};
   const F = A.fotoReal || {};
   const salida = cfg.config.salida || {};
@@ -111,12 +115,13 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
     const v = cfg.config.voz || {};
     const mp3 = `v-${huella(texto, cfg.elevenVoz, v.modelo, v.estabilidad, v.similitud)}.mp3`;
     try {
-      if (!fs.existsSync(enCarpeta(mp3)) || (await ff.duracion(mp3, carpeta)) <= 0.2) {
+      await conCerrojo(mp3, async () => {
+        if (fs.existsSync(enCarpeta(mp3)) && (await ff.duracion(mp3, carpeta)) > 0.2) return;
         await latir(`Voz de la escena ${n}`);
         await voz.generar(cfg, texto, enCarpeta(`tmp-${mp3}`));
         fs.renameSync(enCarpeta(`tmp-${mp3}`), enCarpeta(mp3));
         stats.vocesHechas++;
-      }
+      });
       usados.add(mp3);
       return { archivo: mp3, dura: await ff.duracion(mp3, carpeta) };
     } catch (e) {
@@ -148,7 +153,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
       if (!clip.url) throw new Error(`No se puede armar: la escena ${escena.n} no tiene clip.`);
       if (clip.estado && clip.estado !== "aprobada") throw new Error(`No se puede armar: el clip de la escena ${escena.n} no está aprobado (${clip.estado}).`);
       await latir(`Escena ${escena.n}: clip`);
-      fuente = await traer(carpeta, clip.url, { prefijo: "f", extra: clip.intentos || 0, ext: "mp4", stats, local });
+      fuente = await traer(carpeta, clip.url, { prefijo: "f", ext: "mp4", stats, local, conCerrojo });
       const duraClip = await ff.duracion(fuente, carpeta);
       if (duraClip <= 0.3) {
         fs.rmSync(enCarpeta(fuente), { force: true });
@@ -172,7 +177,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
       const url = escena.fotoUrl || (Array.isArray(contexto.fotos) ? contexto.fotos[0] : null);
       if (url) {
         await latir(`Escena ${escena.n}: foto real`);
-        fuente = await traer(carpeta, url, { prefijo: "f", ext: "jpg", stats, local });
+        fuente = await traer(carpeta, url, { prefijo: "f", ext: "jpg", stats, local, conCerrojo });
       } else if (tipo === "foto-real") {
         throw new Error(`No se puede armar: la escena ${escena.n} es de foto real y no trae foto (fotoUrl).`);
       } else {
@@ -214,12 +219,16 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
     const amplitud = tipo === "cierre" ? F.amplitudCierre ?? 0.03 : F.amplitud ?? 0.1;
     const recorte = Math.min(0.5, Math.max(0, F.recorteMaximo ?? 0.12));
     const caja = diseno ? diseno.caja : { x: 0, y: 0, w: ancho, h: alto };
-    const id = huella(VERSION, tipo, fuente, ancho, alto, fps, crf, preset, dura, audioDe, narracion && narracion.archivo, eventos ? ass : "", tipo === "generada" ? "" : [mov, amplitud, recorte, caja]);
+    const id = huella(VERSION, hilos, tipo, fuente, ancho, alto, fps, crf, preset, dura, audioDe, narracion && narracion.archivo, eventos ? ass : "", tipo === "generada" ? "" : [mov, amplitud, recorte, caja]);
     const seg = `s-${id}.mp4`;
 
-    if (fs.existsSync(enCarpeta(seg)) && Math.abs((await ff.duracion(seg, carpeta)) - dura) < 0.2) {
-      stats.segmentosReutilizados++;
-    } else {
+    const yaEsta = async () => fs.existsSync(enCarpeta(seg)) && Math.abs((await ff.duracion(seg, carpeta)) - dura) < 0.2;
+    // Con cerrojo por segmento: si otro armado (una variación) ya lo está haciendo, se espera y se reutiliza.
+    await conCerrojo(seg, async () => {
+      if (await yaEsta()) {
+        stats.segmentosReutilizados++;
+        return;
+      }
       await latir(`Escena ${escena.n}: preparando`);
       const entradas = [];
       const filtros = [];
@@ -264,8 +273,9 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
       );
       fs.renameSync(enCarpeta(tmp), enCarpeta(seg));
       stats.segmentosHechos++;
-    }
+    });
     usados.add(seg);
+    if (eventos) usados.add(`s-${id}.ass`);
     if (fuente) usados.add(fuente);
     segmentos.push({ n: escena.n, archivo: seg, inicio: cursor, dura });
     cursor += dura;
@@ -289,7 +299,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
   const pedidaMusica = typeof opciones.musica === "string" ? opciones.musica : opciones.musica && opciones.musica.url;
   if (pedidaMusica) {
     await latir("Música");
-    pista = await traer(carpeta, pedidaMusica, { prefijo: "m", ext: "mp3", stats, local });
+    pista = await traer(carpeta, pedidaMusica, { prefijo: "m", ext: "mp3", stats, local, conCerrojo });
     if ((await ff.duracion(pista, carpeta)) <= 0.5) {
       fs.rmSync(enCarpeta(pista), { force: true });
       throw new Error("La pista de música no se pudo leer.");
@@ -299,16 +309,19 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
   const volumen = pista ? Number((opciones.musica && opciones.musica.volumen) ?? (algunaVoz ? M.volumen ?? 0.22 : M.volumenSinVoz ?? 0.6)) : 0;
 
   // ------------------------------------------------------ 3. unir ----
-  const idFinal = huella(VERSION, segmentos.map((s) => s.archivo), pista, volumen, M.entradaSegundos, M.salidaSegundos, total);
+  const idFinal = huella(VERSION, hilos, segmentos.map((s) => s.archivo), pista, volumen, M.entradaSegundos, M.salidaSegundos, total);
   const final = `final-${idFinal}.mp4`;
-  if (fs.existsSync(enCarpeta(final)) && Math.abs((await ff.duracion(final, carpeta)) - total) < 0.5) {
-    stats.finalReutilizado = true;
-  } else {
+  await conCerrojo(final, async () => {
+    if (fs.existsSync(enCarpeta(final)) && Math.abs((await ff.duracion(final, carpeta)) - total) < 0.5) {
+      stats.finalReutilizado = true;
+      return;
+    }
     await latir("Uniendo las escenas");
-    fs.writeFileSync(enCarpeta("lista.txt"), segmentos.map((s) => `file '${s.archivo}'`).join("\n") + "\n");
+    const lista = `lista-${idFinal}.txt`;
+    fs.writeFileSync(enCarpeta(lista), segmentos.map((s) => `file '${s.archivo}'`).join("\n") + "\n");
     const tmp = `tmp-${final}`;
     if (!pista) {
-      await ff.ffmpeg(["-f", "concat", "-safe", "0", "-i", "lista.txt", "-c", "copy", "-movflags", "+faststart", ...BITEXACTO, tmp], carpeta);
+      await ff.ffmpeg(["-f", "concat", "-safe", "0", "-i", lista, "-c", "copy", "-movflags", "+faststart", ...BITEXACTO, tmp], carpeta);
     } else {
       const entra = M.entradaSegundos ?? 0.4;
       const sale = Math.min(M.salidaSegundos ?? 1.2, total / 2);
@@ -319,27 +332,26 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
         `[m0][llave]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450,afade=t=out:st=${redondo(total - sale, 3)}:d=${sale}[m];` +
         `[voz][m]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[a]`;
       await ff.ffmpeg(
-        ["-f", "concat", "-safe", "0", "-i", "lista.txt", "-stream_loop", "-1", "-i", pista, "-filter_complex", filtro, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2", "-t", String(total), "-movflags", "+faststart", ...BITEXACTO, tmp],
+        ["-f", "concat", "-safe", "0", "-i", lista, "-stream_loop", "-1", "-i", pista, "-filter_complex", filtro, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2", "-t", String(total), "-movflags", "+faststart", ...BITEXACTO, tmp],
         carpeta,
       );
     }
     fs.renameSync(enCarpeta(tmp), enCarpeta(final));
-  }
+    fs.rmSync(enCarpeta(lista), { force: true });
+  });
   usados.add(final);
   const duracion = await ff.duracion(final, carpeta);
   if (duracion < 1) throw new Error("El armado no produjo un video válido.");
 
-  // ---------------------------------------------------- 4. limpieza ----
-  // Se conserva lo usado en este armado; lo demás se borra cuando lleva una semana sin usarse
-  // (una corrección puede volver a una versión anterior de la escena).
+  // ------------------------------------------------- 4. marcar lo usado ----
+  // La caché es de todos los proyectos: aquí solo se marca lo que se usó. Lo que lleve
+  // semanas sin usarse lo borra la limpieza general (lib/proyecto.js → limpiarCache).
   const ahora = new Date();
-  for (const f of fs.readdirSync(carpeta)) {
-    const ruta = enCarpeta(f);
+  for (const f of usados) {
     try {
-      if (usados.has(f) || usados.has(f.replace(/\.ass$/, ".mp4"))) fs.utimesSync(ruta, ahora, ahora);
-      else if (/^tmp-/.test(f) || (/^(s|f|m|v|final)-/.test(f) && (/^final-/.test(f) || Date.now() - fs.statSync(ruta).mtimeMs > 7 * 86400000))) fs.rmSync(ruta, { force: true });
+      fs.utimesSync(enCarpeta(f), ahora, ahora);
     } catch {
-      /* se limpia en la próxima */
+      /* no pasa nada */
     }
   }
 

@@ -2,11 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, Clapperboard, Copy, Film, Images, Lock, RotateCcw, Send, X } from "lucide-react";
+import { Check, Clapperboard, Copy, CopyPlus, Download, Film, ImagePlus, Images, Lock, Pencil, Play, RotateCcw, Send, X } from "lucide-react";
+import { confirmarFotoProducto, prepararFotoProducto } from "@/app/(protected)/videos/actions";
+import { createClient } from "@/lib/supabase/client";
+import { BUCKET_VIDEOS_GENERADOS, MAX_FOTO_PRODUCTO_BYTES, TIPOS_FOTO_PRODUCTO } from "@/lib/trabajos-video";
+import { Textarea } from "@/components/ui/textarea";
 import { aprobarVideo, usarVideoEnProspecto } from "@/app/(protected)/videos/actions";
 import {
+  agregarFotoProyecto,
+  ajustarAuto,
   aprobarPiezas,
   cancelarTrabajoProyecto,
+  crearVariaciones,
+  seguirProyecto,
   consultarProyecto,
   corregirProyecto,
   crearProyecto,
@@ -22,7 +30,7 @@ import {
   ESTADO_PIEZA_LABELS,
   NOMBRE_PASO,
   TONO_PIEZA,
-  TOPE_INTENTOS_ESCENA,
+  VEREDICTO_LABELS,
   costoProyectoTexto,
   duracionTotal,
   escenasParaClip,
@@ -42,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Chip, ETIQUETA, Segmento } from "@/components/prospectos/piezas";
 import { CorregirProyecto } from "./proyecto-corregir";
+import { CrearVariaciones } from "./variaciones";
 import { PlanEscenas } from "./proyecto-plan";
 import { RevisionPiezas } from "./proyecto-revision";
 
@@ -52,7 +61,13 @@ type Vista = "escenas" | "plan" | "corregir";
 const VISTAS: readonly Vista[] = ["escenas", "plan", "corregir"];
 const VISTA_LABELS: Record<Vista, string> = { escenas: "Escenas", plan: "Plan", corregir: "Corregir" };
 
+/** Paso del Estudio de video: 1 Plan · 2 Activos · 3 Escenas · 4 Video · 5 Exportar. */
+export type PasoEstudio = 1 | 2 | 3 | 4 | 5;
+
 type Props = {
+  /** Dentro del Estudio: qué paso se está viendo. Sin esto, la vista clásica con pestañas. */
+  paso?: PasoEstudio;
+  onPaso?: (p: PasoEstudio) => void;
   guardado: GuionGuardado;
   /** Hay servidor de videos conectado (existe SERVIDOR_SECRET). */
   activo: boolean;
@@ -65,6 +80,8 @@ type Props = {
   ficha: FichaProducto;
   bloqueado: boolean;
   onGuardado: (g: GuionGuardado, cargar: boolean) => void;
+  /** Se crearon otros guiones (variaciones): se suman a la lista sin abrirlos. */
+  onOtros: (gs: GuionGuardado[]) => void;
 };
 
 const huella = (g: GuionGuardado) => {
@@ -77,7 +94,7 @@ const huella = (g: GuionGuardado) => {
  * de escenas, revisión de imágenes y clips, armado, video final y «Corregir».
  * Mientras hay trabajos en la cola se pone al día sola.
  */
-export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, puedeUsarEnProspecto, fotos, ficha, bloqueado, onGuardado }: Props) {
+export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAprobar, esCeo, puedeUsarEnProspecto, fotos, ficha, bloqueado, onGuardado, onOtros }: Props) {
   const version = versionVigente(guardado);
   const proyecto = version?.proyecto as ProyectoVideo;
   const id = guardado.id;
@@ -87,6 +104,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
   const [revision, setRevision] = useState<{ tipo: TipoPieza; n: number } | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [serie, setSerie] = useState(0);
+  const [variando, setVariando] = useState(false);
   const enAccion = useRef(false);
   const huellaActual = useRef("");
   const alGuardar = useRef(onGuardado);
@@ -113,8 +131,11 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
 
   // En vivo: mientras haya algo en la cola. Nunca a la vez que una acción de la persona.
   const enCurso = hayTrabajoEnCurso(proyecto);
+  // En modo directo el proyecto cambia solo (revisión con IA, etapa siguiente) aunque aquí no se vea nada en cola.
+  const avanzaSolo = proyecto.auto.activo && !proyecto.auto.parada && proyecto.final.estado !== "por-aprobar" && proyecto.final.estado !== "aprobada";
+  const sondear = enCurso || avanzaSolo;
   useEffect(() => {
-    if (!enCurso) return;
+    if (!sondear) return;
     let vivo = true;
     let enVuelo = false;
     const reloj = window.setInterval(() => {
@@ -132,7 +153,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
       vivo = false;
       window.clearInterval(reloj);
     };
-  }, [id, enCurso, recibir]);
+  }, [id, sondear, recibir]);
 
   const resumen = useMemo(() => resumenProyecto(proyecto), [proyecto]);
   const est = useMemo(() => estimado(proyecto), [proyecto]);
@@ -144,6 +165,9 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
   const final = proyecto.final;
   const armando = final.estado === "en-cola" || final.estado === "generando";
   const puedeArmar = !faltaArmar.length && !enCurso && final.estado !== "por-aprobar" && final.estado !== "aprobada";
+  const auto = proyecto.auto;
+  // Las variaciones reutilizan lo ya hecho: hace falta que todas las escenas estén listas.
+  const puedeVariar = !enCurso && !proyecto.variacionDe && proyecto.escenas.every((e) => (e.tipo === "generada" ? !!e.clip.url && (e.clip.estado === "aprobada" || e.clip.estado === "por-aprobar") : !!e.fotoUrl));
   const videoVigente = final.estado === "por-aprobar" || final.estado === "aprobada";
 
   /** Corre una acción del servidor; mientras tanto el sondeo no escribe encima. */
@@ -175,8 +199,9 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
   }
 
   async function rehacerPlan() {
+    if (auto.activo && !window.confirm("El modo directo está encendido: al proponer el plan de nuevo, las imágenes se piden de inmediato. ¿Continuar?")) return;
     if (!window.confirm("Se propone el plan de nuevo desde el guion. Las imágenes y clips de este plan se descartan (lo ya gastado sigue contando). ¿Continuar?")) return;
-    if (await correr("plan", () => crearProyecto(id, { fotos: fotos.length ? fotos : proyecto.contexto.fotos, ficha, reemplazar: true }), "Plan propuesto de nuevo")) setSerie((s) => s + 1);
+    if (await correr("plan", () => crearProyecto(id, { fotos: fotos.length ? fotos : proyecto.contexto.fotos, ficha, reemplazar: true, directo: auto.activo }), "Plan propuesto de nuevo")) setSerie((s) => s + 1);
   }
 
   async function aprobarFinal() {
@@ -211,11 +236,50 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
   }
 
   function abrirEscena(e: EscenaProyecto) {
-    if (e.tipo !== "generada") return void setVista("plan");
-    // Se abre en lo que toca mirar: el clip si ya hay, si no la imagen.
-    const tipo: TipoPieza = e.clip.url || e.clip.estado !== "pendiente" ? "clip" : "imagen";
+    if (e.tipo !== "generada") return void (paso ? onPaso?.(1) : setVista("plan"));
+    // Se abre en lo que toca mirar: el clip si ya hay, si no la imagen. En el Estudio manda el paso.
+    const tipo: TipoPieza = paso === 3 ? "imagen" : e.clip.url || e.clip.estado !== "pendiente" ? "clip" : "imagen";
     setRevision({ tipo, n: e.n });
   }
+
+  // Paso 2 del Estudio: subir otra foto real del producto.
+  const entradaFoto = useRef<HTMLInputElement>(null);
+  async function subirFoto(file: File | undefined) {
+    if (!file) return;
+    if (!TIPOS_FOTO_PRODUCTO[file.type]) return void toast.error("La foto debe ser PNG, JPG o WebP.");
+    if (file.size > MAX_FOTO_PRODUCTO_BYTES) return void toast.error(`La foto pesa más de ${MAX_FOTO_PRODUCTO_BYTES / 1024 / 1024} MB.`);
+    setAccion("foto");
+    try {
+      const prep = await prepararFotoProducto({ tipo: file.type, tamano: file.size });
+      if ("error" in prep) return void toast.error(prep.error);
+      const { error } = await createClient().storage.from(BUCKET_VIDEOS_GENERADOS).uploadToSignedUrl(prep.path, prep.token, file, { contentType: file.type });
+      if (error) return void toast.error(`No se pudo subir la foto: ${error.message}`);
+      const listo = await confirmarFotoProducto(prep.path);
+      if ("error" in listo) return void toast.error(listo.error);
+      await correr("foto", () => agregarFotoProyecto(id, listo.url), "Foto agregada a los activos");
+    } finally {
+      setAccion(null);
+    }
+  }
+  const [planPegado, setPlanPegado] = useState("");
+  async function importarPlan() {
+    let escenas: unknown;
+    try {
+      const o: unknown = JSON.parse(planPegado);
+      escenas = Array.isArray(o) ? o : (o as { escenas?: unknown })?.escenas;
+    } catch {
+      return void toast.error("Eso no es un JSON válido. Debe ser una lista de escenas o un objeto con «escenas».");
+    }
+    if (!Array.isArray(escenas) || !escenas.length) return void toast.error("El plan pegado no trae escenas.");
+    if (!window.confirm(`Se reemplaza el plan por las ${escenas.length} escenas pegadas (las piezas ya generadas se descartan). ¿Continuar?`)) return;
+    // Sin número de escena: así ninguna hereda piezas de otra por coincidencia.
+    const limpias = escenas.map((e) => ({ ...(e && typeof e === "object" ? e : {}), n: 0 }));
+    if (await correr("plan", () => guardarPlan(id, { escenas: limpias }), "Plan importado")) {
+      setPlanPegado("");
+      setSerie((x) => x + 1);
+    }
+  }
+  const enPaso = (...pasos: PasoEstudio[]) => !paso || pasos.includes(paso);
 
   const primeraPorAprobar = (tipo: TipoPieza) => proyecto.escenas.find((e) => e.tipo === "generada" && e[tipo].estado === "por-aprobar")?.n ?? null;
 
@@ -230,6 +294,8 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
             {proyecto.escenas.length} escenas · {duracionTotal(proyecto)} s
           </Chip>
         </div>
+        {enPaso(1) && (
+          <>
         <div className="grid gap-2 sm:grid-cols-3">
           <Etapa titulo="1 · Imágenes base" hecho={resumen.imagenes.aprobadas} total={resumen.imagenes.total} extra={resumen.imagenes.porAprobar ? `${resumen.imagenes.porAprobar} por revisar` : resumen.imagenes.enCurso ? `${resumen.imagenes.enCurso} en proceso` : ""} />
           <Etapa titulo="2 · Clips" hecho={resumen.clips.aprobadas} total={resumen.clips.total} extra={resumen.clips.porAprobar ? `${resumen.clips.porAprobar} por revisar` : resumen.clips.enCurso ? `${resumen.clips.enCurso} en proceso` : ""} />
@@ -249,6 +315,55 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
             {est.sinCosto} {est.sinCosto === 1 ? "escena sale" : "escenas salen"} de la foto real y no cuestan.
           </dd>
         </dl>
+        {proyecto.variacionDe && (
+          <p className="text-xs text-muted-foreground">
+            <Chip tono="azul">Variación</Chip> de «{proyecto.variacionDe.producto}»: cambia {proyecto.variacionDe.cambia}. Las demás escenas son las ya aprobadas del original (no se pagaron otra vez).
+          </p>
+        )}
+        {/* ---------------------------------------- cuánto avanza solo */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2" data-auto={auto.activo ? "si" : "no"}>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" className="size-4 accent-primary" checked={auto.activo} disabled={ocupado} onChange={(e) => void correr("auto", () => ajustarAuto(id, { activo: e.target.checked }))} />
+            Modo directo
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-primary" checked={auto.imagenes} disabled={ocupado} onChange={(e) => void correr("auto", () => ajustarAuto(id, { imagenes: e.target.checked }))} />
+            La IA aprueba las imágenes
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-primary" checked={auto.armarDirecto} disabled={ocupado} onChange={(e) => void correr("auto", () => ajustarAuto(id, { armarDirecto: e.target.checked }))} />
+            Armar al terminar los clips
+          </label>
+          {auto.imagenes && (
+            <Segmento value={auto.exigencia} onChange={(v) => void correr("auto", () => ajustarAuto(id, { exigencia: v }))} opciones={["estricto", "normal"] as const} etiquetas={{ estricto: "Estricto", normal: "Normal" }} disabled={ocupado} />
+          )}
+          <span className="basis-full text-xs text-muted-foreground">
+            {auto.activo
+              ? "Avanza solo hasta «Video por aprobar». Se detiene únicamente si hace falta una persona. El video final siempre lo apruebas tú."
+              : "Apagado: cada etapa se pide con su botón."}
+          </span>
+        </div>
+          </>
+        )}
+        {auto.parada && (
+          <div role="alert" data-parada={auto.parada.codigo} className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2">
+            <Chip tono="rojo">Detenido</Chip>
+            <span className="min-w-0 flex-1 basis-56 text-xs leading-relaxed">{auto.parada.texto}</span>
+            {auto.parada.codigo === "imagen-dudosa" ? (
+              <Button size="sm" onClick={() => setRevision({ tipo: "imagen", n: primeraPorAprobar("imagen") ?? 1 })}>
+                <Check /> Revisar
+              </Button>
+            ) : auto.parada.codigo === "revisar-clips" ? (
+              <Button size="sm" onClick={() => setRevision({ tipo: "clip", n: primeraPorAprobar("clip") ?? 1 })}>
+                <Check /> Revisar
+              </Button>
+            ) : (
+              <Button size="sm" disabled={ocupado} onClick={() => void correr("seguir", () => seguirProyecto(id))}>
+                <Play /> {accion === "seguir" ? "Siguiendo…" : "Seguir"}
+              </Button>
+            )}
+          </div>
+        )}
         {!activo && (
           <p className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
@@ -257,7 +372,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
             </span>
           </p>
         )}
-        {[...(aviso ? [aviso] : []), ...proyecto.avisos].map((a) => (
+        {[...(aviso ? [aviso] : []), ...(enPaso(1) ? proyecto.avisos : [])].map((a) => (
           <p key={a} role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
             {a}
           </p>
@@ -265,7 +380,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
 
         {/* ------------------------------------------ lo que toca hacer */}
         <div className="flex flex-wrap items-center gap-2">
-          {paraImagen.length > 0 && (
+          {paraImagen.length > 0 && !auto.activo && (
             <Button disabled={!activo || ocupado || armando} onClick={() => void pedir("imagenes", "Imágenes en cola")}>
               <Images /> {accion === "pedir:imagenes" ? "Encolando…" : `Generar ${paraImagen.length} ${paraImagen.length === 1 ? "imagen" : "imágenes"}`}
             </Button>
@@ -275,7 +390,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
               <Check /> Revisar {resumen.imagenes.porAprobar} {resumen.imagenes.porAprobar === 1 ? "imagen" : "imágenes"}
             </Button>
           )}
-          {paraClip.length > 0 && (
+          {paraClip.length > 0 && !auto.activo && (
             <Button variant={resumen.imagenes.porAprobar ? "outline" : "default"} disabled={!activo || ocupado || armando} onClick={() => void pedirClips()}>
               <Film /> {accion === "pedir:clips" ? "Encolando…" : `Generar ${paraClip.length} ${paraClip.length === 1 ? "clip" : "clips"} (${paraClip.reduce((s, e) => s + e.duracion, 0)} s)`}
             </Button>
@@ -285,7 +400,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
               <Check /> Revisar {resumen.clips.porAprobar} {resumen.clips.porAprobar === 1 ? "clip" : "clips"}
             </Button>
           )}
-          {puedeArmar && (
+          {puedeArmar && !auto.activo && (
             <Button disabled={!activo || ocupado} onClick={() => void pedir("armado", "Armado en cola: no cuesta")}>
               <Clapperboard /> {accion === "pedir:armado" ? "Encolando…" : final.url ? "Armar de nuevo (sin costo)" : "Armar video (sin costo)"}
             </Button>
@@ -318,7 +433,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
       </div>
 
       {/* ---------------------------------------------- video final */}
-      {final.url && (
+      {final.url && enPaso(5) && (
         <div className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
           <video key={final.url} controls preload="metadata" playsInline src={final.url} className="mx-auto aspect-[9/16] w-full max-w-[13rem] rounded-lg border border-border bg-black object-contain" aria-label="Video armado" />
           <div className="flex min-w-0 flex-col gap-2">
@@ -343,13 +458,23 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
               )}
               {final.estado === "por-aprobar" && !puedeAprobar && <span className="text-xs text-muted-foreground">Lo aprueba el CEO, el gerente comercial o la directora operativa.</span>}
               {videoVigente && (
-                <Button variant="outline" onClick={() => setVista("corregir")}>
+                <Button variant="outline" onClick={() => (paso ? onPaso?.(4) : setVista("corregir"))}>
                   Corregir algo
                 </Button>
               )}
               {final.estado === "aprobada" && (
                 <Button variant="outline" onClick={() => void copiarEnlace(final.url as string)}>
                   <Copy /> Copiar enlace
+                </Button>
+              )}
+              {final.estado === "aprobada" && (
+                <a href={`${final.url}?download=`} download className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 text-sm font-medium hover:bg-accent">
+                  <Download className="size-4" /> Descargar
+                </a>
+              )}
+              {puedeVariar && (
+                <Button variant="outline" disabled={ocupado} onClick={() => setVariando(true)}>
+                  <CopyPlus /> Crear variaciones
                 </Button>
               )}
               {final.estado === "aprobada" && puedeUsarEnProspecto && guardado.prospectoId && (
@@ -363,18 +488,79 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
       )}
 
       {/* ---------------------------------------------- vistas */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Segmento value={vista} onChange={setVista} opciones={VISTAS} etiquetas={VISTA_LABELS} />
-      </div>
+      {paso === 5 && !final.url && (
+        <p className="rounded-xl border border-border bg-card px-3 py-3 text-sm text-muted-foreground">
+          Todavía no hay video armado. {faltaArmar.length ? `Falta ${faltaArmar.slice(0, 3).join(", ")}.` : "Ya se puede armar: no cuesta."} Cuando esté, aquí se aprueba, se descarga y se crean sus variaciones.
+        </p>
+      )}
 
-      {vista === "escenas" && (
+      {/* ---------------------------------------------- paso 2 del Estudio: activos */}
+      {paso === 2 && (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip tono={ficha.confirmado ? "verde" : "ambar"}>{ficha.confirmado ? "Ficha del producto confirmada" : "Ficha del producto sin confirmar"}</Chip>
+            <Chip>{proyecto.contexto.fotos.length} {proyecto.contexto.fotos.length === 1 ? "foto real" : "fotos reales"}</Chip>
+            <input ref={entradaFoto} type="file" hidden accept={Object.keys(TIPOS_FOTO_PRODUCTO).join(",")} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void subirFoto(f); }} />
+          </div>
+          <ul className="flex flex-wrap gap-3" aria-label="Activos del proyecto">
+            {proyecto.contexto.fotos.map((u, i) => {
+              const usos = proyecto.escenas.filter((e) => e.tipo !== "generada" && e.fotoUrl === u).map((e) => e.n);
+              return (
+                <li key={u} className="flex w-40 flex-col gap-2 rounded-2xl border border-border bg-card p-2 sm:w-44" data-activo={i + 1}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={u} alt={`Foto real ${i + 1} del producto`} className="aspect-[9/16] w-full rounded-xl bg-black object-contain" />
+                  <span className="font-heading text-sm font-black italic uppercase">Producto · foto {i + 1}</span>
+                  <span className="min-h-8 text-xs leading-snug text-muted-foreground">
+                    {i === 0 ? "Principal. " : ""}
+                    {usos.length ? `Se anima en la escena ${usos.join(", ")}.` : "Referencia para las escenas generadas."} No se genera: sale idéntica.
+                  </span>
+                  <span className="grid grid-cols-2 gap-1.5">
+                    <Button variant="outline" size="sm" onClick={() => onPaso?.(1)}>
+                      <Pencil /> Editar
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={ocupado} onClick={() => entradaFoto.current?.click()}>
+                      <ImagePlus /> Subir
+                    </Button>
+                  </span>
+                </li>
+              );
+            })}
+            <li className="flex w-40 flex-col justify-between gap-2 rounded-2xl border border-dashed border-border p-3 sm:w-44">
+              <span className="font-heading text-sm font-black italic uppercase">Otra foto</span>
+              <span className="text-xs leading-snug text-muted-foreground">Otra vista del producto real (hasta 4). Se usa en escenas de foto real: no cuestan.</span>
+              <Button size="sm" disabled={ocupado || proyecto.contexto.fotos.length >= 4} onClick={() => entradaFoto.current?.click()}>
+                <ImagePlus /> {accion === "foto" ? "Subiendo…" : "Subir"}
+              </Button>
+            </li>
+            <li className="flex w-40 flex-col gap-2 rounded-2xl border border-dashed border-border p-3 opacity-80 sm:w-44">
+              <span className="font-heading text-sm font-black italic uppercase">Personajes base</span>
+              <span className="text-xs leading-snug text-muted-foreground">
+                Preparado, todavía no activo: hoy cada escena generada describe a su personaje en su propio prompt (paso 3). El material de personaje reutilizable entre escenas necesita al trabajador.
+              </span>
+            </li>
+          </ul>
+          <div className="rounded-xl border border-border bg-card p-3">
+            <span className={ETIQUETA}>Ficha del producto que usa el proyecto</span>
+            <p className="mt-1 text-xs leading-relaxed whitespace-pre-wrap">{proyecto.contexto.analisisProducto || "Sin ficha: los prompts no describen el tamaño ni el uso del producto."}</p>
+            <p className="mt-2 text-xs text-muted-foreground">La ficha se corrige fuera del estudio, junto a los datos del producto. Cierre: «{proyecto.contexto.cierre.oferta}» · «{proyecto.contexto.cierre.llamadoALaAccion}».</p>
+          </div>
+        </div>
+      )}
+
+      {!paso && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmento value={vista} onChange={setVista} opciones={VISTAS} etiquetas={VISTA_LABELS} />
+        </div>
+      )}
+
+      {(paso ? paso === 3 || paso === 4 : vista === "escenas") && (
         <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2" aria-label="Escenas del proyecto">
           {proyecto.escenas.map((e) => (
-            <TarjetaEscena key={e.n} e={e} esCeo={esCeo} ocupado={ocupado} onAbrir={() => abrirEscena(e)} onReabrir={(tipo) => void correr("reabrir", () => reabrirIntentos(id, e.n, tipo), "Intentos reabiertos")} />
+            <TarjetaEscena key={e.n} e={e} tope={proyecto.topeIntentos} esCeo={esCeo} ocupado={ocupado} onAbrir={() => abrirEscena(e)} onReabrir={(tipo) => void correr("reabrir", () => reabrirIntentos(id, e.n, tipo), "Intentos reabiertos")} />
           ))}
         </ul>
       )}
-      {vista === "plan" && (
+      {(paso ? paso === 1 : vista === "plan") && (
         <PlanEscenas
           key={`plan-${serie}`}
           proyecto={proyecto}
@@ -388,7 +574,7 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
           onRehacer={() => void rehacerPlan()}
         />
       )}
-      {vista === "corregir" && (
+      {(paso ? paso === 4 && !!final.url : vista === "corregir") && (
         <CorregirProyecto
           key={`corregir-${serie}`}
           proyecto={proyecto}
@@ -405,8 +591,48 @@ export function ProyectoVideoPanel({ guardado, activo, puedeAprobar, esCeo, pued
         />
       )}
 
+      {paso === 1 && (
+        <details className="rounded-xl border border-border bg-card">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Avanzado: pegar o importar un plan (JSON)</summary>
+          <div className="flex flex-col gap-2 border-t border-border p-3">
+            <p className="text-xs text-muted-foreground">
+              El plan lo propone el sistema; esto es solo para traer uno hecho fuera. Lista de escenas con <code>paso</code>, <code>tipo</code> («generada», «foto-real», «cierre»), <code>duracion</code>, <code>voz</code>, <code>promptImagen</code> y{" "}
+              <code>promptVideo</code>. Se le aplican las mismas reglas: cierre al final con foto real, hasta 20 escenas.
+            </p>
+            <Textarea value={planPegado} rows={4} className="max-h-48 font-mono text-xs" placeholder='{"escenas":[{"paso":1,"tipo":"generada","duracion":4,"voz":"…","promptImagen":"…","promptVideo":"…"}]}' aria-label="Plan en JSON" onChange={(e) => setPlanPegado(e.target.value)} />
+            <Button variant="outline" className="self-start" disabled={ocupado || enCurso || !planPegado.trim()} onClick={() => void importarPlan()}>
+              Importar plan
+            </Button>
+          </div>
+        </details>
+      )}
+      {variando && (
+        <CrearVariaciones
+          proyecto={proyecto}
+          analisis={guardado.analisisProducto}
+          ocupado={ocupado}
+          onCerrar={() => setVariando(false)}
+          onCrear={async (pedidos) => {
+            enAccion.current = true;
+            setAccion("variaciones");
+            const r = await crearVariaciones(id, pedidos);
+            enAccion.current = false;
+            setAccion(null);
+            if ("error" in r) {
+              toast.error(r.error, { duration: 10000 });
+              return false;
+            }
+            onOtros(r.variaciones);
+            setAviso(r.aviso ?? null);
+            setVariando(false);
+            toast.success(r.aviso ?? "Variaciones creadas");
+            return true;
+          }}
+        />
+      )}
       {revision && (
         <RevisionPiezas
+          tope={proyecto.topeIntentos}
           tipo={revision.tipo}
           escenas={proyecto.escenas}
           inicial={revision.n}
@@ -441,12 +667,12 @@ function Etapa({ titulo, hecho, total, extra, pulso }: { titulo: string; hecho: 
   );
 }
 
-function TarjetaEscena({ e, esCeo, ocupado, onAbrir, onReabrir }: { e: EscenaProyecto; esCeo: boolean; ocupado: boolean; onAbrir: () => void; onReabrir: (tipo: TipoPieza) => void }) {
+function TarjetaEscena({ e, tope, esCeo, ocupado, onAbrir, onReabrir }: { e: EscenaProyecto; tope: number; esCeo: boolean; ocupado: boolean; onAbrir: () => void; onReabrir: (tipo: TipoPieza) => void }) {
   const generada = e.tipo === "generada";
   const miniatura = generada ? e.imagen.url : e.fotoUrl;
   const enProceso = generada && (e.imagen.estado === "en-cola" || e.imagen.estado === "generando" || e.clip.estado === "en-cola" || e.clip.estado === "generando");
-  const topeImagen = generada && e.imagen.intentos >= TOPE_INTENTOS_ESCENA && e.imagen.estado !== "aprobada" && e.imagen.estado !== "por-aprobar";
-  const topeClip = generada && e.clip.intentos >= TOPE_INTENTOS_ESCENA && e.clip.estado !== "aprobada" && e.clip.estado !== "por-aprobar";
+  const topeImagen = generada && e.imagen.intentos >= tope && e.imagen.estado !== "aprobada" && e.imagen.estado !== "por-aprobar";
+  const topeClip = generada && e.clip.intentos >= tope && e.clip.estado !== "aprobada" && e.clip.estado !== "por-aprobar";
   return (
     <li className="flex w-32 shrink-0 snap-start flex-col gap-1.5 sm:w-36" data-escena={e.n}>
       <button
@@ -472,14 +698,17 @@ function TarjetaEscena({ e, esCeo, ocupado, onAbrir, onReabrir }: { e: EscenaPro
       {generada ? (
         <span className="flex flex-col gap-1">
           <Chip tono={TONO_PIEZA[e.imagen.estado]}>
-            Img · {ESTADO_PIEZA_LABELS[e.imagen.estado]} · {e.imagen.intentos}/{TOPE_INTENTOS_ESCENA}
+            Img · {ESTADO_PIEZA_LABELS[e.imagen.estado]} · {e.imagen.intentos}/{tope}
           </Chip>
+          {e.imagen.revision && e.imagen.revision.veredicto !== "sin-ia" && (
+            <Chip tono={e.imagen.revision.veredicto === "aprobada-auto" ? "verde" : e.imagen.revision.veredicto === "rechazada-auto" ? "rojo" : "ambar"}>{VEREDICTO_LABELS[e.imagen.revision.veredicto].replace(": decide una persona", "")}</Chip>
+          )}
           <Chip tono={TONO_PIEZA[e.clip.estado]}>
-            Clip · {ESTADO_PIEZA_LABELS[e.clip.estado]} · {e.clip.intentos}/{TOPE_INTENTOS_ESCENA}
+            Clip · {ESTADO_PIEZA_LABELS[e.clip.estado]} · {e.clip.intentos}/{tope}
           </Chip>
           {(topeImagen || topeClip) && (
             <span className="text-[11px] leading-snug text-destructive">
-              Tope de {TOPE_INTENTOS_ESCENA} intentos: no se regenera más.
+              Tope de {tope} intentos: no se regenera más.
               {esCeo && (
                 <Button variant="ghost" size="xs" className="mt-1" disabled={ocupado} onClick={() => onReabrir(topeImagen ? "imagen" : "clip")}>
                   <RotateCcw /> Reabrir
@@ -514,14 +743,14 @@ export function ConvertirEnProyecto({ guardado, sinGuardar, activo, fotos, ficha
   // Una versión nueva del guion (por una corrección) puede traer el proyecto de la anterior.
   const anterior = guardado ? [...guardado.versiones].reverse().find((v) => v.n !== vigente?.n && v.proyecto) : undefined;
 
-  async function crear(heredarDe?: number) {
+  async function crear(heredarDe?: number, directo = false) {
     if (!guardado) return;
     setOcupado(true);
-    const r = await crearProyecto(guardado.id, { fotos, ficha, ...(heredarDe ? { heredarDe } : {}) });
+    const r = await crearProyecto(guardado.id, { fotos, ficha, ...(heredarDe ? { heredarDe } : {}), directo });
     setOcupado(false);
     if ("error" in r) return void toast.error(r.error, { duration: 10000 });
     onGuardado(r.guardado, false);
-    toast.success(heredarDe ? `Proyecto traído de la v${heredarDe}` : "Plan de escenas listo: revísalo antes de generar");
+    toast.success(heredarDe ? `Proyecto traído de la v${heredarDe}` : directo ? "Proyecto en modo directo: avanza solo hasta donde pueda" : "Plan de escenas listo: revísalo antes de generar");
   }
 
   return (
@@ -536,6 +765,9 @@ export function ConvertirEnProyecto({ guardado, sinGuardar, activo, fotos, ficha
         <Button disabled={!guardado || ocupado || bloqueado || !fotos.length} onClick={() => void crear()}>
           <Clapperboard /> {ocupado ? "Armando el plan…" : "Convertir en proyecto por escenas"}
         </Button>
+        <Button variant="outline" disabled={!guardado || ocupado || bloqueado || !fotos.length || !ficha.confirmado} title={ficha.confirmado ? undefined : "Confirma primero la ficha del producto"} onClick={() => void crear(undefined, true)}>
+          <Play /> Seguir en modo directo
+        </Button>
         {anterior && (
           <Button variant="outline" disabled={ocupado || bloqueado || !fotos.length} onClick={() => void crear(anterior.n)}>
             Traer el proyecto de la v{anterior.n}
@@ -544,6 +776,7 @@ export function ConvertirEnProyecto({ guardado, sinGuardar, activo, fotos, ficha
         {!guardado && <span className="text-xs text-muted-foreground">Guarda el guion primero.</span>}
         {guardado && sinGuardar && <span className="text-xs text-amber-700 dark:text-amber-300">Hay cambios sin guardar: el plan sale de la versión guardada (v{vigente?.n}).</span>}
         {guardado && !fotos.length && <span className="text-xs text-amber-700 dark:text-amber-300">Sube al menos una foto real del producto (arriba, junto a los datos).</span>}
+        {guardado && fotos.length > 0 && !ficha.confirmado && <span className="text-xs text-amber-700 dark:text-amber-300">Para el modo directo falta confirmar la ficha del producto (arriba).</span>}
       </div>
     </div>
   );
