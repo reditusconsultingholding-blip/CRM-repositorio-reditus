@@ -189,6 +189,10 @@ async function etapaInvestigacion(c: CandidatoVideo, v: VideoProspecto): Promise
   return { ...v, datos, etapa: "investigacion", retomarEn: "", detalle: `Investigación de ${nombrePais(c.pais)} lista (${fuentes.anuncios.length} anuncios activos consultados). Formato recomendado: ${buscarFormato(analisis.formatos[0] ?? "")?.nombre ?? "sin recomendación"}.` };
 }
 
+// Video de muestra para un prospecto: no hay cliente a quien preguntarle nada.
+const INDICACION_PROSPECTO =
+  "Es un video de muestra para un prospecto: NO hay cliente que confirme datos, así que NO dejes nada entre corchetes. Usa solo lo que dice la página del producto y la investigación. Para los usos y situaciones, escribe escenas cotidianas y evidentes para este tipo de producto. No prometas resultados ni des cifras que la página no muestre: si un dato no está, omítelo y reformula la frase sin él.";
+
 /** Etapa 3: guion para ese país, proyecto por escenas y modo directo. La aprobación del dueño cuenta como visto bueno de la ficha. */
 async function etapaLanzar(admin: Admin, c: CandidatoVideo, v: VideoProspecto): Promise<VideoProspecto> {
   const base = leerDatosVideo(v.datos);
@@ -198,7 +202,7 @@ async function etapaLanzar(admin: Admin, c: CandidatoVideo, v: VideoProspecto): 
   // Quien aprobó el video confirma con eso la ficha (regla del dueño para los prospectos).
   const ficha = { ...(v.ficha ?? leerFicha(null)), confirmado: fichaConDatos(v.ficha ?? leerFicha(null)) ? { porId: v.decididoPorId, por: `${v.decididoPor} (al aprobar el video del prospecto)`, fecha: ahora } : null };
   const datos: DatosVideo = { ...base, formato: formato.slug, oferta: v.oferta, llamado: v.llamado, fotosProducto: v.fotos, fichaProducto: ficha };
-  const escrito = await generarGuionVideo(datos, formato);
+  const escrito = await generarGuionVideo(datos, formato, INDICACION_PROSPECTO);
   if (escrito.origen !== "ia") return detener(v, "investigacion", `La IA no escribió el guion (${(escrito.aviso ?? "no está disponible").split(". ")[0]}). Vuelve a correrlo cuando la IA responda.`);
   let texto = escrito.texto;
   if (faltaEnElCierre(texto, datos).length) texto = (await regenerarCierreGuion(datos, texto)).texto;
