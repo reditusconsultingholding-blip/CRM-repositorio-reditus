@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
+  BookOpen,
   LayoutDashboard,
   DollarSign,
   ClipboardList,
@@ -58,6 +59,8 @@ const ALL_LINKS = [
   { href: "/videos", label: "Creativos", icon: Film, roles: VIDEOS_ROLES, grupo: "Operación" },
   { href: "/prospectos", label: "Prospectos", icon: UserPlus, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/clientes", label: "Clientes", icon: Contact, roles: INGRESOS_ROLES, grupo: "Comercial" },
+  // Maestría en negociación: privada del CEO, con nombre discreto a propósito.
+  { href: "/maestria", label: "Formación", icon: BookOpen, roles: ["ceo"], grupo: "Comercial" },
   { href: "/flujo", label: "Flujo de trabajo", icon: Workflow, roles: null, grupo: "Equipo" },
   { href: "/seguimiento", label: "Seguimiento diario", icon: ClipboardCheck, roles: null, grupo: "Equipo" },
   { href: "/ayuda", label: "¿Cómo funciona?", icon: HelpCircle, roles: null, grupo: "Equipo" },
@@ -174,7 +177,7 @@ export function Sidebar({
             href="/perfil"
             aria-current={
               // Usuarios, Panel CEO y la maestría se abren desde Configuración.
-              ["/perfil", "/ceo", "/admin", "/maestria"].some((r) => pathname.startsWith(r)) ? "page" : undefined
+              ["/perfil", "/ceo", "/admin"].some((r) => pathname.startsWith(r)) ? "page" : undefined
             }
             className="rd-lado-enlace"
           >
