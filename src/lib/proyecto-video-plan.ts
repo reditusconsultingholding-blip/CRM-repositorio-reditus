@@ -10,6 +10,8 @@ import {
   LOCUCIONES,
   MAX_SEGUNDOS_CLIP,
   cortesDeApertura,
+  golpesPara,
+  type Transicion,
   contarPalabras,
   palabrasQueCaben,
   type Locucion,
@@ -263,6 +265,19 @@ export function enriquecerPlan(entrada: EscenaProyecto[], d: DatosPlan): { escen
     // El cierre y la inserción anterior tampoco comparten foto si hay otra.
     if (alternadas) cambios.push("se alternaron las fotos para no repetir la misma en escenas seguidas");
   }
+  // Ritmo: cada escena entra con una transición distinta a la anterior y ninguna toma pasa de ~3 s sin un cambio visual.
+  const CICLO: Transicion[] = ["zoom", "barrido", "deslizar", "flash", "glitch"];
+  let puestas = 0;
+  escenas = escenas.map((e, i) => {
+    const x = { ...e };
+    if (i > 0 && !x.transicion) {
+      x.transicion = x.tipo === "cierre" ? "fundido" : CICLO[(i - 1) % CICLO.length];
+      puestas++;
+    }
+    if (x.tipo !== "cierre" && !x.cortes?.length && !x.golpesVisuales?.length && x.duracion > 3.4) x.golpesVisuales = golpesPara(x.duracion);
+    return x;
+  });
+  if (puestas) cambios.push(`${puestas} escenas recibieron su transición de entrada (variadas, no solo corte seco) y cambios visuales cada ~3 s`);
   // La apertura: un solo clip de 8 s del que se usan cuatro tramos cortos (golpe + tres tomas).
   if (ponerApertura(escenas)) cambios.push("la primera escena pasó a ser la apertura de 3 s en cuatro tomas cortas (sale de un solo clip)");
   return { escenas: numerar(escenas.slice(0, MAX_ESCENAS_PROYECTO)), cambios };

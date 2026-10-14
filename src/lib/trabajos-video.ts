@@ -246,6 +246,8 @@ const escenaFuera = (e: EscenaProyecto) => ({
   fotoUrl: e.fotoUrl,
   movimiento: e.movimiento,
   ...(e.cortes?.length ? { cortes: e.cortes, duracionClip: e.duracionClip ?? 8 } : {}),
+  ...(e.transicion ? { transicion: e.transicion } : {}),
+  ...(e.golpesVisuales?.length ? { golpesVisuales: e.golpesVisuales } : {}),
   imagen: piezaFuera(e.imagen),
   clip: piezaFuera(e.clip),
 });

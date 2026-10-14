@@ -208,7 +208,22 @@ export type EscenaProyecto = {
   cortes?: Corte[];
   /** Segundos que se le piden al generador para el clip cuando no coincide con `duracion` (apertura en cortes). */
   duracionClip?: number;
+  /** Cómo ENTRA esta escena (la dibuja el servidor de videos). Sin valor, la elige él según el ritmo. */
+  transicion?: Transicion;
+  /** Segundos de la escena en los que debe haber un cambio visual (acercamiento brusco o reencuadre) para que ninguna toma pase de ~3 s igual. */
+  golpesVisuales?: number[];
 };
+
+/** Las transiciones que sabe dibujar el servidor de videos (`lib/efectos.js`). */
+export const TRANSICIONES = ["corte", "zoom", "barrido", "flash", "glitch", "deslizar", "fundido"] as const;
+export type Transicion = (typeof TRANSICIONES)[number];
+export const TRANSICION_LABELS: Record<Transicion, string> = { corte: "Corte seco", zoom: "Acercamiento brusco", barrido: "Barrido", flash: "Destello", glitch: "Interferencia", deslizar: "Deslizar", fundido: "Fundido suave" };
+
+/** Los momentos de una toma de `segundos` en los que hace falta un cambio visual: uno cada ~2,7 s, nunca pegado al final. */
+export function golpesPara(segundos: number): number[] {
+  const n = Math.floor((segundos - 0.6) / 2.7);
+  return Array.from({ length: Math.max(0, n) }, (_, i) => Math.round(((segundos / (n + 1)) * (i + 1)) * 10) / 10);
+}
 
 export type Corte = { desde: number; hasta: number };
 
@@ -240,15 +255,20 @@ export const ESTILO_SUBTITULOS_LABELS: Record<EstiloSubtitulos, string> = {
   limpio: "Limpio (una línea blanca, sobrio)",
   impacto: "De impacto (mayúsculas grandes, una o dos palabras)",
 };
-export const RITMOS = ["rapido", "medio", "calmado"] as const;
+export const RITMOS = ["muy-rapido", "rapido", "medio", "calmado"] as const;
 export type Ritmo = (typeof RITMOS)[number];
-export const RITMO_LABELS: Record<Ritmo, string> = { rapido: "Rápido (cortes y transiciones marcadas)", medio: "Medio", calmado: "Calmado (marca sobria)" };
+export const RITMO_LABELS: Record<Ritmo, string> = {
+  "muy-rapido": "Muy rápido (un cambio visual cada segundo y medio, transiciones enérgicas)",
+  rapido: "Rápido (transiciones variadas, ninguna toma quieta)",
+  medio: "Medio",
+  calmado: "Calmado (marca sobria: cortes secos y fundidos)",
+};
 export type EdicionProyecto = { subtitulos: EstiloSubtitulos; ritmo: Ritmo };
 
 /** El estilo que le va a cada formato cuando nadie lo ha elegido: dinámico por defecto. */
 export function edicionDeFormato(formato: string): EdicionProyecto {
   if (formato === "ugc" || formato === "testimonio" || formato === "entrevista") return { subtitulos: "palabra", ritmo: "rapido" };
-  if (formato === "historia" || formato === "historias-musicales") return { subtitulos: "limpio", ritmo: "medio" };
+  if (formato === "historia" || formato === "historias-musicales") return { subtitulos: "limpio", ritmo: "rapido" };
   if (formato === "usos-del-producto") return { subtitulos: "caja", ritmo: "rapido" };
   return { subtitulos: "impacto", ritmo: "rapido" };
 }
@@ -382,6 +402,8 @@ export type ContextoProyecto = {
   cierre: CierreProyecto;
   /** Estilo de subtítulos y ritmo del montaje. Sin elegir, sale del formato (`edicionDeFormato`). */
   edicion?: EdicionProyecto;
+  /** El gancho de la apertura (banco de ganchos): el activo, las tres opciones que se ofrecen y por qué se eligió. */
+  gancho?: { id: string; opciones: string[]; porque: string };
   voz: VozProyecto;
 };
 
@@ -578,6 +600,8 @@ export function leerEscenas(raw: unknown): EscenaProyecto[] {
         movimiento: uno(o.movimiento, MOVIMIENTOS, "acercar"),
         imagen: leerPieza(o.imagen),
         clip: leerPieza(o.clip),
+        ...((TRANSICIONES as readonly string[]).includes(o.transicion as string) ? { transicion: o.transicion as Transicion } : {}),
+        ...(Array.isArray(o.golpesVisuales) && o.golpesVisuales.length ? { golpesVisuales: (o.golpesVisuales as unknown[]).filter((x): x is number => typeof x === "number" && x > 0.3 && x < 15).slice(0, 4) } : {}),
         ...(tipo === "generada" && leerCortes(o.cortes).length >= 2 ? { cortes: leerCortes(o.cortes), duracionClip: Math.min(MAX_SEGUNDOS_CLIP, Math.max(4, Math.round(num(o.duracionClip, MAX_SEGUNDOS_CLIP)))) } : {}),
       };
     });
@@ -603,6 +627,9 @@ export function leerContexto(raw: unknown): ContextoProyecto {
       ...(typeof c.urgencia === "string" ? { urgencia: txt(c.urgencia, 80) } : {}),
     },
     ...(o.edicion && typeof o.edicion === "object" ? { edicion: leerEdicion(o.edicion) } : {}),
+    ...(typeof obj(o.gancho).id === "string" && obj(o.gancho).id
+      ? { gancho: { id: txt(obj(o.gancho).id, 40), opciones: lista(obj(o.gancho).opciones).map((x) => txt(x, 40)).filter(Boolean).slice(0, 4), porque: txt(obj(o.gancho).porque, 300) } }
+      : {}),
     voz: leerVoz(o.voz, txt(o.pais, 4)),
   };
 }

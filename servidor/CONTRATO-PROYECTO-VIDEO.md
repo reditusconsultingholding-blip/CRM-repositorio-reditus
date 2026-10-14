@@ -192,6 +192,13 @@ Decisión del dueño: **la voz es la que genera el modelo de video dentro de cad
 3. **Fotogramas del final (opcional, recomendado)**: antes de cerrar el armado, subir de 3 a 6 fotogramas JPG del video ya armado con `{ toma, pedirSubida: true, tipo: "fotograma-final", indice: 1..6 }` y mandar sus rutas en el cierre: `fotogramas: ["<ruta>", …]`, en orden. El primero debe ser de los 2 primeros segundos; el último, del cierre con el rótulo; los demás, repartidos. Con ellos el CRM hace el control de calidad automático (gancho, producto visible, oferta y llamado al final, subtítulos) y lo deja anotado junto al video «por aprobar». Sin fotogramas, el control se hace solo con los datos (duración, plan), y lo dice.
 4. `duracion` en el resultado del armado ya existía: ahora se usa para comparar con el objetivo. Conviene mandarla siempre.
 
+### 18-oct-2026 · ritmo: transición por escena, cambios visuales dentro de la toma y «muy rápido» (lado del CRM hecho; solo se AÑADE, ningún campo publicado cambia de nombre)
+
+- **`escena.transicion`** (ya lo lee `efectos.js`): el CRM ahora lo manda en casi todas las escenas del video automático, variando entre `zoom`, `barrido`, `deslizar`, `flash` y `glitch`; el cierre entra con `fundido`. La escena 1 no trae (abre el video). Valores: los de `TRANSICIONES`. Ausente → como hoy.
+- **`escena.golpesVisuales`: number[]** (NUEVO, opcional): segundos dentro de la escena (ya recortada) donde debe haber un cambio visual para que ninguna toma pase de ~3 s igual. En cada marca: acercamiento brusco (punch-in de 100 % → 112–118 % en 2 cuadros, alternando el punto de anclaje: centro, tercio superior, tercio inferior) que se mantiene hasta la marca siguiente, donde vuelve a 100 % o cambia de anclaje. Sin fundidos. Aplica a clips generados y a fotos reales animadas (en fotos, además, cambiar el sentido del movimiento). Ausente o vacío → nada. Ejemplo: escena de 8 s → `[2.7, 5.3]`; de 6 s → `[2, 4]`. No viene en escenas con `cortes` ni en el cierre.
+- **`opciones.ritmo: "muy-rapido"`** (NUEVO valor; `rapido`, `medio` y `calmado` siguen igual): como `rapido`, y además si una escena no trae `golpesVisuales` el trabajador pone uno cada ~1,5 s, usa solo las transiciones enérgicas (`zoom`, `flash`, `glitch`, `barrido`) y los subtítulos entran con golpe. Valor desconocido → tratar como `rapido`.
+- El valor por defecto del CRM pasa a `rapido` en todos los formatos.
+
 ### 17-oct-2026 · apertura en cortes, narración por defecto, estilo de edición y urgencia (lado del CRM hecho; **pendiente en el trabajador**)
 
 Sale de la primera retroalimentación del dueño. Todo es compatible hacia atrás: un campo ausente significa «como antes».
@@ -285,3 +292,35 @@ Cómo quedó implementado lo del 14-oct del CRM (A, B y C) y lo poco que se aña
 
 11. `opciones.tonoMusica` (C.1): la pista sale de la carpeta `musica\<tono>\` del servidor, que llena el dueño con pistas con licencia. Si `tonoMusica` no viene, se usa `neutro`. Si no hay pistas de ese tono, se usa una de `neutro` y se avisa; si tampoco hay, el video sale sin música y `avisos` trae una línea que empieza por **«El video salió SIN música»**. Nunca falla por la música (tampoco si no se puede bajar la de `opciones.musica`). **Nuevo: `opciones.musica: false`** = sin música y sin aviso (`null` = que elija el trabajador). El tono es libre: cualquier nombre que exista como carpeta sirve.
 12. `subtitulos: true | false` y `fotogramas: [ruta…]` (C.2 y C.3) van en el cierre del armado: 5 fotogramas, el primero del primer segundo y el último del cierre con el rótulo. Si la subida de fotogramas falla, el video se entrega igual, sin ellos.
+
+### 16-oct-2026 · edición (lado del trabajador): cierre hecho, narración, plantillas, transiciones
+
+**Tarjeta de cierre** — implementada según «16-oct · tarjeta de cierre de calidad». Precisiones:
+
+1. Detalle en Montserrat SemiBold (peso 600; el 500 no va en el paquete). Tipografía de toda la tarjeta: Montserrat (licencia libre).
+2. Fondo cuando la foto es de fondo blanco: el último cuadro del **último clip generado** antes del cierre (aunque haya escenas de foto real en medio). Si no hay ninguno, un degradado del color de la marca.
+3. El producto no lleva movimiento continuo: entra (94 → 100 %) y queda quieto.
+4. Horizontal (16:9), que el contrato no describe: producto a la izquierda, textos a la derecha, mismas reglas.
+5. **Nuevo campo opcional `contexto.cierre.urgencia`** (texto corto, p. ej. «Solo esta semana»; recomendado ≤ 28 caracteres): se pinta como una etiqueta blanca sobre el titular, en mayúsculas. Si no viene, no se pinta nada: el trabajador no inventa urgencias ni contadores.
+6. Durante el cierre no hay subtítulo. Además, si dos escenas seguidas traen la misma frase en `voz`, el subtítulo no se repite en la segunda.
+
+**Narración (`contexto.voz.motor: "narracion"`)**
+
+7. Etapa `clips`: los clips se generan **sin diálogo**. Pedido al CRM: con motor `narracion`, que el bloque «AUDIO» del `promptVideo` diga «sin voz, nadie habla; solo sonido ambiente». Si el prompt no trae ningún bloque «AUDIO», el trabajador agrega esa instrucción él.
+8. Etapa `armado`: se narra `voz` de cada escena que se dice (`locucion` `camara` o `narrador`, o sin `locucion`), también las de `foto-real` y `cierre`, con UNA voz. **La duración de cada escena pasa a ser la de su frase** (más 0,3 s de pausas): `duracion` deja de mandar en esas escenas; el cierre conserva su mínimo de 5 s. La `duracion` total va en el resultado.
+9. Campos opcionales nuevos en `contexto.voz`: `vozId` (ID de una voz de ElevenLabs, si el CRM quiere elegirla por proyecto) y `sexo` (`"mujer"` | `"hombre"`, para elegir entre las voces por país del servidor). Si no vienen, se usa la voz del servidor.
+10. Sin clave de ElevenLabs en el servidor: el video se arma con el audio de los clips y `avisos` lo dice. Como esos clips se pidieron sin diálogo, saldrá sin voz y el primer aviso lo advierte: conviene que el CRM no ofrezca «narración» mientras el servidor no tenga clave.
+11. `avisos` del armado trae «Narración de ElevenLabs con la voz de …: N caracteres nuevos» (para llevar el gasto).
+
+**Subtítulos**
+
+12. **`opciones.estiloSubtitulos`**: `"impacto" | "karaoke" | "limpio" | "titular" | "maquina"`. Si no viene (o no es uno de esos), el trabajador elige uno fijo según `contexto.producto`. El resultado lo informa en el registro del servidor.
+13. **`escena.enfasis`**: lista de palabras de esa escena que deben resaltarse (`["ojos", "azul"]`; se comparan sin tildes ni mayúsculas). Opcional. **Emojis: no soportados** (no se dibujan en color); si llegan dentro de `voz` pueden verse como cuadros: mejor no mandarlos.
+14. El resaltado usa `contexto.cierre.color`. Los subtítulos van siempre entre el 12 % y el 84 % del alto.
+
+**Ritmo y transiciones**
+
+15. **`opciones.ritmo`**: `"rapido" | "medio"`. Sin él: rápido en los cortes de los primeros 3 s y medio después.
+16. **`escena.transicion`** (opcional): `"corte" | "zoom" | "barrido" | "flash" | "glitch" | "deslizar"`, la transición con la que ENTRA esa escena. La primera escena y el cierre entran siempre en corte.
+17. **Apertura de cortes rápidos** — dos formas: (a) escenas normales muy cortas: una escena `generada` sin `voz` admite `duracion` desde 0,4 s; (b) **`apertura: [{ n, desde, hasta }]`** en el trabajo de armado (primer nivel): `n` es una escena `generada` de `todas`; `desde`/`hasta` en segundos dentro de su clip; cada corte dura entre 0,3 y 1,2 s y entre todos no pasan de 3 s. Van antes de la primera escena, sin subtítulo y sin el audio del clip (con golpes de sonido). Un corte que apunte a una escena sin clip se ignora.
+18. Las variaciones comparten plantilla y transiciones con el original porque ambas salen de `contexto.producto` (no del `guionId`): así sus escenas iguales no se recodifican. Conviene que `contexto.producto` no cambie entre el original y sus variaciones.

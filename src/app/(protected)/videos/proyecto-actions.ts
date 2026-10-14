@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { registrarAprendizaje } from "@/lib/aprendizajes-video-server";
 import type { EtapaAprendizaje, OrigenAprendizaje } from "@/lib/aprendizajes-video";
 import { TIEMPOS_BASE, type TiemposVideo } from "@/lib/progreso-video";
+import { aplicarGancho, buscarGancho, elegirGanchos } from "@/lib/ganchos-video";
 import { unstable_rethrow } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES, type Profile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -844,5 +845,30 @@ export async function guardarEdicion(id: string, edicion: { subtitulos?: unknown
     finalPorRehacer(p);
     anotar(p, `Estilo de edición cambiado por ${x.profile.name}: subtítulos «${nueva.subtitulos}», ritmo «${nueva.ritmo}».`);
     return guardar(x, p, "Estilo guardado. Si ya había video, ármalo de nuevo para verlo (no cuesta).");
+  });
+}
+
+/**
+ * «Cambiar gancho»: la apertura pasa a ser otro gancho del banco. La imagen y el clip de la
+ * escena 1 dejan de valer (hay que generarlos: una imagen y un clip). No encola nada.
+ */
+export async function cambiarGancho(id: string, ganchoId: string): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    if (hayTrabajoEnCurso(p)) return { error: "Hay algo generándose: espera a que termine para cambiar el gancho." };
+    const receta = buscarGancho(String(ganchoId ?? ""));
+    const primera = p.escenas[0];
+    if (!receta) return { error: "Ese gancho ya no está en el banco." };
+    if (!primera || primera.tipo !== "generada") return { error: "La primera escena de este plan no es generada: cámbiala a «Generada» en el plan para ponerle un gancho." };
+    const opciones = p.contexto.gancho?.opciones.length ? p.contexto.gancho.opciones : elegirGanchos([x.g.producto, x.g.analisisProducto, x.version.guion].join(" "), [], x.g.formato).opciones;
+    p.escenas = [aplicarGancho(primera, receta, { producto: x.g.producto, dolor: primera.voz, fichaTexto: p.contexto.analisisProducto, relacion: x.formato.relacion_aspecto || "9:16" }), ...p.escenas.slice(1)];
+    p.contexto.gancho = { id: receta.id, opciones: [...new Set([...opciones, receta.id])].slice(0, 4), porque: `«${receta.nombre}», elegido por ${x.profile.name}.` };
+    finalPorRehacer(p);
+    anotar(p, `Gancho de la apertura cambiado a «${receta.nombre}» por ${x.profile.name}: la escena 1 necesita imagen y clip nuevos.`);
+    // Cambiar el gancho no lanza nada, aunque el modo automático esté encendido.
+    p.auto = { ...p.auto, activo: false };
+    return guardar(x, p, `Gancho cambiado a «${receta.nombre}». La escena 1 necesita una imagen y un clip nuevos (no se generó nada todavía).`);
   });
 }

@@ -16,6 +16,7 @@ import {
   cancelarTrabajoProyecto,
   guardarCierre,
   guardarEdicion,
+  cambiarGancho,
   crearVariaciones,
   seguirProyecto,
   consultarProyecto,
@@ -68,6 +69,7 @@ import { PlanEscenas } from "./proyecto-plan";
 import { RevisionPiezas } from "./proyecto-revision";
 import { RetroVideo } from "./aprendizajes";
 import { useConfirmar } from "./progreso-video";
+import { GANCHOS, GANCHOS_VERSION, buscarGancho } from "@/lib/ganchos-video";
 
 /** Cada cuánto se consulta mientras hay algo generándose y la pestaña está a la vista. */
 const SONDEO_MS = 4000;
@@ -644,6 +646,49 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
           guardando={accion === "cierre"}
           onGuardar={(c) => void correr("cierre", () => guardarCierre(id, c), "Cierre guardado")}
         />
+      )}
+      {paso === 1 && proyecto.escenas[0]?.tipo === "generada" && (
+        <section className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3" id="gancho-de-apertura" aria-label="Gancho de apertura">
+          <div>
+            <span className="text-sm font-semibold">Gancho de apertura (los primeros 3 segundos)</span>
+            <p className="text-sm text-muted-foreground">
+              Un golpe visual de 1 segundo con el producto real y tres tomas muy cortas; después empieza la historia. {proyecto.contexto.gancho?.porque ?? "Este plan todavía no tiene un gancho del banco: elige uno."}
+            </p>
+          </div>
+          <ul className="grid gap-2 md:grid-cols-3">
+            {(proyecto.contexto.gancho?.opciones.length ? proyecto.contexto.gancho.opciones : GANCHOS.slice(0, 3).map((g) => g.id)).map((gid) => {
+              const g = buscarGancho(gid);
+              if (!g) return null;
+              const activo = proyecto.contexto.gancho?.id === gid;
+              return (
+                <li key={gid} data-gancho={gid} className={cn("flex flex-col gap-2 rounded-lg border bg-card p-3", activo ? "border-primary" : "border-border")}>
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    {g.nombre} {activo && <Chip tono="azul">En uso</Chip>}
+                  </span>
+                  <span className="text-sm leading-relaxed">{g.como}</span>
+                  <span className="text-sm text-muted-foreground">Sirve cuando: {g.cuando}</span>
+                  <span className="text-sm text-muted-foreground">Cuidado: {g.riesgos}</span>
+                  {!activo && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-auto self-start"
+                      disabled={ocupado || enCurso}
+                      onClick={async () => {
+                        if (await confirmar(`La apertura pasa a ser «${g.nombre}». La imagen y el clip de la escena 1 se descartan y hay que generarlos de nuevo (una imagen y un clip).`, { titulo: "¿Cambiar el gancho?", si: "Sí, cambiar" })) {
+                          if (await correr("gancho", () => cambiarGancho(id, gid))) setSerie((s) => s + 1);
+                        }
+                      }}
+                    >
+                      {accion === "gancho" ? "Cambiando…" : "Usar este gancho"}
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <span className="text-xs text-muted-foreground">Banco de ganchos {GANCHOS_VERSION}. Son tipos de toma que se recrean con el producto real: nunca material de terceros.</span>
+        </section>
       )}
       {paso === 1 && (
         <EdicionVideo edicion={leerEdicion(proyecto.contexto.edicion, guardado.formato)} ocupado={ocupado || armando} onCambiar={(e) => void correr("edicion", () => guardarEdicion(id, e), "Estilo guardado")} />

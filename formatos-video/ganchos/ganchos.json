@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "investigado": "2026-10-13",
+  "comoSeInvestigo": "Búsqueda web de qué aperturas de anuncios verticales (TikTok, Reels, Shorts) están funcionando en 2026 + práctica de producción de Reditus. Las fuentes son guías de agencias y proveedores (orientativas, no estudios independientes). Coinciden en: el primer segundo y medio decide; interrupción visual en el primer cuadro; cortes de 0,5 a 1 s; acercamientos bruscos; texto + sonido + imagen juntos en el primer golpe; problema antes que producto.",
+  "fuentes": [
+    "https://segwise.ai/blog/video-ad-hooks-drive-conversions",
+    "https://segwise.ai/blog/anatomy-top-performing-video-ad-frame-by-frame",
+    "https://www.trendtrack.io/blog-post/best-performing-ad-hooks",
+    "https://ecommercefastlane.com/ugc-hooks-for-ecommerce/",
+    "https://jetfuel.agency/short-form-video-ads-for-dtc-brands-tiktok-reels-and-shorts-strategy-that-drives-revenue-in-2026/",
+    "https://www.vidovo.com/blog/ugc-hook-examples-how-brands-can-create-better-ugc-ads-in-the-first-3-seconds",
+    "https://adligator.com/blog/facebook-ad-creative-trends-2026"
+  ],
+  "reglas": [
+    "Se recrea el TIPO de toma con el producto real del cliente. Nunca se copia material, marcas, música, creadores ni personas de terceros.",
+    "Una cifra o una afirmación solo se usa si figura en la página del producto o la dio el cliente.",
+    "El golpe dura 1 segundo. Lo siguen tres tomas de menos de 1 segundo. Todo sale de UN clip de 8 s en cuatro momentos."
+  ],
+  "ganchos": [
+    {
+      "id": "pov-situacion",
+      "nombre": "POV: estás ahí",
+      "cuando": "El dolor ocurre en un momento concreto que el comprador reconoce al instante (de noche, al despertar, frente al espejo, en el carro).",
+      "como": "Cámara en primera persona o pegada a la cara, en el segundo exacto del dolor; el producto entra de golpe por un manotazo y cambia lo que se ve.",
+      "promptImagen": "Primerísimo plano, punto de vista subjetivo o pegado al rostro, en el momento exacto del dolor ({dolor}). Luz dura y contrastada que dramatiza la situación. {producto} entra en cuadro por un borde, a punto de usarse.",
+      "promptClip": "0–1 s GOLPE: arranque brusco, la persona reacciona de golpe al dolor ({dolor}) con la cámara pegada a su cara, y una mano entra como un manotazo con {producto}; 2–3 s primerísimo plano de {producto} ya en uso, desde otro ángulo; 4–5 s lo que cambia alrededor al usarlo, plano abierto y distinto; 6–7 s la persona, aliviada, en un encuadre nuevo.",
+      "frase": "Otra vez las tres",
+      "riesgos": "Si el momento no se reconoce en medio segundo, no frena. Evitar caras deformadas por el gran angular.",
+      "palabras": ["noche", "dormir", "sueño", "despertar", "madrugada", "cama", "dolor", "espalda", "cansancio", "estrés", "ansiedad", "pantalla", "móvil", "celular"],
+      "transicion": "flash"
+    },
+    {
+      "id": "cambio-de-mundo",
+      "nombre": "El mundo cambia de color",
+      "cuando": "El producto transforma lo que se ve o se siente de inmediato (lentes, luces, filtros, cosmética de color, limpieza, antes sucio/después limpio).",
+      "como": "Un gesto con el producto y TODA la escena cambia de golpe (color, luz, orden). El cambio es el golpe.",
+      "promptImagen": "Escena del problema a pantalla completa ({dolor}), con {producto} sostenido en primer término, justo antes de usarse. Composición que permita ver el cambio en toda la imagen.",
+      "promptClip": "0–1 s GOLPE: un gesto rápido con {producto} y toda la escena cambia de golpe de color y de luz; 2–3 s primerísimo plano de {producto} mostrando ese efecto; 4–5 s la misma escena desde otro ángulo, ya cambiada; 6–7 s comparación rápida: se aparta el producto y vuelve el problema, se acerca y desaparece.",
+      "frase": "Mira lo que cambia",
+      "riesgos": "El efecto debe ser el real del producto: no exagerar un resultado que el producto no da.",
+      "palabras": ["gafas", "lentes", "luz", "filtro", "color", "limpia", "mancha", "blanquea", "brillo", "maquillaje", "tinte", "pantalla"],
+      "transicion": "flash"
+    },
+    {
+      "id": "objeto-cae",
+      "nombre": "Cae al cuadro",
+      "cuando": "Producto físico pequeño o mediano, con forma reconocible. Sirve casi siempre; es el comodín.",
+      "como": "El producto cae desde arriba y golpea la superficie (o rebota) justo frente a la cámara, con salpicadura, polvo o un rebote de la cámara.",
+      "promptImagen": "Plano cenital o muy bajo de una superficie relacionada con el uso ({dolor}), con {producto} suspendido en el aire a punto de caer, nítido, con sombra marcada.",
+      "promptClip": "0–1 s GOLPE: {producto} cae desde arriba y golpea la superficie frente a la cámara, que tiembla con el impacto; 2–3 s primerísimo plano del detalle más reconocible de {producto}; 4–5 s una mano lo toma con decisión, ángulo lateral; 6–7 s {producto} en uso, plano medio distinto.",
+      "frase": "Esto lo cambia todo",
+      "riesgos": "El producto no puede deformarse ni romperse al caer. No usar con productos frágiles o líquidos abiertos.",
+      "palabras": ["botella", "frasco", "caja", "termo", "cápsulas", "suplemento", "crema", "herramienta", "accesorio"],
+      "transicion": "zoom"
+    },
+    {
+      "id": "mano-atrapa",
+      "nombre": "La mano lo atrapa",
+      "cuando": "Producto que cabe en una mano; marcas con energía.",
+      "como": "El producto vuela hacia la cámara y una mano lo atrapa a centímetros del lente.",
+      "promptImagen": "{producto} en el aire, en primer término y ligeramente desenfocado por el movimiento, con una mano abierta entrando en cuadro para atraparlo. Fondo del lugar donde se usa.",
+      "promptClip": "0–1 s GOLPE: {producto} vuela hacia la cámara y una mano lo atrapa de golpe, muy cerca del lente; 2–3 s la mano lo gira y muestra su frente; 4–5 s primerísimo plano de un detalle; 6–7 s {producto} usándose, encuadre abierto.",
+      "frase": "Atrápalo antes",
+      "riesgos": "Manos deformes en la generación: revisar la imagen base.",
+      "palabras": ["bolsillo", "portátil", "pequeño", "mano", "deporte", "gym", "viaje"],
+      "transicion": "zoom"
+    },
+    {
+      "id": "pantalla-partida",
+      "nombre": "Antes y después relámpago",
+      "cuando": "Hay un contraste visible entre con y sin el producto (misma persona, mismo lugar, misma hora).",
+      "como": "Pantalla partida vertical: a un lado el problema, al otro la solución, a la vez. Una línea barre de un lado al otro en medio segundo.",
+      "promptImagen": "Pantalla partida vertical en dos mitades iguales: a la izquierda la persona con el problema ({dolor}); a la derecha la MISMA persona en el mismo lugar y a la misma hora, con {producto} y sin el problema. Misma ropa, mismo encuadre.",
+      "promptClip": "0–1 s GOLPE: pantalla partida, la mitad con el problema y la mitad con {producto}, y una línea barre de golpe de un lado al otro; 2–3 s primer plano del lado con el problema; 4–5 s primer plano del lado con {producto}; 6–7 s la imagen completa pasa a ser la del lado con {producto}.",
+      "frase": "Misma hora, otra noche",
+      "riesgos": "No prometer un resultado que el producto no garantiza. Las dos mitades deben ser la misma persona.",
+      "palabras": ["antes", "después", "resultado", "piel", "cabello", "postura", "orden", "limpieza", "sueño", "ojeras"],
+      "transicion": "barrido"
+    },
+    {
+      "id": "destape",
+      "nombre": "Destape brusco",
+      "cuando": "El empaque o el momento de abrirlo tiene gracia; regalos; productos con sorpresa dentro.",
+      "como": "Una mano arranca la tapa, la tela o el empaque de un tirón y el producto queda a la vista.",
+      "promptImagen": "{producto} cubierto por una tela, una tapa o su empaque cerrado, sobre una superficie limpia, con una mano agarrando el borde lista para tirar.",
+      "promptClip": "0–1 s GOLPE: una mano arranca de un tirón lo que cubre {producto} y queda a la vista; 2–3 s primerísimo plano de {producto} recién destapado; 4–5 s la mano lo saca y lo muestra, otro ángulo; 6–7 s {producto} en uso.",
+      "frase": "No sabía que existía",
+      "riesgos": "No inventar un empaque que el producto no tiene: usar tela o tapa neutra si no hay foto del empaque.",
+      "palabras": ["regalo", "kit", "caja", "empaque", "set", "sorpresa", "combo"],
+      "transicion": "deslizar"
+    },
+    {
+      "id": "tapado-de-camara",
+      "nombre": "Tapa la cámara y aparece",
+      "cuando": "Se quiere pasar del problema a la solución en un parpadeo; productos que se llevan puestos.",
+      "como": "Una mano o el propio producto tapa el lente; al destaparlo, la escena ya es otra.",
+      "promptImagen": "La persona con el problema ({dolor}), mirando cerca de la cámara, con la mano avanzando hacia el lente con {producto}.",
+      "promptClip": "0–1 s GOLPE: la mano con {producto} avanza y tapa por completo la cámara; 2–3 s se destapa y la persona ya lo está usando, en otro lugar o con otra luz; 4–5 s detalle de {producto} puesto o en uso; 6–7 s reacción de alivio, plano distinto.",
+      "frase": "Parpadea y cambia",
+      "riesgos": "El cambio de escena debe ser claro; si no, parece un error.",
+      "palabras": ["ropa", "faja", "gafas", "reloj", "joya", "zapatos", "maquillaje", "puesto"],
+      "transicion": "glitch"
+    },
+    {
+      "id": "asmr-fuerte",
+      "nombre": "Sonido que se siente",
+      "cuando": "El producto suena bien: clic, chasquido, burbujeo, crujido, spray, cremallera.",
+      "como": "Primerísimo plano del gesto que hace el sonido, sin música, con el sonido muy presente.",
+      "promptImagen": "Primerísimo plano macro de {producto} en el punto exacto donde se produce su sonido característico, con los dedos a punto de accionarlo.",
+      "promptClip": "0–1 s GOLPE: macro del gesto que hace sonar {producto}, seco y nítido; 2–3 s otro gesto sonoro, ángulo distinto; 4–5 s {producto} completo, girando; 6–7 s en uso, plano medio. Sonido ambiente muy presente.",
+      "frase": "Escucha esto",
+      "riesgos": "Si el video lleva narración encima desde el segundo cero, el sonido se pierde: dejar el primer segundo sin voz.",
+      "palabras": ["spray", "clic", "crema", "espuma", "bebida", "café", "crujiente", "cierre", "masaje"],
+      "transicion": "corte"
+    },
+    {
+      "id": "texto-contradice",
+      "nombre": "El texto dice lo contrario",
+      "cuando": "Hay una creencia común equivocada sobre el problema (\"bajar el brillo basta\", \"es cosa de la edad\").",
+      "como": "En pantalla, la creencia en texto grande; la imagen la desmiente en el mismo segundo.",
+      "promptImagen": "Alguien haciendo lo que la gente cree que resuelve el problema ({dolor}) y fallando a la vista, con espacio limpio arriba para un texto grande. {producto} visible en segundo plano.",
+      "promptClip": "0–1 s GOLPE: la persona hace el remedio de siempre y falla de forma evidente; 2–3 s entra {producto} en primer plano; 4–5 s {producto} resolviendo lo que el remedio no pudo; 6–7 s resultado, plano distinto.",
+      "frase": "Eso no funciona",
+      "riesgos": "No ridiculizar a nadie ni afirmar algo médico que la página no respalde.",
+      "palabras": ["brillo", "remedio", "truco", "mito", "creen", "siempre", "nunca", "dieta"],
+      "transicion": "glitch"
+    },
+    {
+      "id": "cifra-real",
+      "nombre": "La cifra que choca",
+      "cuando": "La página del producto publica un dato fuerte y verificable (porcentaje, horas, unidades).",
+      "como": "La cifra ocupa la pantalla un segundo, con el producto detrás; luego se ve qué significa.",
+      "promptImagen": "{producto} de frente, centrado, sobre fondo oscuro y limpio, con mucho aire arriba para una cifra enorme.",
+      "promptClip": "0–1 s GOLPE: zoom brusco hasta {producto} sobre fondo oscuro (la cifra va en texto encima); 2–3 s demostración visual de lo que significa la cifra; 4–5 s detalle de {producto}; 6–7 s {producto} en uso.",
+      "frase": "Noventa y nueve por ciento",
+      "riesgos": "SOLO con una cifra que figure en la página o que haya dado el cliente. Sin cifra real, no se usa este gancho.",
+      "palabras": ["%", "por ciento", "horas", "veces", "bloquea", "reduce", "comprobado", "clínicamente"],
+      "transicion": "zoom"
+    },
+    {
+      "id": "reaccion",
+      "nombre": "Reacción que no se espera",
+      "cuando": "Formatos con persona (UGC, testimonio). El resultado sorprende a quien lo prueba.",
+      "como": "La cara de la persona en el instante de la sorpresa, antes de que se sepa por qué.",
+      "promptImagen": "Primer plano de una persona real y natural con {producto} en la mano, en el instante de una sorpresa genuina, ojos muy abiertos, en su casa.",
+      "promptClip": "0–1 s GOLPE: la persona reacciona con sorpresa genuina mirando {producto}; 2–3 s lo acerca a la cámara; 4–5 s lo usa, ángulo distinto; 6–7 s vuelve a mirar a cámara, asintiendo.",
+      "frase": "No me lo creía",
+      "riesgos": "Reacciones sobreactuadas suenan falsas. No usar con marcas sobrias.",
+      "palabras": ["ugc", "testimonio", "probé", "resultado", "sorpresa", "recomiendo"],
+      "transicion": "zoom"
+    },
+    {
+      "id": "pregunta-tres-palabras",
+      "nombre": "Pregunta en tres palabras",
+      "cuando": "El dolor cabe en una pregunta directa. Marcas sobrias que no admiten efectos.",
+      "como": "Texto enorme con la pregunta, sobre la imagen del dolor; un acercamiento brusco la remata.",
+      "promptImagen": "La situación del dolor ({dolor}) en un plano limpio y oscuro, con aire arriba para una pregunta en texto enorme. {producto} visible en un borde.",
+      "promptClip": "0–1 s GOLPE: acercamiento brusco a la situación del dolor; 2–3 s {producto} entra en plano; 4–5 s {producto} en uso; 6–7 s resultado, encuadre distinto.",
+      "frase": "¿Otra noche igual?",
+      "riesgos": "Es el menos visual: úsalo solo si los demás no encajan con la marca.",
+      "palabras": ["sobria", "premium", "clínica", "salud", "servicio"],
+      "transicion": "fundido"
+    }
+  ]
+}

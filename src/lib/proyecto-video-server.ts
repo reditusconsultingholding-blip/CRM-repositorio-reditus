@@ -46,7 +46,8 @@ import { avisar, crearTrabajoEtapa, leerTrabajos } from "@/lib/trabajos-video-se
 import type { Exigencia } from "@/lib/videos-config";
 import { leerConfig } from "@/lib/videos-config-server";
 import { codigoDePais, nombrePais, versionVigente, type DatosVideo, type GuionGuardado, type VersionGuion } from "@/lib/videos";
-import { escribirGuionArchivo, fichaFormato, leerGuionArchivo } from "@/lib/videos-server";
+import { escribirGuionArchivo, fichaFormato, leerGuionArchivo, listarGuiones } from "@/lib/videos-server";
+import { aplicarGancho, buscarGancho, elegirGanchos } from "@/lib/ganchos-video";
 
 // Lado servidor del proyecto de video por escenas: lo que necesita IA (mirar
 // las fotos del producto, proponer el plan de escenas) y poner el proyecto al
@@ -301,6 +302,20 @@ export async function armarProyecto(d: PedidoArmar): Promise<ProyectoVideo> {
     plan.escenas = arreglado.escenas;
   }
   if (plan.vozDescripcion && !cambios?.persona) voz.descripcion = plan.vozDescripcion;
+  // GANCHO de la apertura, del banco: el que mejor encaja con el producto, su dolor y los anuncios consultados,
+  // sin repetir el de los videos anteriores de este cliente. Clonando manda la referencia: no se toca.
+  let gancho = previo?.contexto.gancho;
+  if (!clonando && plan.escenas[0]?.tipo === "generada" && !gancho) {
+    const otros = g.cliente.trim() ? (await listarGuiones(d.admin)).guiones.filter((x) => x.id !== g.id && x.cliente.trim().toLowerCase() === g.cliente.trim().toLowerCase()) : [];
+    const usados = otros.flatMap((x) => x.versiones.map((v) => v.proyecto?.contexto.gancho?.id ?? "")).filter(Boolean);
+    const texto = [g.producto, g.analisisProducto, g.resumenMercado, g.valores, d.version.guion, ...g.anunciosHallados.map((a) => `${a.titular} ${a.texto}`)].join(" ");
+    const elegido = elegirGanchos(texto, usados, g.formato);
+    const receta = buscarGancho(elegido.id);
+    if (receta) {
+      plan.escenas[0] = aplicarGancho(plan.escenas[0], receta, { producto: g.producto, dolor: plan.escenas[0].voz, fichaTexto: textoFicha(ficha), relacion: d.formato.relacion_aspecto || "9:16" });
+      gancho = elegido;
+    }
+  }
   const cfg = await leerConfig(d.admin);
   // Un plan sin IA con escenas que cuestan no arranca solo: sus prompts son genéricos.
   const hayGeneradas = plan.escenas.some((e) => e.tipo === "generada");
@@ -319,7 +334,7 @@ export async function armarProyecto(d: PedidoArmar): Promise<ProyectoVideo> {
           : null,
     },
     variacionDe: null,
-    contexto: { producto: g.producto, pais: g.pais, fotos, analisisProducto: textoFicha(ficha), cierre: { oferta: g.oferta, llamadoALaAccion: g.llamado }, voz, edicion: previo?.contexto.edicion ?? edicionDeFormato(g.formato) },
+    contexto: { producto: g.producto, pais: g.pais, fotos, analisisProducto: textoFicha(ficha), cierre: { oferta: g.oferta, llamadoALaAccion: g.llamado }, voz, edicion: previo?.contexto.edicion ?? edicionDeFormato(g.formato), ...(gancho ? { gancho } : {}) },
     escenas: plan.escenas,
     costo: { creditos: 0, segundosGenerados: 0, imagenes: 0 },
     final: { estado: "pendiente", url: null, armados: 0, trabajoId: null, nota: "" },
