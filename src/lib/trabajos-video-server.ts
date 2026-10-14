@@ -1136,9 +1136,7 @@ async function resultadoConCandado(
       .filter((ruta) => ruta.startsWith(`${carpetaProyecto(t)}/final-f`))
       .map((ruta) => almacen.getPublicUrl(ruta).data.publicUrl),
     subtitulos: typeof cuerpo.subtitulos === "boolean" ? cuerpo.subtitulos : null,
-    ...(typeof (cuerpo.transcripcion ?? cuerpo.transcripcionSubtitulos) === "string" && String(cuerpo.transcripcion ?? cuerpo.transcripcionSubtitulos).trim()
-      ? { transcripcion: String(cuerpo.transcripcion ?? cuerpo.transcripcionSubtitulos).slice(0, 6000) }
-      : {}),
+    ...(textoTranscripcion(cuerpo) ? { transcripcion: textoTranscripcion(cuerpo).slice(0, 6000) } : {}),
   };
   t.terminadoAt = iso;
   t.latidoAt = iso;
@@ -1236,4 +1234,16 @@ async function falloConCandado(
   anotarGasto(r.dato, cuerpo);
   const t = await enFila(() => soltar(admin, r.dato, motivo, cuerpo.definitivo === true));
   return { ok: true, dato: { estado: t.estado, intentos: t.intentos, maxIntentos: t.maxIntentos, reintentaDesde: t.noAntesDe } };
+}
+
+/** Lo que leyó el servidor en los subtítulos: texto plano, o la lista `transcripcionCaptions` ({desde, hasta, texto}) del trabajador. */
+function textoTranscripcion(cuerpo: Record<string, unknown>): string {
+  const plano = cuerpo.transcripcion ?? cuerpo.transcripcionSubtitulos;
+  if (typeof plano === "string" && plano.trim()) return plano;
+  const lista = Array.isArray(cuerpo.transcripcionCaptions) ? cuerpo.transcripcionCaptions : [];
+  return lista
+    .map((x) => (x && typeof x === "object" && typeof (x as { texto?: unknown }).texto === "string" ? (x as { texto: string }).texto : ""))
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 }
