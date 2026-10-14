@@ -180,7 +180,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
               <Chip tono={enTope ? "rojo" : "neutro"}>
                 Intento {pieza.intentos} de {tope}
               </Chip>
-              {pieza.revisadaPor && pieza.estado !== "por-aprobar" && <span className="text-xs text-muted-foreground">por {pieza.revisadaPor}</span>}
+              {pieza.revisadaPor && pieza.estado !== "por-aprobar" && <span className="text-sm text-muted-foreground">por {pieza.revisadaPor}</span>}
             </div>
             {tipo === "imagen" && pieza.revision && (
               <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs" data-revision={pieza.revision.veredicto}>
@@ -204,7 +204,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
               </div>
             )}
             {pieza.nota && (
-              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs leading-relaxed break-words text-amber-700 dark:text-amber-300">
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-sm leading-relaxed break-words text-amber-700 dark:text-amber-300">
                 <strong className="font-medium">{pieza.estado === "fallo" ? "Motivo del fallo: " : "Nota: "}</strong>
                 {pieza.nota}
               </p>
@@ -216,7 +216,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
             )}
             <details className="rounded-lg border border-border bg-muted/30">
               <summary className="cursor-pointer px-2 py-1.5 text-xs font-medium">Qué se pidió</summary>
-              <p className="border-t border-border px-2 py-1.5 text-xs leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
+              <p className="border-t border-border px-2 py-1.5 text-sm leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
                 {tipo === "imagen" ? escena.promptImagen : escena.promptVideo}
               </p>
             </details>
@@ -224,7 +224,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
             {modo === "ver" ? (
               <div className="mt-auto flex flex-col gap-2">
                 {enTope && pieza.estado !== "aprobada" && (
-                  <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs leading-relaxed text-destructive">
+                  <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-sm leading-relaxed text-destructive">
                     Esta escena llegó al tope de {tope} intentos de {nombre}: ya no se regenera. Apruébala, cámbiala a «Foto real animada» en el plan o pide al CEO que la reabra.
                   </p>
                 )}
@@ -244,13 +244,13 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
                     <RefreshCw /> Regenerar
                   </Button>
                 </div>
-                {!puedeAprobar && <p className="text-xs text-muted-foreground">Aprueban el CEO, el gerente comercial o la directora operativa.</p>}
+                {!puedeAprobar && <p className="text-sm text-muted-foreground">Aprueban el CEO, el gerente comercial o la directora operativa.</p>}
                 {puedeAprobar && porAprobar.length > 1 && (
                   <Button variant="outline" disabled={!todasVistas || ocupado} onClick={() => void onAprobarTodas(porAprobar.map((e) => e.n))}>
                     <Check /> {todasVistas ? `Aprobar las ${porAprobar.length} que faltan` : `Aprobar todas: primero míralas (${porAprobar.filter((e) => vistas.has(e.n)).length} de ${porAprobar.length} vistas)`}
                   </Button>
                 )}
-                <p className="hidden text-xs text-muted-foreground sm:block">Teclado: ← → pasar · A aprobar · R rechazar · G regenerar.</p>
+                <p className="hidden text-sm text-muted-foreground sm:block">Teclado: ← → pasar · A aprobar · R rechazar · G regenerar.</p>
               </div>
             ) : (
               <div className="mt-auto flex flex-col gap-2">
@@ -263,7 +263,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
                   placeholder={modo === "rechazar" ? "Qué está mal (obligatorio): «el envase salió azul», «la mano tiene seis dedos»…" : "Qué debe cambiar (recomendado): se le pasa al generador"}
                   aria-label="Nota"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {modo === "rechazar"
                     ? "Queda rechazada con tu nota. No se gasta nada hasta que alguien pida regenerarla."
                     : `Se genera de nuevo SOLO ${tipo === "imagen" ? "esta imagen" : "este clip"}: intento ${pieza.intentos + 1} de ${tope}. Cuesta${tipo === "imagen" && escena.clip.url ? "; su clip actual deja de valer" : ""}.`}

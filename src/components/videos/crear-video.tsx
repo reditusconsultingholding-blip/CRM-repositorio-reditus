@@ -69,6 +69,7 @@ import { ConvertirEnProyecto } from "./proyecto-video";
 import { ClonarAnuncio } from "./clonar-anuncio";
 import { CAMBIOS_VACIOS } from "@/lib/clonacion-video";
 import { EstudioVideo } from "./estudio-video";
+import { useConfirmar } from "./progreso-video";
 import { ListaProyectos } from "./proyectos-lista";
 import { AprendizajesVideos } from "./aprendizajes";
 import { MusicaVideos } from "./musica-videos";
@@ -245,6 +246,7 @@ function EnlaceBoton({ href, children }: { href: string | null; children: React.
 
 export function CrearVideo(props: Props) {
   const { formatos, prospecto } = props;
+  const [confirmar, dialogoConfirmar] = useConfirmar();
   // Llegada desde un aviso («tu video está listo», `/videos?guion=<id>`): la
   // pantalla arranca con ese guion ya abierto.
   const [deEnlace] = useState(() => (props.abrirGuionId ? (props.guiones.find((x) => x.id === props.abrirGuionId) ?? null) : null));
@@ -471,7 +473,7 @@ export function CrearVideo(props: Props) {
       } else setAvisoRapido("Antes de generar, confirma la ficha del producto (o corrígela): lo que diga es lo que el video muestra y dice.");
       return void irALaFicha();
     }
-    if (guion.trim() && sinGuardar && !window.confirm("Hay un guion sin guardar en el editor. «Generar todo» escribe uno nuevo. ¿Continuar?")) return;
+    if (guion.trim() && sinGuardar && !(await confirmar("Hay un guion sin guardar en el editor. «Generar todo» escribe uno nuevo.", { titulo: "¿Escribir un guion nuevo?", si: "Sí, generar todo" }))) return;
     setOcupado("todo");
     setFaltantes(null);
     let d: DatosVideo | null = datos;
@@ -525,7 +527,7 @@ export function CrearVideo(props: Props) {
       if (v) texto = texto.split(c).join(v);
     }
     const quedan = corchetes(texto).length;
-    if (quedan && !window.confirm(`Quedan ${quedan} datos sin completar; van a salir entre corchetes en el guion y el video puede leerlos mal. ¿Seguir así?`)) return;
+    if (quedan && !(await confirmar(`Quedan ${quedan} datos sin completar; van a salir entre corchetes en el guion y el video puede leerlos mal.`, { titulo: "¿Seguir así?", si: "Sí, seguir" }))) return;
     setGuion(texto);
     setFaltantes(null);
     setOcupado("todo");
@@ -569,19 +571,19 @@ export function CrearVideo(props: Props) {
     setDatos((d) => ({ ...d, referencias: d.referencias.map((r, j) => (j === i ? { ...r, ...cambio } : r)) }));
   }
 
-  function confirmarReemplazo() {
-    return !guion.trim() || window.confirm("Ya hay un guion escrito. ¿Reemplazarlo por una versión nueva?");
+  async function confirmarReemplazo() {
+    return !guion.trim() || (await confirmar("Ya hay un guion escrito. Se reemplaza por una versión nueva.", { titulo: "¿Reemplazar el guion?", si: "Sí, reemplazar" }));
   }
 
-  function usarPlantilla() {
-    if (!formato || !confirmarReemplazo()) return;
+  async function usarPlantilla() {
+    if (!formato || !(await confirmarReemplazo())) return;
     setGuion(`${lineaMercado(datos)}\n\n${rellenar(formato.plantilla, datos)}`);
     setOrigen("plantilla");
     setAviso(null);
   }
 
   async function generar() {
-    if (!confirmarReemplazo()) return;
+    if (!(await confirmarReemplazo())) return;
     setOcupado("guion");
     setAviso(null);
     const r = await escribirGuion(datos, indicacion);
@@ -622,7 +624,7 @@ export function CrearVideo(props: Props) {
 
   async function usarEnProspecto() {
     if (!prospecto) return;
-    if (!window.confirm(`Esto reemplaza el guion actual de «${prospecto.nombre}» en su ficha. ¿Continuar?`)) return;
+    if (!(await confirmar(`Esto reemplaza el guion actual de «${prospecto.nombre}» en su ficha.`, { titulo: "¿Usar este guion en el prospecto?", si: "Sí, reemplazar" }))) return;
     setOcupado("prospecto");
     const r = await guardarGuionProspecto(prospecto.id, guion);
     setOcupado(null);
@@ -631,7 +633,11 @@ export function CrearVideo(props: Props) {
   }
 
   function abrir(g: GuionGuardado, duplicar: boolean) {
-    if (sinGuardar && !window.confirm("Tienes un guion sin guardar. ¿Descartarlo y abrir este?")) return;
+    if (!sinGuardar) return abrirYa(g, duplicar);
+    void confirmar("Tienes un guion sin guardar. Se descarta para abrir este.", { titulo: "¿Descartar lo que no guardaste?", si: "Sí, abrir" }).then((si) => si && abrirYa(g, duplicar));
+  }
+
+  function abrirYa(g: GuionGuardado, duplicar: boolean) {
     setDatos(datosDe(g));
     setFotos(g.fotosProducto.join("\n"));
     setGuion(g.guion);
@@ -1800,6 +1806,7 @@ export function CrearVideo(props: Props) {
         </CardContent>
       </Card>
 
+      {dialogoConfirmar}
     </div>
   );
 }

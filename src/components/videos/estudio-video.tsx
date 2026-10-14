@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Download, FileText, Film, Images, Layers } from "lucide-react";
 import { tiemposVideo } from "@/app/(protected)/videos/proyecto-actions";
 import { contar, resumenProyecto, type ProyectoVideo } from "@/lib/proyecto-video";
-import { TIEMPOS_BASE, progresoDeVideo, type TiemposVideo } from "@/lib/progreso-video";
+import { TIEMPOS_BASE, costoDeVideo, progresoDeVideo, type TiemposVideo } from "@/lib/progreso-video";
 import { versionVigente } from "@/lib/videos";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,7 @@ export function EstudioVideo({ modo, onCambiar, ...panel }: Props) {
           <Chip tono={resumen.tono}>{resumen.etiqueta}</Chip>
           <span className="min-w-0 flex-1 basis-56">{resumen.detalle || "Todo al día."}</span>
         </p>
-        <BarraProgresoVideo progreso={progreso} medido={tiempos.medidos} />
+        <BarraProgresoVideo progreso={progreso} medido={tiempos.medidos} costo={costoDeVideo(proyecto, tiempos)} />
       </div>
 
       {/* ------------------------------------------- los cinco pasos */}

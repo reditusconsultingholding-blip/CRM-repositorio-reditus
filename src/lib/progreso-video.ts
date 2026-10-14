@@ -4,13 +4,46 @@
 // armado → listo. El porcentaje y el tiempo restante se calculan con lo que tarda
 // cada cosa: los tiempos REALES medidos en trabajos anteriores cuando existen, y
 // valores por defecto si todavía no hay historia.
-import { hayTrabajoEnCurso, type ProyectoVideo } from "@/lib/proyecto-video";
+import { estimado, hayTrabajoEnCurso, type ProyectoVideo } from "@/lib/proyecto-video";
 import type { EtapaVideoProspecto } from "@/lib/videos-prospecto";
 
 /** Segundos que tarda cada cosa. `medidos`: salieron de trabajos reales (si no, son los valores por defecto). */
-export type TiemposVideo = { pagina: number; investigacion: number; guion: number; plan: number; imagen: number; clip: number; armado: number; medidos: boolean };
+export type TiemposVideo = {
+  pagina: number;
+  investigacion: number;
+  guion: number;
+  plan: number;
+  imagen: number;
+  clip: number;
+  armado: number;
+  medidos: boolean;
+  /** Créditos que cuesta una imagen y un clip (promedio de los trabajos terminados; si no hay, lo medido en el primer video real). */
+  creditosImagen: number;
+  creditosClip: number;
+};
 
-export const TIEMPOS_BASE: TiemposVideo = { pagina: 45, investigacion: 90, guion: 70, plan: 50, imagen: 50, clip: 170, armado: 100, medidos: false };
+export const TIEMPOS_BASE: TiemposVideo = { pagina: 45, investigacion: 90, guion: 70, plan: 50, imagen: 50, clip: 170, armado: 100, medidos: false, creditosImagen: 6, creditosClip: 60 };
+
+/** Lo que vale un crédito del proveedor de video (462 créditos ≈ 2,31 USD). */
+export const USD_POR_CREDITO = 0.005;
+const usd = (creditos: number) => (creditos * USD_POR_CREDITO).toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const miles = (n: number) => Math.round(n).toLocaleString("es-CO");
+
+/**
+ * El costo de un video, dicho en claro: lo que ya costó cuando está armado
+ * («Este video costó 462 créditos ≈ 2,31 USD») o lo gastado y lo que falta por gastar mientras se produce.
+ */
+export function costoDeVideo(p: ProyectoVideo, t: TiemposVideo = TIEMPOS_BASE): string {
+  const f = p.final.estado;
+  const gastado = p.costo.creditos;
+  if (f === "por-aprobar" || f === "aprobada") return gastado ? `Este video costó ${miles(gastado)} créditos ≈ ${usd(gastado)} USD.` : "";
+  const e = estimado(p);
+  const falta = e.imagenes * t.creditosImagen + e.clips * t.creditosClip;
+  if (!falta && !gastado) return "";
+  const partes = [gastado ? `Gastado: ${miles(gastado)} créditos (≈ ${usd(gastado)} USD)` : "", falta ? `falta por gastar ≈ ${miles(falta)} créditos (≈ ${usd(falta)} USD): ${e.imagenes} ${e.imagenes === 1 ? "imagen" : "imágenes"} a ~${miles(t.creditosImagen)} y ${e.clips} ${e.clips === 1 ? "clip" : "clips"} a ~${miles(t.creditosClip)}` : ""].filter(Boolean);
+  const texto = partes.join(" · ");
+  return texto.charAt(0).toUpperCase() + texto.slice(1) + ".";
+}
 
 export type EstadoEtapa = "hecha" | "en-curso" | "pendiente" | "detenida";
 export type EtapaProgreso = { clave: string; nombre: string; estado: EstadoEtapa; detalle: string };

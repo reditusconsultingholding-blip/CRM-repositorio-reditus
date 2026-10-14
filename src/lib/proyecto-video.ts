@@ -320,7 +320,7 @@ export type ContextoProyecto = {
   fotos: string[];
   /** Ficha del producto en texto, confirmada por una persona. */
   analisisProducto: string;
-  cierre: { oferta: string; llamadoALaAccion: string };
+  cierre: CierreProyecto;
   voz: VozProyecto;
 };
 
@@ -335,6 +335,60 @@ export const ESTADO_FINAL_LABELS: Record<EstadoFinal, string> = {
 };
 
 /** Tono de la música del armado, elegido según la narrativa. */
+// ---- cierre del video (la tarjeta final con el producto real, la oferta y el llamado) ----
+
+/**
+ * `oferta` y `llamadoALaAccion` son las palabras del cliente. Para la tarjeta final la oferta
+ * va en DOS líneas: `titular` (corto y grande: «2x1», «79 €») y `detalle` («Dos gafas por 79 €»).
+ * Si nadie los escribe, salen solos de la oferta (`partirOferta`). `color` es el color de marca
+ * del botón del llamado (hex).
+ */
+export type CierreProyecto = { oferta: string; llamadoALaAccion: string; titular?: string; detalle?: string; color?: string };
+
+export const COLOR_HEX = /^#[0-9a-fA-F]{6}$/;
+/** Color del botón del cierre cuando el proyecto no trae el de la marca: el azul de Reditus. */
+export const COLOR_MARCA_BASE = "#0553C9";
+
+const PRECIO = /(\$\s?\d[\d.,]*(?:\s?[A-Z]{3})?|\d[\d.,]*\s?(?:€|EUR|USD|COP|MXN|PEN|CLP|ARS|DOP|GTQ))/;
+const mayuscula = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
+/** Parte la oferta en titular (corto, va grande) y detalle (una línea). Sin IA: reglas simples y previsibles. */
+export function partirOferta(oferta: string): { titular: string; detalle: string } {
+  const o = oferta.replace(/\s+/g, " ").trim();
+  if (!o) return { titular: "", detalle: "" };
+  // «2x1: dos gafas por 79 €» · «Envío gratis — hoy»
+  const conSeparador = /^(.{1,18}?)\s*(?::|·|—|–|\|)\s+(.+)$/.exec(o);
+  if (conSeparador) return { titular: conSeparador[1].trim().slice(0, 28), detalle: mayuscula(conSeparador[2].trim()).slice(0, 70) };
+  // «Ceryon Eclipse por 79 €» → el precio va grande
+  // Con varios precios («antes $120.000, ahora $89.900») manda el que sigue a «ahora/por/solo»; si no, el último.
+  const precios = [...o.matchAll(new RegExp(PRECIO.source, "g"))].map((m) => ({ texto: m[1].trim(), antes: o.slice(0, m.index).trim() }));
+  const elegido = precios.find((x) => /(?:ahora|por|solo|sólo|a)$/i.test(x.antes)) ?? precios[precios.length - 1];
+  if (elegido) {
+    const precio = elegido.texto;
+    const escapado = precio.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const resto = o
+      .replace(new RegExp(`(?:[\\s,;]+(?:y\\s+)?(?:ahora|por|a|en|desde|solo|sólo))*\\s*${escapado}`, "i"), "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[\s,.:;-]+|[\s,.:;-]+$/g, "")
+      .trim();
+    return { titular: precio.slice(0, 28), detalle: mayuscula(resto || o).slice(0, 70) };
+  }
+  // Sin precio ni separador: si es corta va toda grande; si no, va toda en la línea de detalle.
+  return o.length <= 22 ? { titular: o, detalle: "" } : { titular: "", detalle: mayuscula(o).slice(0, 70) };
+}
+
+/** El cierre tal como viaja al servidor de videos: siempre con titular, detalle y color. */
+export function cierreCompleto(c: CierreProyecto): Required<CierreProyecto> {
+  const partes = partirOferta(c.oferta);
+  return {
+    oferta: c.oferta,
+    llamadoALaAccion: c.llamadoALaAccion,
+    titular: c.titular?.trim() || partes.titular,
+    detalle: c.titular?.trim() ? (c.detalle?.trim() ?? "") : c.detalle?.trim() || partes.detalle,
+    color: c.color && COLOR_HEX.test(c.color) ? c.color.toUpperCase() : COLOR_MARCA_BASE,
+  };
+}
+
 export const TONOS_MUSICA = ["neutro", "energia", "suspenso", "emotivo"] as const;
 export type TonoMusica = (typeof TONOS_MUSICA)[number];
 export const TONO_MUSICA_LABELS: Record<TonoMusica, string> = { neutro: "Neutro", energia: "Energía", suspenso: "Suspenso", emotivo: "Emotivo" };
@@ -457,7 +511,13 @@ export function leerContexto(raw: unknown): ContextoProyecto {
       .filter((u) => u.startsWith("https://"))
       .slice(0, MAX_FOTOS_PROYECTO),
     analisisProducto: txt(o.analisisProducto, 2400),
-    cierre: { oferta: txt(c.oferta, 400), llamadoALaAccion: txt(c.llamadoALaAccion, 200) },
+    cierre: {
+      oferta: txt(c.oferta, 400),
+      llamadoALaAccion: txt(c.llamadoALaAccion, 200),
+      ...(txt(c.titular, 28) ? { titular: txt(c.titular, 28) } : {}),
+      ...(txt(c.detalle, 70) ? { detalle: txt(c.detalle, 70) } : {}),
+      ...(COLOR_HEX.test(txt(c.color, 9)) ? { color: txt(c.color, 9).toUpperCase() } : {}),
+    },
     voz: leerVoz(o.voz, txt(o.pais, 4)),
   };
 }

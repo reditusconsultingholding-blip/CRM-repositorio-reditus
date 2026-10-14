@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Clapperboard, FolderOpen, ScanSearch } from "lucide-react";
 import { tiemposVideo } from "@/app/(protected)/videos/proyecto-actions";
 import { resumenProyecto, type ProyectoVideo } from "@/lib/proyecto-video";
-import { TIEMPOS_BASE, progresoDeVideo, type TiemposVideo } from "@/lib/progreso-video";
+import { TIEMPOS_BASE, costoDeVideo, progresoDeVideo, type TiemposVideo } from "@/lib/progreso-video";
 import { versionVigente, type GuionGuardado } from "@/lib/videos";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/prospectos/piezas";
@@ -63,7 +63,7 @@ export function ListaProyectos({ guiones, abiertoId, onAbrir, onCrear, onClonar 
                   </div>
                   <Chip tono={r.tono}>{r.etiqueta}</Chip>
                 </div>
-                <BarraProgresoVideo progreso={progresoDeVideo(p, tiempos)} compacta />
+                <BarraProgresoVideo progreso={progresoDeVideo(p, tiempos)} compacta costo={costoDeVideo(p, tiempos)} />
                 <Button variant={g.id === abiertoId ? "default" : "outline"} className="self-start" onClick={() => onAbrir(g)}>
                   <FolderOpen /> {g.id === abiertoId ? "Seguir con este video" : "Abrir"}
                 </Button>

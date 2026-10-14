@@ -12,7 +12,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Chip } from "@/components/prospectos/piezas";
 import { hayTrabajoEnCurso } from "@/lib/proyecto-video";
-import { progresoDeVideo } from "@/lib/progreso-video";
+import { costoDeVideo, progresoDeVideo } from "@/lib/progreso-video";
 import { BarraProgresoVideo, useConfirmar } from "@/components/videos/progreso-video";
 import { useTiemposVideo } from "@/components/videos/proyectos-lista";
 
@@ -172,7 +172,7 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
               </div>
               {v.etapa !== "sin-decidir" && v.etapa !== "no" && (
                 <div data-barra-prospecto={c.id}>
-                  <BarraProgresoVideo progreso={progresoDeVideo(proyecto ?? null, tiempos, { etapa: v.etapa, retomarEn: v.retomarEn, detalle: v.detalle })} medido={tiempos.medidos} />
+                  <BarraProgresoVideo progreso={progresoDeVideo(proyecto ?? null, tiempos, { etapa: v.etapa, retomarEn: v.retomarEn, detalle: v.detalle })} medido={tiempos.medidos} costo={proyecto ? costoDeVideo(proyecto, tiempos) : undefined} />
                 </div>
               )}
               {v.detalle && <p className="text-xs leading-relaxed">{v.detalle}</p>}

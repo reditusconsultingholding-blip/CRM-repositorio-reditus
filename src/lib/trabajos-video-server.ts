@@ -6,7 +6,7 @@ import { RAIZ_COLA } from "@/lib/cola-raiz";
 import { leerConfig } from "@/lib/videos-config-server";
 import { buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
 import { bloqueDeAudio } from "@/lib/proyecto-video-plan";
-import { duracionTotal, gastoDeTrabajo, type CodigoParada, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
+import { cierreCompleto, duracionTotal, gastoDeTrabajo, type CodigoParada, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
 import { corchetes, escenasParaVideo, pasosDelGuion } from "@/lib/trabajos-video";
 import {
   BUCKET_TRABAJOS,
@@ -473,10 +473,12 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica },
     pedidoPor: p.quien,
     origen: "manual",
-    cierre: { ...proyecto.contexto.cierre },
+    // El cierre viaja completo: titular + detalle (la oferta en dos líneas) y el color de marca del botón.
+    cierre: cierreCompleto(proyecto.contexto.cierre),
     avisos: [],
     etapa,
-    contexto: proyecto.contexto,
+    // El trabajador dibuja el cierre con `contexto.cierre`: va completo ahí también.
+    contexto: { ...proyecto.contexto, cierre: cierreCompleto(proyecto.contexto.cierre) },
     escenasEtapa: paraEtapa,
     todas: etapa === "armado" ? proyecto.escenas : [],
     reportes: [],

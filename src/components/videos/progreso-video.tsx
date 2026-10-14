@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
  * Barra de progreso de un video: etapas, porcentaje y tiempo estimado que falta.
  * `compacta` es para listas (una línea); la completa muestra todas las etapas.
  */
-export function BarraProgresoVideo({ progreso, compacta, medido }: { progreso: Progreso; compacta?: boolean; medido?: boolean }) {
+export function BarraProgresoVideo({ progreso, compacta, medido, costo }: { progreso: Progreso; compacta?: boolean; medido?: boolean; /** Lo que costó o falta por gastar, ya dicho en claro. */ costo?: string }) {
   const actual = progreso.etapas.find((e) => e.estado === "en-curso" || e.estado === "detenida") ?? progreso.etapas.find((e) => e.estado === "pendiente") ?? progreso.etapas[progreso.etapas.length - 1];
   const falta = tiempoRestante(progreso.restanteSeg);
   return (
@@ -48,6 +48,11 @@ export function BarraProgresoVideo({ progreso, compacta, medido }: { progreso: P
             ? `Detenido en «${actual.nombre}»: espera a una persona.${compacta ? "" : ` ${progreso.espera}`}`
             : `${actual.nombre}${falta ? ` · faltan ${falta}` : ""}${!compacta ? (medido ? " (según lo que tardaron los trabajos anteriores)" : " (estimado; se afina con los primeros videos)") : ""}`}
       </span>
+      {costo && (
+        <span className="text-xs leading-snug text-muted-foreground" data-costo-video>
+          {costo}
+        </span>
+      )}
     </div>
   );
 }

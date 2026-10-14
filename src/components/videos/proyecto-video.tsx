@@ -14,6 +14,7 @@ import {
   ajustarPlan,
   aprobarPiezas,
   cancelarTrabajoProyecto,
+  guardarCierre,
   crearVariaciones,
   seguirProyecto,
   consultarProyecto,
@@ -31,6 +32,7 @@ import {
   ESTADO_PIEZA_LABELS,
   NOMBRE_PASO,
   TONO_PIEZA,
+  cierreCompleto,
   PUNTOS_CONTROL,
   VEREDICTO_LABELS,
   type PuntoControl,
@@ -295,7 +297,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
         <div className={cn("flex flex-wrap items-center gap-2", paso && "hidden")} role="status" aria-live="polite">
           <Chip tono={resumen.tono}>{resumen.etiqueta}</Chip>
-          <span className="min-w-0 flex-1 basis-48 text-xs text-muted-foreground">{resumen.detalle}</span>
+          <span className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">{resumen.detalle}</span>
           <Chip>
             {proyecto.escenas.length} escenas · {duracionTotal(proyecto)} s
           </Chip>
@@ -322,7 +324,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
           </dd>
         </dl>
         {proyecto.variacionDe && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             <Chip tono="azul">Variación</Chip> de «{proyecto.variacionDe.producto}»: cambia {proyecto.variacionDe.cambia}. Las demás escenas son las ya aprobadas del original (no se pagaron otra vez).
           </p>
         )}
@@ -343,7 +345,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
           {auto.imagenes && (
             <Segmento value={auto.exigencia} onChange={(v) => void correr("auto", () => ajustarAuto(id, { exigencia: v }))} opciones={["estricto", "normal"] as const} etiquetas={{ estricto: "Estricto", normal: "Normal" }} disabled={ocupado} />
           )}
-          <span className="basis-full text-xs text-muted-foreground">
+          <span className="basis-full text-sm text-muted-foreground">
             {auto.activo
               ? "Avanza solo hasta «Video por aprobar». Se detiene únicamente si hace falta una persona. El video final siempre lo apruebas tú."
               : "Apagado: cada etapa se pide con su botón."}
@@ -488,7 +490,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
                   <Check /> {accion === "final" ? "Aprobando…" : "Aprobar video"}
                 </Button>
               )}
-              {final.estado === "por-aprobar" && !puedeAprobar && <span className="text-xs text-muted-foreground">Lo aprueba el CEO, el gerente comercial o la directora operativa.</span>}
+              {final.estado === "por-aprobar" && !puedeAprobar && <span className="text-sm text-muted-foreground">Lo aprueba el CEO, el gerente comercial o la directora operativa.</span>}
               {videoVigente && (
                 <Button variant="outline" onClick={() => (paso ? onPaso?.(4) : setVista("corregir"))}>
                   Corregir algo
@@ -576,7 +578,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
           <div className="rounded-xl border border-border bg-card p-3">
             <span className={ETIQUETA}>Ficha del producto que usa el proyecto</span>
             <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap">{proyecto.contexto.analisisProducto || "Sin ficha: las escenas no saben el tamaño ni el uso del producto."}</p>
-            <p className="mt-2 text-xs text-muted-foreground">La ficha se corrige fuera del estudio, junto a los datos del producto. Cierre: «{proyecto.contexto.cierre.oferta}» · «{proyecto.contexto.cierre.llamadoALaAccion}».</p>
+            <p className="mt-2 text-sm text-muted-foreground">La ficha se corrige fuera del estudio, junto a los datos del producto. Cierre: «{proyecto.contexto.cierre.oferta}» · «{proyecto.contexto.cierre.llamadoALaAccion}».</p>
           </div>
         </div>
       )}
@@ -627,6 +629,15 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
       )}
 
       {paso === 1 && (
+        <CierreVideo
+          key={`cierre-${JSON.stringify(proyecto.contexto.cierre)}`}
+          proyecto={proyecto}
+          ocupado={ocupado || armando}
+          guardando={accion === "cierre"}
+          onGuardar={(c) => void correr("cierre", () => guardarCierre(id, c), "Cierre guardado")}
+        />
+      )}
+      {paso === 1 && (
         <details className="rounded-xl border border-border bg-card">
           <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Avanzado</summary>
           <div className="flex flex-col gap-2 border-t border-border p-3">
@@ -637,7 +648,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
               <span className="min-w-0 flex-1 basis-56 text-sm text-muted-foreground">Alarga o reparte las frases que no caben, hace que el cierre se diga en voz y deja la mayoría del video en clips. No genera ni gasta nada.</span>
             </div>
             <span className="text-sm font-medium">Traer un plan hecho fuera (JSON)</span>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               El plan lo propone el sistema; esto es solo para traer uno hecho fuera. Lista de escenas con <code>paso</code>, <code>tipo</code> («generada», «foto-real», «cierre»), <code>duracion</code>, <code>voz</code>, <code>promptImagen</code> y{" "}
               <code>promptVideo</code>. Se le aplican las mismas reglas: cierre al final con foto real, hasta 20 escenas.
             </p>
@@ -694,18 +705,69 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
   );
 }
 
+/** La tarjeta final del video: la oferta en dos líneas y el color de marca del botón. */
+function CierreVideo({ proyecto, ocupado, guardando, onGuardar }: { proyecto: ProyectoVideo; ocupado: boolean; guardando: boolean; onGuardar: (c: { titular: string; detalle: string; color: string }) => void }) {
+  const actual = cierreCompleto(proyecto.contexto.cierre);
+  const [titular, setTitular] = useState(actual.titular);
+  const [detalle, setDetalle] = useState(actual.detalle);
+  const [color, setColor] = useState(actual.color);
+  const sucio = titular !== actual.titular || detalle !== actual.detalle || color.toUpperCase() !== actual.color;
+  const CAMPO = "h-9 w-full rounded-lg border border-input bg-card px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3" id="cierre-del-video" aria-label="Cierre del video">
+      <div>
+        <span className="text-sm font-semibold">Cierre del video</span>
+        <p className="text-sm text-muted-foreground">La última pantalla: el producto real en grande, la oferta en dos líneas y el botón con el color de la marca. Cambiarlo no cuesta: solo se vuelve a armar.</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Titular (grande)
+          <input className={CAMPO} value={titular} maxLength={28} disabled={ocupado} placeholder="2x1" onChange={(e) => setTitular(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Detalle (una línea)
+          <input className={CAMPO} value={detalle} maxLength={70} disabled={ocupado} placeholder="Dos gafas por 79 €" onChange={(e) => setDetalle(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Color de la marca
+          <span className="flex items-center gap-2">
+            <input type="color" className="h-9 w-12 cursor-pointer rounded-lg border border-input bg-card p-1" value={color} disabled={ocupado} aria-label="Color de la marca" onChange={(e) => setColor(e.target.value)} />
+            <span className="font-mono text-sm text-muted-foreground">{color.toUpperCase()}</span>
+          </span>
+        </label>
+      </div>
+      {/* Así se leerá (el dibujo final lo hace el servidor de videos con la foto real). */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3" data-vista-cierre>
+        <div className="min-w-0 flex-1 basis-48">
+          <span className="block font-heading text-2xl leading-tight font-bold">{titular || detalle || "Sin oferta"}</span>
+          {titular && detalle && <span className="block text-sm">{detalle}</span>}
+        </div>
+        <span className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: color }}>
+          {proyecto.contexto.cierre.llamadoALaAccion || "Llamado a la acción"}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button disabled={ocupado || !sucio} onClick={() => onGuardar({ titular: titular.trim(), detalle: detalle.trim(), color })}>
+          {guardando ? "Guardando…" : sucio ? "Guardar el cierre" : "Cierre guardado"}
+        </Button>
+        <span className="text-sm text-muted-foreground">La oferta completa («{proyecto.contexto.cierre.oferta || "sin oferta"}») y el llamado se cambian en «Corregir».</span>
+      </div>
+    </section>
+  );
+}
+
 function Etapa({ titulo, hecho, total, extra, pulso }: { titulo: string; hecho: number; total: number; extra: string; pulso?: boolean }) {
   const pct = total > 0 ? Math.round((hecho / total) * 100) : 100;
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-border bg-card px-3 py-2">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-medium">{titulo}</span>
-        <span className="font-mono text-xs text-muted-foreground">{total > 0 ? `${hecho}/${total}` : "—"}</span>
+        <span className="font-mono text-sm text-muted-foreground">{total > 0 ? `${hecho}/${total}` : "—"}</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={titulo} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
         <div className={cn("h-full rounded-full bg-primary transition-[width] duration-500", pulso && "animate-pulse")} style={{ width: `${pulso ? Math.max(pct, 35) : pct}%` }} />
       </div>
-      <span className="min-h-4 text-xs text-muted-foreground">{total > 0 ? extra : "No hay escenas generadas"}</span>
+      <span className="min-h-4 text-sm text-muted-foreground">{total > 0 ? extra : "No hay escenas generadas"}</span>
     </div>
   );
 }
@@ -735,7 +797,7 @@ function TarjetaEscena({ e, tope, esCeo, ocupado, onAbrir, onReabrir }: { e: Esc
         {generada && e.clip.url && !enProceso && <Film className="absolute right-1.5 bottom-1.5 size-4 text-white drop-shadow" aria-label="Tiene clip" />}
       </button>
       <span className="line-clamp-2 text-sm font-semibold">{e.titulo || NOMBRE_PASO[e.paso]}</span>
-      <span className="text-xs text-muted-foreground">
+      <span className="text-sm text-muted-foreground">
         {generada ? "Generada" : e.tipo === "cierre" ? "Cierre" : "Foto real"} · {e.duracion} s
       </span>
       {generada ? (
@@ -816,7 +878,7 @@ export function ConvertirEnProyecto({ guardado, sinGuardar, activo, fotos, ficha
             Traer el proyecto de la v{anterior.n}
           </Button>
         )}
-        {!guardado && <span className="text-xs text-muted-foreground">Guarda el guion primero.</span>}
+        {!guardado && <span className="text-sm text-muted-foreground">Guarda el guion primero.</span>}
         {guardado && sinGuardar && <span className="text-xs text-amber-700 dark:text-amber-300">Hay cambios sin guardar: el plan sale de la versión guardada (v{vigente?.n}).</span>}
         {guardado && !fotos.length && <span className="text-xs text-amber-700 dark:text-amber-300">Sube al menos una foto real del producto (arriba, junto a los datos).</span>}
         {guardado && fotos.length > 0 && !ficha.confirmado && <span className="text-xs text-amber-700 dark:text-amber-300">Para el modo directo falta confirmar la ficha del producto (arriba).</span>}

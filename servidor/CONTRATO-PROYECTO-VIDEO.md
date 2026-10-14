@@ -192,6 +192,41 @@ Decisión del dueño: **la voz es la que genera el modelo de video dentro de cad
 3. **Fotogramas del final (opcional, recomendado)**: antes de cerrar el armado, subir de 3 a 6 fotogramas JPG del video ya armado con `{ toma, pedirSubida: true, tipo: "fotograma-final", indice: 1..6 }` y mandar sus rutas en el cierre: `fotogramas: ["<ruta>", …]`, en orden. El primero debe ser de los 2 primeros segundos; el último, del cierre con el rótulo; los demás, repartidos. Con ellos el CRM hace el control de calidad automático (gancho, producto visible, oferta y llamado al final, subtítulos) y lo deja anotado junto al video «por aprobar». Sin fotogramas, el control se hace solo con los datos (duración, plan), y lo dice.
 4. `duracion` en el resultado del armado ya existía: ahora se usa para comparar con el objetivo. Conviene mandarla siempre.
 
+### 16-oct-2026 · tarjeta de cierre de calidad (lado del CRM hecho; **pendiente en el trabajador**, `lib/rotulo.js`)
+
+El cierre del primer video real (fondo gris, foto pequeña, rótulo oscuro arriba y botón amarillo) se ve de plantilla barata frente al resto. Nuevo diseño. No cambia ninguna ruta ni el orden del armado: solo cómo se dibuja la escena `tipo: "cierre"`.
+
+**Lo que manda el CRM desde hoy** en los trabajos de `etapa: "armado"`, en `contexto.cierre` (el que ya lee `armado.js`) y repetido igual en `cierre` de primer nivel:
+
+```json
+"cierre": {
+  "oferta": "2x1: dos gafas Ceryon Eclipse por 79 €",
+  "llamadoALaAccion": "Pídelas en el enlace de abajo",
+  "titular": "2x1",
+  "detalle": "Dos gafas Ceryon Eclipse por 79 €",
+  "color": "#0553C9"
+}
+```
+
+- `titular` (≤ 28 caracteres) y `detalle` (≤ 70) son la oferta partida en dos líneas. `titular` puede venir vacío: entonces el `detalle` va como línea principal. `detalle` puede venir vacío: solo titular.
+- `color` es el color de marca del proyecto en hex `#RRGGBB` (siempre viene; por defecto el azul de Reditus). Es el color del botón del llamado. **Ya no hay amarillo fijo.**
+- `oferta` y `llamadoALaAccion` siguen llegando igual (son las palabras del cliente; sirven para los subtítulos y como respaldo).
+- Compatibilidad: si un trabajo viejo no trae NI `titular` NI `detalle`, usar `oferta` entera como línea principal; si no trae `color`, `#0553C9`. Un campo ausente equivale a vacío.
+
+**Cómo se dibuja** (lienzo vertical del video, p. ej. 1080 × 1920; duración = la de la escena de cierre, mínimo 5 s):
+
+1. **Fondo**: la propia foto del cierre (`fotoUrl` de la escena) escalada a cubrir todo el lienzo, muy desenfocada (desenfoque gaussiano ≈ 40 px a 1080 de ancho) y oscurecida (capa negra al 45 %). Si la foto tiene fondo blanco o casi blanco (producto de catálogo), usar en su lugar el último fotograma de la escena anterior con el mismo desenfoque y oscurecido. Nunca un color plano gris.
+2. **Producto**: la foto real, sin recortar ni deformar, centrada en la mitad superior, ocupando ≈ 62 % del ancho (máx. 46 % del alto), con esquinas redondeadas de 36 px y sombra suave (desplazamiento 0/24 px, desenfoque 60 px, negro al 45 %). Si la foto es de fondo blanco, se deja sobre una tarjeta blanca con ese mismo redondeo.
+3. **Titular**: debajo del producto, centrado, blanco, peso 800, tamaño ≈ 150 px (bajar hasta que quepa en una línea al 86 % del ancho; mínimo 90 px), interletrado −1 %. Tipografía sans geométrica limpia (Inter, Manrope o Montserrat; la misma de los subtítulos si ya hay una cargada).
+4. **Detalle**: debajo, blanco al 92 %, peso 500, ≈ 54 px, máximo 2 líneas centradas al 84 % del ancho.
+5. **Botón del llamado**: píldora centrada con fondo `cierre.color`, texto en peso 700 ≈ 46 px, relleno 30 px vertical / 56 px horizontal, radio completo. Color del texto: blanco si el color es oscuro, `#0B1220` si es claro (luminancia relativa > 0,6). Máximo 2 líneas; si no cabe, bajar el tamaño hasta 36 px.
+6. **Márgenes seguros**: nada de texto en el 12 % superior ni en el 16 % inferior del lienzo (zonas que tapan las redes).
+7. **Sin subtítulo encima**: durante el cierre no se quema el subtítulo de esa escena (la tarjeta ya dice lo mismo). La voz, si la hay, sí suena.
+8. **Animación de entrada, sutil** (primeros 0,6 s; después todo quieto): el fondo aparece con fundido de 0,3 s; el producto entra escalando de 94 % a 100 % con fundido; el titular y el detalle suben 24 px con fundido, 0,12 s después; el botón entra el último (0,25 s después) con un rebote mínimo (100 % → 104 % → 100 %). Sin destellos, sin zoom continuo, sin parpadeos. El movimiento `quieto`/`acercar` de la escena solo aplica a la foto del producto y de forma muy leve (≤ 3 %).
+9. **Prohibido**: fondo gris plano, rótulo oscuro en banda arriba, botón amarillo fijo, emojis, bordes gruesos, más de un tamaño de titular.
+
+**Cómo comprobarlo**: armar de nuevo el proyecto de Ceryon (no cuesta) y mirar los últimos 5 s: producto grande y nítido, «2x1» enorme, «Dos gafas Ceryon Eclipse por 79 €» debajo, botón azul `#0553C9` con «Pídelas en el enlace de abajo».
+
 ### 15-oct-2026 · música por tono desde la biblioteca (lado del CRM; el trabajador no cambia)
 
 - Al encolar un **armado**, si el proyecto no trae una pista puesta a mano, el CRM elige una de la biblioteca (`trabajos/config/musica.json` = `{ "suspenso": [urls], "energia": [urls], "emotivo": [urls], "neutro": [urls] }`, más `_ultima` para rotar) según el `tonoMusica` del proyecto y la manda en `opciones.musica` (URL https de un mp3). Si ese tono no tiene pistas usa «neutro»; si tampoco hay, `opciones.musica` va `null` como antes.

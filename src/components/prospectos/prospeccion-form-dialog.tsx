@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { avisarNavegacion } from "@/components/cargador-seccion";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { crearProspectoManualProspeccion } from "@/app/(protected)/prospectos/prospeccion-actions";
@@ -46,6 +47,7 @@ export function ProspeccionFormDialog() {
       if (r.aviso) toast.warning(`Prospecto creado, pero sin guion. ${r.aviso}`, { duration: 9000 });
       else toast.success("Prospecto creado con su guion");
       setOpen(false);
+      avisarNavegacion(`/prospectos/${r.id}`);
       router.push(`/prospectos/${r.id}`);
     });
   }

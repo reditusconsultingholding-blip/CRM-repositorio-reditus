@@ -15,6 +15,7 @@ import { ID_VALIDO, escribirGuionArchivo, leerGuionArchivo } from "@/lib/videos-
 import {
   MAX_FOTOS_PROYECTO,
   TONOS_MUSICA,
+  COLOR_HEX,
   anotar,
   leerVoz,
   type TonoMusica,
@@ -542,7 +543,10 @@ export async function corregirProyecto(id: string, correccion: CorreccionProyect
         duracion: f?.duracion ?? e.duracion,
       };
     });
-    if (c.oferta !== null) p.contexto.cierre.oferta = c.oferta;
+    if (c.oferta !== null && c.oferta !== p.contexto.cierre.oferta) {
+      // Oferta nueva: el titular y el detalle del cierre vuelven a salir de ella.
+      p.contexto.cierre = { oferta: c.oferta, llamadoALaAccion: p.contexto.cierre.llamadoALaAccion, ...(p.contexto.cierre.color ? { color: p.contexto.cierre.color } : {}) };
+    }
     if (c.llamado !== null) p.contexto.cierre.llamadoALaAccion = c.llamado;
     if (c.musica !== undefined) p.opciones.musica = c.musica;
     if (c.subtitulos !== undefined) p.opciones.subtitulos = c.subtitulos;
@@ -765,12 +769,16 @@ export async function tiemposVideo(): Promise<TiemposVideo> {
     if (tiemposRecordados && tiemposRecordados.hasta > Date.now()) return tiemposRecordados.valor;
     const { trabajos } = await listarTrabajos(createAdminClient(), 40);
     const muestras: Record<"imagenes" | "clips" | "armado", number[]> = { imagenes: [], clips: [], armado: [] };
+    const precios: Record<"imagen" | "clip", number[]> = { imagen: [], clip: [] };
     for (const t of trabajos) {
       if (t.estado !== "listo" || !t.etapa || t.etapa === "analisis" || !t.tomadoAt || !t.terminadoAt) continue;
+      // Lo que costó cada pieza entregada (los trabajos simulados reportan 0 y no cuentan).
+      for (const r of t.reportes) if (!r.error && r.creditos > 0) precios[r.tipo].push(r.creditos);
       const seg = (Date.parse(t.terminadoAt) - Date.parse(t.tomadoAt)) / 1000;
       if (!Number.isFinite(seg) || seg < 5 || seg > 3600) continue;
       muestras[t.etapa as "imagenes" | "clips" | "armado"].push(t.etapa === "armado" ? seg : seg / Math.max(1, t.escenasEtapa.length));
     }
+    const promedio = (l: number[], def: number) => (l.length ? Math.round((l.reduce((a, b) => a + b, 0) / l.length) * 10) / 10 : def);
     const mediana = (l: number[], def: number) => (l.length >= 2 ? Math.round([...l].sort((a, b) => a - b)[Math.floor(l.length / 2)]) : def);
     const valor: TiemposVideo = {
       ...TIEMPOS_BASE,
@@ -778,6 +786,8 @@ export async function tiemposVideo(): Promise<TiemposVideo> {
       clip: mediana(muestras.clips, TIEMPOS_BASE.clip),
       armado: mediana(muestras.armado, TIEMPOS_BASE.armado),
       medidos: muestras.imagenes.length >= 2 && muestras.clips.length >= 2,
+      creditosImagen: promedio(precios.imagen, TIEMPOS_BASE.creditosImagen),
+      creditosClip: promedio(precios.clip, TIEMPOS_BASE.creditosClip),
     };
     tiemposRecordados = { valor, hasta: Date.now() + 5 * 60_000 };
     return valor;
@@ -785,4 +795,35 @@ export async function tiemposVideo(): Promise<TiemposVideo> {
     unstable_rethrow(err);
     return TIEMPOS_BASE;
   }
+}
+
+// ------------------------------------------------------ cierre del video ----
+
+/**
+ * La tarjeta final: titular y detalle de la oferta (dos líneas) y el color de marca del botón.
+ * Vacíos = salen solos de la oferta. No genera nada: si ya había video, queda «por armar de nuevo» (no cuesta).
+ */
+export async function guardarCierre(id: string, cierre: { titular?: unknown; detalle?: unknown; color?: unknown }): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    if (p.final.estado === "en-cola" || p.final.estado === "generando") return { error: "El video se está armando: espera a que termine para cambiar el cierre." };
+    const s = (v: unknown, max: number) => (typeof v === "string" ? v : "").replace(/\s+/g, " ").trim().slice(0, max);
+    const color = s(cierre?.color, 9);
+    if (color && !COLOR_HEX.test(color)) return { error: "El color debe ser un código como #0553C9." };
+    const antes = JSON.stringify(p.contexto.cierre);
+    const { oferta, llamadoALaAccion } = p.contexto.cierre;
+    p.contexto.cierre = {
+      oferta,
+      llamadoALaAccion,
+      ...(s(cierre?.titular, 28) ? { titular: s(cierre?.titular, 28) } : {}),
+      ...(s(cierre?.detalle, 70) ? { detalle: s(cierre?.detalle, 70) } : {}),
+      ...(color ? { color: color.toUpperCase() } : {}),
+    };
+    if (JSON.stringify(p.contexto.cierre) === antes) return estado(x);
+    finalPorRehacer(p);
+    anotar(p, `Cierre del video cambiado por ${x.profile.name}.`);
+    return guardar(x, p, "Cierre guardado. Si ya había video, ármalo de nuevo para verlo (no cuesta).");
+  });
 }

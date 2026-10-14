@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmar } from "./progreso-video";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, Clapperboard, Copy, Lock, RefreshCw, Send, X } from "lucide-react";
@@ -65,6 +66,7 @@ type Props = {
 };
 
 export function GenerarVideo({ activo, fotos, onFotos: setFotos, guardado, sinGuardar, bloqueado, puedeAprobar, puedeUsarEnProspecto, onGuardado }: Props) {
+  const [confirmar, dialogoConfirmar] = useConfirmar();
   const [subtitulos, setSubtitulos] = useState(true);
   const [voz, setVoz] = useState(true);
   const [modelo, setModelo] = useState("");
@@ -161,8 +163,8 @@ export function GenerarVideo({ activo, fotos, onFotos: setFotos, guardado, sinGu
 
   async function pedir() {
     if (!guardado || !vigente) return void toast.error("Guarda el guion antes de generar el video.");
-    if (sinGuardar && !window.confirm(`Tienes cambios sin guardar. El video se genera con la versión guardada (v${vigente.n}), no con lo que hay en el editor. ¿Continuar?`)) return;
-    if (vigente.videoUrl && !window.confirm(`La v${vigente.n} ya tiene video. Se genera uno nuevo, que lo reemplaza y vuelve a quedar por aprobar. ¿Continuar?`)) return;
+    if (sinGuardar && !(await confirmar(`Tienes cambios sin guardar. El video se genera con la versión guardada (v${vigente.n}), no con lo que hay en el editor.`))) return;
+    if (vigente.videoUrl && !(await confirmar(`La v${vigente.n} ya tiene video. Se genera uno nuevo, que lo reemplaza y vuelve a quedar por aprobar.`, { titulo: "¿Generar otro video?", si: "Sí, generar" }))) return;
     const imagenesProducto = fotos
       .split(/\s+/)
       .map((x) => x.trim())
@@ -183,7 +185,7 @@ export function GenerarVideo({ activo, fotos, onFotos: setFotos, guardado, sinGu
 
   async function aprobar(n: number) {
     if (!guardado) return;
-    if (!window.confirm(`¿Aprobar el video de la v${n}? A partir de aquí se puede copiar su enlace y pasarlo al prospecto.`)) return;
+    if (!(await confirmar("A partir de aquí se puede copiar su enlace y pasarlo al prospecto.", { titulo: `¿Aprobar el video de la v${n}?`, si: "Sí, aprobar" }))) return;
     const r = await correr(`aprobar:${n}`, () => aprobarVideo(guardado.id, n));
     if (!r) return;
     onGuardado(r.guardado, false);
@@ -192,7 +194,7 @@ export function GenerarVideo({ activo, fotos, onFotos: setFotos, guardado, sinGu
 
   async function alProspecto(n: number) {
     if (!guardado) return;
-    if (!window.confirm(`Esto reemplaza la pieza actual de la ficha del prospecto por el video de la v${n}. ¿Continuar?`)) return;
+    if (!(await confirmar(`Esto reemplaza la pieza actual de la ficha del prospecto por el video de la v${n}.`, { titulo: "¿Usar este video en el prospecto?", si: "Sí, reemplazar" }))) return;
     const r = await correr(`prospecto:${n}`, () => usarVideoEnProspecto(guardado.id, n));
     if (r) toast.success("Video puesto en la ficha del prospecto");
   }
@@ -353,6 +355,7 @@ export function GenerarVideo({ activo, fotos, onFotos: setFotos, guardado, sinGu
           </div>
         );
       })}
+      {dialogoConfirmar}
     </div>
   );
 }

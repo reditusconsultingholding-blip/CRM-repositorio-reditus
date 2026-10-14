@@ -19,6 +19,7 @@ const SECCIONES: Record<string, string> = {
   requerimientos: "Requerimientos",
   chat: "Chat interno",
   prospectos: "Prospectos",
+  videos: "Creativos",
   clientes: "Clientes",
   whatsapp: "WhatsApp Business",
   admin: "Usuarios",

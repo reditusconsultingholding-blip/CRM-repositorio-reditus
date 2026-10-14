@@ -3,7 +3,7 @@
 import { FolderOpen } from "lucide-react";
 import { versionVigente, videoAprobado, type GuionGuardado } from "@/lib/videos";
 import { resumenProyecto } from "@/lib/proyecto-video";
-import { enProduccion, progresoDeVideo } from "@/lib/progreso-video";
+import { costoDeVideo, enProduccion, progresoDeVideo } from "@/lib/progreso-video";
 import { BarraProgresoVideo } from "./progreso-video";
 import { useTiemposVideo } from "./proyectos-lista";
 import type { TrabajoVista } from "@/lib/trabajos-video";
@@ -83,8 +83,13 @@ export function MisVideos({ guiones, trabajos, enCurso, abiertoId, onAbrir }: Pr
                 </Button>
                 {p && enProduccion(p) && (
                   <div className="basis-full" data-barra-video={g.id}>
-                    <BarraProgresoVideo progreso={progresoDeVideo(p, tiempos)} compacta />
+                    <BarraProgresoVideo progreso={progresoDeVideo(p, tiempos)} compacta costo={costoDeVideo(p, tiempos)} />
                   </div>
+                )}
+                {p && !enProduccion(p) && costoDeVideo(p, tiempos) && (
+                  <span className="basis-full text-xs text-muted-foreground" data-costo-video>
+                    {costoDeVideo(p, tiempos)}
+                  </span>
                 )}
               </li>
             );

@@ -174,11 +174,11 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span className="text-sm font-medium">{e.titulo || NOMBRE_PASO[e.paso]}</span>
                     <Chip tono={e.tipo === "generada" ? "ambar" : "verde"}>{TIPO_CORTO[e.tipo]}</Chip>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      paso {e.paso} · {e.duracion} s
+                    <span className="font-mono text-sm text-muted-foreground">
+                      {NOMBRE_PASO[e.paso] ?? `Paso ${e.paso}`} · {e.duracion} s
                     </span>
                   </span>
-                  <span className="line-clamp-1 w-full text-xs text-muted-foreground">{e.voz ? `«${e.voz}»` : "Sin voz"}</span>
+                  <span className="line-clamp-1 w-full text-sm text-muted-foreground">{e.voz ? `«${e.voz}»` : "Sin voz"}</span>
                 </button>
                 <Button variant="ghost" size="icon-sm" aria-label={`Subir la escena ${i + 1}`} disabled={quieto || i === 0 || esCierre} onClick={() => mover(i, -1)}>
                   <ArrowUp />
@@ -245,7 +245,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                         {contarPalabras(e.voz)} de {palabrasQueCaben(e.duracion)} palabras que caben en {e.duracion} s. La voz sale del propio clip: cambiar esta frase después obliga a regenerar el clip.
                       </span>
                     ) : (
-                      <span className="text-xs font-normal text-muted-foreground">{e.tipo === "generada" ? "Narración aparte: cambiar el texto solo obliga a armar de nuevo." : "Una foto animada no habla: esta frase va escrita en pantalla (subtítulo)."}</span>
+                      <span className="text-sm font-normal text-muted-foreground">{e.tipo === "generada" ? "Narración aparte: cambiar el texto solo obliga a armar de nuevo." : "Una foto animada no habla: esta frase va escrita en pantalla (subtítulo)."}</span>
                     )}
                   </Label>
                   {e.tipo === "generada" && (
@@ -272,14 +272,14 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                     <div className="grid gap-3 border-t border-border p-3 md:grid-cols-2">
                       <Label className="flex flex-col items-stretch gap-1.5">
                         <span>Cómo debe verse la imagen</span>
-                        <Textarea value={e.promptImagen} maxLength={4000} rows={5} disabled={quieto} className="max-h-60 text-xs" onChange={(ev) => cambiar(e.clave, { promptImagen: ev.target.value })} />
+                        <Textarea value={e.promptImagen} maxLength={4000} rows={5} disabled={quieto} className="max-h-60 text-sm" onChange={(ev) => cambiar(e.clave, { promptImagen: ev.target.value })} />
                       </Label>
                       <Label className="flex flex-col items-stretch gap-1.5">
                         <span>Qué se mueve en el clip</span>
-                        <Textarea value={e.promptVideo} maxLength={4000} rows={5} disabled={quieto} className="max-h-60 text-xs" onChange={(ev) => cambiar(e.clave, { promptVideo: ev.target.value })} />
+                        <Textarea value={e.promptVideo} maxLength={4000} rows={5} disabled={quieto} className="max-h-60 text-sm" onChange={(ev) => cambiar(e.clave, { promptVideo: ev.target.value })} />
                       </Label>
                       {(e.imagen.url || e.clip.url) && (
-                        <p className="text-xs text-muted-foreground md:col-span-2">
+                        <p className="text-sm text-muted-foreground md:col-span-2">
                           Esta escena ya tiene piezas generadas. Cambiar estas instrucciones no las cambia: hay que regenerarlas (cuenta como intento).
                         </p>
                       )}
@@ -327,7 +327,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                         </Select>
                       </Label>
                       {esCierre && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           El cierre siempre va al final, con la foto real y la oferta en texto grande: «{proyecto.contexto.cierre.oferta}» · «{proyecto.contexto.cierre.llamadoALaAccion}».
                         </p>
                       )}
@@ -392,7 +392,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
         <Label className="flex flex-col items-stretch gap-1.5">
           <span>Descripción fija de la voz o del personaje</span>
           <Textarea value={vozP.descripcion} maxLength={400} rows={2} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, descripcion: e.target.value }))} />
-          <span className="text-xs font-normal text-muted-foreground">
+          <span className="text-sm font-normal text-muted-foreground">
             Va idéntica en todos los clips: es lo que sostiene que la voz no cambie de un clip a otro. Aun así puede variar un poco; si un clip suena distinto, se regenera solo ese.
           </span>
         </Label>
@@ -402,7 +402,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
           <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={vozP.motor === "narracion"} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, motor: e.target.checked ? "narracion" : "clip" }))} />
           <span>
             Usar narración aparte (ElevenLabs) en vez de la voz del clip
-            <span className="block text-xs text-muted-foreground">Apagado por decisión del dueño. Solo funciona si el servidor de videos tiene esa clave.</span>
+            <span className="block text-sm text-muted-foreground">Apagado por decisión del dueño. Solo funciona si el servidor de videos tiene esa clave.</span>
           </span>
         </label>
         </details>

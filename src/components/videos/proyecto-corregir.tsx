@@ -61,7 +61,7 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Marca solo lo que está mal. Abajo ves qué se va a rehacer y si cuesta, antes de ejecutar. Lo que no marques no se toca.
       </p>
 
@@ -97,7 +97,7 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
               <Textarea value={marcas[e.n]?.texto ?? e.voz} maxLength={1200} rows={1} className="min-h-8" placeholder="Sin voz" aria-label={`Texto de la escena ${e.n}`} onChange={(ev) => marcar(e.n, { texto: ev.target.value })} />
             </Label>
           ))}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {proyecto.contexto.voz.motor === "clip"
               ? "La voz sale de cada clip: cambiar la frase de una escena generada obliga a generar ese clip de nuevo (abajo ves el costo). En las de foto real y el cierre, la frase es solo texto: no cuesta."
               : "Con narración aparte, cambiar el texto solo obliga a armar de nuevo."}
@@ -119,7 +119,7 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
                 <li key={e.n} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-2">
                   <span className="flex flex-wrap items-center gap-1.5 text-sm">
                     <strong className="font-medium">Escena {e.n}</strong>
-                    <span className="text-xs text-muted-foreground">{e.tipo === "cierre" ? "Cierre con foto real" : "Foto real animada"}</span>
+                    <span className="text-sm text-muted-foreground">{e.tipo === "cierre" ? "Cierre con foto real" : "Foto real animada"}</span>
                     <Chip tono="verde">Cambiarla no cuesta</Chip>
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
@@ -162,10 +162,10 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
               <li key={e.n} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-2">
                 <span className="flex flex-wrap items-center gap-1.5 text-sm">
                   <strong className="font-medium">Escena {e.n}</strong>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     {e.titulo || NOMBRE_PASO[e.paso]} · {e.duracion} s
                   </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
+                  <span className="font-mono text-xs text-muted-foreground">
                     imagen {e.imagen.intentos}/{proyecto.topeIntentos} · clip {e.clip.intentos}/{proyecto.topeIntentos}
                   </span>
                 </span>
@@ -195,17 +195,17 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
           {!plan.vacio && !plan.bloqueos.length && <Chip tono={cuesta ? "ambar" : "verde"}>{cuesta ? "Cuesta: solo lo marcado" : "Sin costo: solo armado"}</Chip>}
         </div>
         {plan.vacio ? (
-          <p className="text-xs text-muted-foreground">Todavía no marcaste nada.</p>
+          <p className="text-sm text-muted-foreground">Todavía no marcaste nada.</p>
         ) : (
           <ul className="flex flex-col gap-1">
             {plan.pasos.map((p) => (
-              <li key={p.texto} className="flex items-start gap-2 text-xs leading-relaxed">
+              <li key={p.texto} className="flex items-start gap-2 text-sm leading-relaxed">
                 <Chip tono={p.cuesta ? "ambar" : "verde"}>{p.cuesta ? "Cuesta" : "Sin costo"}</Chip>
                 <span className="min-w-0 flex-1">{p.texto}</span>
               </li>
             ))}
             {plan.bloqueos.map((b) => (
-              <li key={b} className="flex items-start gap-2 text-xs leading-relaxed text-destructive">
+              <li key={b} className="flex items-start gap-2 text-sm leading-relaxed text-destructive">
                 <Chip tono="rojo">No se puede</Chip>
                 <span className="min-w-0 flex-1">{b}</span>
               </li>
@@ -216,7 +216,7 @@ export function CorregirProyecto({ proyecto, activo, ocupado, onAplicar }: Props
           <Button disabled={ocupado || plan.vacio || plan.bloqueos.length > 0 || !activo} onClick={() => void aplicar()}>
             <Wrench /> {cuesta ? "Aplicar corrección" : "Aplicar y armar de nuevo"}
           </Button>
-          {!activo && <span className="text-xs text-muted-foreground">Se activa al conectar el servidor de videos.</span>}
+          {!activo && <span className="text-sm text-muted-foreground">Se activa al conectar el servidor de videos.</span>}
         </div>
       </section>
     </div>

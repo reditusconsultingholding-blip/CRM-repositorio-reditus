@@ -14,7 +14,7 @@
 //
 // Lectura y escritura: `src/lib/trabajos-video-server.ts`.
 
-import { leerContexto, leerEscenas, type ContextoProyecto, type EscenaProyecto, type TipoPieza } from "@/lib/proyecto-video";
+import { COLOR_HEX, leerContexto, leerEscenas, type CierreProyecto, type ContextoProyecto, type EscenaProyecto, type TipoPieza } from "@/lib/proyecto-video";
 
 /** Tope de videos por día cuando no hay configuración guardada. El vigente lo edita el CEO en la sección (`lib/videos-config.ts`). */
 export const TOPE_DIARIO_VIDEOS = 6;
@@ -164,7 +164,7 @@ export type TrabajoVideo = {
    * además de los subtítulos. Son las palabras del cliente: no se reescriben.
    * Vacíos si el guion se guardó sin esos datos.
    */
-  cierre: { oferta: string; llamadoALaAccion: string };
+  cierre: CierreProyecto;
 
   // ---- proyecto por escenas (servidor/CONTRATO-PROYECTO-VIDEO.md) ----
   /** Null = video completo de los de antes. */
@@ -362,6 +362,9 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
     cierre: {
       oferta: txt((o.cierre as Record<string, unknown> | undefined)?.oferta, 400),
       llamadoALaAccion: txt((o.cierre as Record<string, unknown> | undefined)?.llamadoALaAccion, 200),
+      ...(txt((o.cierre as Record<string, unknown> | undefined)?.titular, 28) ? { titular: txt((o.cierre as Record<string, unknown> | undefined)?.titular, 28) } : {}),
+      ...(typeof (o.cierre as Record<string, unknown> | undefined)?.detalle === "string" ? { detalle: txt((o.cierre as Record<string, unknown> | undefined)?.detalle, 70) } : {}),
+      ...(COLOR_HEX.test(txt((o.cierre as Record<string, unknown> | undefined)?.color, 9)) ? { color: txt((o.cierre as Record<string, unknown> | undefined)?.color, 9) } : {}),
     },
     avisos: lista(o.avisos)
       .map((a) => txt(a, 400))

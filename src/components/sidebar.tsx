@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -21,6 +21,9 @@ import {
   ClipboardCheck,
   Clapperboard,
   Film,
+  ChevronDown,
+  ScanSearch,
+  ListVideo,
 } from "lucide-react";
 import { signOut } from "@/app/(protected)/actions";
 import { Button } from "@/components/ui/button";
@@ -54,9 +57,6 @@ const ALL_LINKS = [
     roles: ["editor_video", "disenador_landing", "programador"],
     grupo: "Operación",
   },
-  // Guiones por formato para cualquier producto; no confundir con la entrada
-  // de arriba, que son las piezas gratis asignadas del embudo de prospección.
-  { href: "/videos", label: "Creativos", icon: Film, roles: VIDEOS_ROLES, grupo: "Operación" },
   { href: "/prospectos", label: "Prospectos", icon: UserPlus, roles: INGRESOS_ROLES, grupo: "Comercial" },
   { href: "/clientes", label: "Clientes", icon: Contact, roles: INGRESOS_ROLES, grupo: "Comercial" },
   // Maestría en negociación: privada del CEO, con nombre discreto a propósito.
@@ -74,23 +74,66 @@ const OCULTOS = [
 ] as const;
 
 // El mismo orden de siempre, solo separado en bloques con su rótulo.
-const GRUPOS = ["Operación", "Comercial", "Equipo"] as const;
+// «Creativos» es un grupo aparte: sus entradas son las secciones de /videos (lib/videos-vistas.ts).
+const GRUPOS = ["Operación", "Creativos", "Comercial", "Equipo"] as const;
+const ICONO_VISTA: Record<string, typeof Film> = { crear: Clapperboard, clonar: ScanSearch, estudio: Film, "mis-videos": ListVideo };
 
-const SUBENLACE =
-  "ml-7 rounded-md px-2.5 py-1.5 text-[13px] text-white/60 outline-none transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:ring-2 focus-visible:ring-[#00c6ff]/60 aria-[current=page]:bg-white/10 aria-[current=page]:font-medium aria-[current=page]:text-white";
+// ---- grupos plegables: el estado se recuerda en este navegador ----
+const CLAVE_PLEGADOS = "rd-menu-plegados";
+const oyentes = new Set<() => void>();
+const leerPlegados = () => {
+  try {
+    return window.localStorage.getItem(CLAVE_PLEGADOS) ?? "";
+  } catch {
+    return "";
+  }
+};
+const suscribirPlegados = (fn: () => void) => {
+  oyentes.add(fn);
+  return () => void oyentes.delete(fn);
+};
+function alternarGrupo(grupo: string) {
+  const l = new Set(leerPlegados().split("|").filter(Boolean));
+  if (l.has(grupo)) l.delete(grupo);
+  else l.add(grupo);
+  try {
+    window.localStorage.setItem(CLAVE_PLEGADOS, [...l].join("|"));
+  } catch {
+    /* sin almacenamiento, el estado dura lo que dure la página */
+  }
+  oyentes.forEach((fn) => fn());
+}
 
-/** Las subentradas de «Creativos», con la activa según `?vista=` (lee la dirección: por eso va dentro de Suspense). */
+/** Encabezado de un grupo del menú: un botón que lo pliega o lo despliega. */
+function TituloGrupo({ grupo, plegado }: { grupo: string; plegado: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={!plegado}
+      aria-controls={`menu-${grupo}`}
+      onClick={() => alternarGrupo(grupo)}
+      className="rd-lado-titulo flex w-full items-center justify-between gap-2 rounded-md text-left outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-[#00c6ff]/60"
+    >
+      <span>{grupo}</span>
+      <ChevronDown aria-hidden="true" className={`size-3.5 shrink-0 transition-transform motion-reduce:transition-none ${plegado ? "-rotate-90" : ""}`} />
+    </button>
+  );
+}
+
+/** Las entradas del grupo «Creativos», con la activa según `?vista=` (lee la dirección: por eso va dentro de Suspense). */
 function SubCreativos({ enSeccion }: { enSeccion: boolean }) {
   const parametros = useSearchParams();
   const actual = enSeccion ? vistaDeParametros(parametros.get("vista"), parametros.get("guion")) : null;
   return (
     <>
-      {VISTAS_CREATIVOS.filter((v) => v.enMenu).map((v) => (
+      {VISTAS_CREATIVOS.filter((v) => v.enMenu).map((v) => {
+        const Icono = ICONO_VISTA[v.clave] ?? Film;
+        return (
         <Link
           key={v.clave}
           href={`/videos?vista=${v.clave}`}
           aria-current={actual === v.clave ? "page" : undefined}
-          className={SUBENLACE}
+          className="rd-lado-enlace"
           onClick={(e) => {
             // Ya dentro de Creativos la pantalla tiene todo cargado: solo cambia la dirección (sin ir al servidor).
             if (!enSeccion || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -98,9 +141,11 @@ function SubCreativos({ enSeccion }: { enSeccion: boolean }) {
             window.history.pushState(null, "", `/videos?vista=${v.clave}`);
           }}
         >
+          <Icono className="size-4 shrink-0" />
           {v.nombre}
         </Link>
-      ))}
+        );
+      })}
     </>
   );
 }
@@ -117,6 +162,9 @@ export function Sidebar({
   avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
+  const plegados = useSyncExternalStore(suscribirPlegados, leerPlegados, () => "").split("|");
+  const enCreativos = pathname === "/videos" || pathname.startsWith("/videos/");
+  const veCreativos = (VIDEOS_ROLES as readonly string[]).includes(role);
   const links = ALL_LINKS.filter((l) => !l.roles || (l.roles as readonly string[]).includes(role));
   // Solo se enciende una entrada: la de ruta más específica (así /prospectos
   // y /prospectos/mis-videos nunca quedan activas a la vez).
@@ -142,42 +190,31 @@ export function Sidebar({
       <nav className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
         {GRUPOS.map((grupo) => {
           const delGrupo = links.filter((l) => l.grupo === grupo);
-          if (delGrupo.length === 0) return null;
+          const esCreativos = grupo === "Creativos";
+          if (esCreativos ? !veCreativos : delGrupo.length === 0) return null;
+          const plegado = plegados.includes(grupo);
           return (
             <div key={grupo} className="flex flex-col gap-0.5">
-              <p className="rd-lado-titulo">{grupo}</p>
-              {delGrupo.map((link) => {
-                const Icon = link.icon;
-                const active = link.href === hrefActivo;
-                const enlace = (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    aria-current={active ? "page" : undefined}
-                    className="rd-lado-enlace"
-                  >
-                    <Icon className="size-4 shrink-0" />
-                    {link.label}
-                    {link.href === "/chat" && <ChatBadge userId={userId} />}
-                  </Link>
-                );
-                if (link.href !== "/videos") return enlace;
-                // «Creativos» despliega sus secciones: siempre al estar dentro, y al pasar o enfocar desde fuera.
-                return (
-                  <div key={link.href} className="group/creativos flex flex-col gap-0.5">
-                    {enlace}
-                    <div
-                      role="group"
-                      aria-label="Secciones de Creativos"
-                      className={active ? "flex flex-col gap-0.5 pb-1" : "hidden flex-col gap-0.5 pb-1 group-focus-within/creativos:flex md:group-hover/creativos:flex"}
-                    >
-                      <Suspense fallback={null}>
-                        <SubCreativos enSeccion={active} />
-                      </Suspense>
-                    </div>
-                  </div>
-                );
-              })}
+              <TituloGrupo grupo={grupo} plegado={plegado} />
+              <div id={`menu-${grupo}`} className={plegado ? "hidden" : "flex flex-col gap-0.5"}>
+                {esCreativos ? (
+                  <Suspense fallback={null}>
+                    <SubCreativos enSeccion={enCreativos} />
+                  </Suspense>
+                ) : (
+                  delGrupo.map((link) => {
+                    const Icon = link.icon;
+                    const active = link.href === hrefActivo;
+                    return (
+                      <Link key={link.href} href={link.href} aria-current={active ? "page" : undefined} className="rd-lado-enlace">
+                        <Icon className="size-4 shrink-0" />
+                        {link.label}
+                        {link.href === "/chat" && <ChatBadge userId={userId} />}
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
             </div>
           );
         })}

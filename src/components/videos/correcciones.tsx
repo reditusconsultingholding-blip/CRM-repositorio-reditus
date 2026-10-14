@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmar } from "./progreso-video";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Check, Eye, GitCompare, History, RefreshCw, RotateCcw, Save, X } from "lucide-react";
@@ -67,6 +68,7 @@ type Props = {
 type Accion = "pendiente" | "ia" | "estado" | `ia:${string}` | `mano:${string}` | `restaurar:${number}` | null;
 
 export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId, sinGuardar, bloqueado, videoActivo, onGuardado }: Props) {
+  const [confirmar, dialogoConfirmar] = useConfirmar();
   const [texto, setTexto] = useState("");
   const [accion, setAccion] = useState<Accion>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -114,12 +116,12 @@ export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId,
     return true;
   }
 
-  function confirmarPisar() {
-    return !sinGuardar || window.confirm("Tienes cambios sin guardar en el guion. La versión corregida los reemplaza en el editor. ¿Continuar?");
+  async function confirmarPisar() {
+    return !sinGuardar || (await confirmar("Tienes cambios sin guardar en el guion. La versión corregida los reemplaza en el editor.", { titulo: "¿Reemplazar lo que hay en el editor?", si: "Sí, reemplazar" }));
   }
 
   async function registrar(regenerar: boolean) {
-    if (regenerar && !confirmarPisar()) return;
+    if (regenerar && !(await confirmarPisar())) return;
     const listo = await correr(
       regenerar ? "ia" : "pendiente",
       () => registrarCorreccion(id, texto, regenerar),
@@ -230,10 +232,12 @@ export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId,
                       variant="outline"
                       size="sm"
                       disabled={ocupado}
-                      onClick={() => {
-                        if (!confirmarPisar()) return;
-                        void correr(`ia:${c.id}`, () => regenerarConCorreccion(id, c.id), true, "Guion regenerado con la corrección");
-                      }}
+                      onClick={() =>
+                        void (async () => {
+                          if (!(await confirmarPisar())) return;
+                          await correr(`ia:${c.id}`, () => regenerarConCorreccion(id, c.id), true, "Guion regenerado con la corrección");
+                        })()
+                      }
                     >
                       <RefreshCw className={cn(accion === `ia:${c.id}` && "animate-spin")} /> Regenerar con IA
                     </Button>
@@ -322,11 +326,13 @@ export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId,
                         variant="ghost"
                         size="sm"
                         disabled={ocupado}
-                        onClick={() => {
-                          if (!confirmarPisar()) return;
-                          if (!window.confirm(`Se creará la v${vigente.n + 1} con el texto de la v${v.n}. La v${vigente.n} se conserva. ¿Restaurar?`)) return;
-                          void correr(`restaurar:${v.n}`, () => restaurarVersion(id, v.n), true, `Versión ${v.n} restaurada`);
-                        }}
+                        onClick={() =>
+                          void (async () => {
+                            if (!(await confirmarPisar())) return;
+                            if (!(await confirmar(`Se creará la v${vigente.n + 1} con el texto de la v${v.n}. La v${vigente.n} se conserva.`, { titulo: `¿Restaurar la v${v.n}?`, si: "Sí, restaurar" }))) return;
+                            await correr(`restaurar:${v.n}`, () => restaurarVersion(id, v.n), true, `Versión ${v.n} restaurada`);
+                          })()
+                        }
                       >
                         <RotateCcw /> Restaurar
                       </Button>
@@ -352,6 +358,7 @@ export function CorreccionesCliente({ guardado, guionActual, datos, prospectoId,
             {vista.modo === "ver" ? <VerVersion v={antes} /> : <Diferencias antes={antes.guion} despues={vigente.guion} nAntes={antes.n} nDespues={vigente.n} />}
           </div>
         )}
+        {dialogoConfirmar}
       </CardContent>
     </Card>
   );
