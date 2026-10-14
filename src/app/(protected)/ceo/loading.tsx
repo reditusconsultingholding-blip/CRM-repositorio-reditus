@@ -1,14 +1,6 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { CargandoSeccion } from "@/components/cargador-seccion";
 
+// Misma pantalla de carga en todo el CRM: el aro con el logo y la frase.
 export default function Loading() {
-  return (
-    <div className="flex flex-col gap-4">
-      <Skeleton className="h-8 w-40" />
-      <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-72 w-full" />
-        <Skeleton className="h-72 w-full" />
-      </div>
-      <Skeleton className="h-64 w-full" />
-    </div>
-  );
+  return <CargandoSeccion />;
 }

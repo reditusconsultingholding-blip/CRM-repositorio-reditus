@@ -53,7 +53,7 @@ export function CargadorApps() {
         <div className="flex flex-col items-center gap-3">
           <p className="rd-etiqueta text-[#5cc8ff]">Abriendo {NOMBRES[cambio.destino]}</p>
           <p className="max-w-xs font-heading text-xl font-semibold leading-snug tracking-tight text-white sm:max-w-none sm:text-2xl">
-            Qué pena la demora, la calidad pesa.
+            Qué pena la demora, la calidad pesa un poco.
           </p>
         </div>
       </div>

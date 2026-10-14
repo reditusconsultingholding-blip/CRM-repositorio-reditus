@@ -24,7 +24,7 @@ export function AroReditus({ className }: { className?: string }) {
 }
 
 /** Para `loading.tsx`: ocupa el área de contenido mientras el servidor arma la página. */
-export function CargandoSeccion({ texto = "Cargando…" }: { texto?: string }) {
+export function CargandoSeccion({ texto = "Qué pena la demora, la calidad pesa un poco." }: { texto?: string }) {
   // Si a los 15 s el servidor no ha respondido, se dice y se ofrece reintentar.
   const [lento, setLento] = useState(false);
   useEffect(() => {
@@ -125,7 +125,7 @@ function Vigia() {
             </div>
           </>
         ) : (
-          <p className="text-[15px] font-medium text-muted-foreground">Cargando…</p>
+          <p className="text-[15px] font-medium text-muted-foreground">Qué pena la demora, la calidad pesa un poco.</p>
         )}
       </div>
     </div>
