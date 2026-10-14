@@ -34,9 +34,20 @@
     "crf": 21
   },
   "subtitulos": {
+    "_nota": "Subtítulos del proyecto por escenas: cinco plantillas (impacto, karaoke, limpio, titular, maquina). El trabajo elige con opciones.estiloSubtitulos; también valen los nombres del CRM: palabra = karaoke, caja = titular. «auto» = una fija por producto. Sin valor: karaoke. El resaltado es el color de la marca (cierre.color), no un amarillo fijo. Tipografías en la carpeta fuentes\\. Los tres campos de abajo solo valen para los videos completos de antes (sin etapa).",
     "fuente": "Arial",
     "resaltado": "FFE600",
     "maxPalabras": 3
+  },
+  "captions": {
+    "_VERIFICAR": "OPCIONAL. Subtítulos hechos por la API de Captions (Mirage). Revisado el 17-oct-2026 contra captions.ai/help (Video Captions, Add captions to a video, List caption templates), SIN ninguna llamada real. Por verificar con la primera: el PRECIO (la documentación no lo dice ni trae campo de costo), cuánto tarda y que detecte bien el español. Solo sirve con CAPTIONS_API_KEY en el .env y video 9:16 de hasta 50 MB y 5 minutos.",
+    "porDefecto": false,
+    "_porDefecto": "true = todos los videos verticales usan Captions aunque el trabajo no lo pida (opciones.subtitulos.proveedor: \"captions\"). Si algo falla, se usan las plantillas propias y se avisa.",
+    "plantilla": "",
+    "_plantilla": "Plantilla por defecto: su nombre (p. ej. \"Cove\") o su id (ctpl_…). Para ver las de la cuenta:  .\\probar.ps1 -PlantillasCaptions",
+    "limiteMinutos": 8,
+    "consultarCadaSegundos": 5,
+    "maxMb": 50
   },
   "armado": {
     "_nota": "Etapa «armado» del proyecto por escenas (no cuesta: todo lo hace ffmpeg en el servidor).",
@@ -64,17 +75,23 @@
       "fundidoEntrada": 0.04,
       "fundidoSalida": 0.1
     },
-    "fotogramasFinales": 5,
-    "_fotogramasFinales": "Cuántos fotogramas del video ya armado se le mandan al CRM para su control de calidad (de 3 a 6; 0 = ninguno). El primero es del primer segundo y el último del cierre con el rótulo."
-  },
-  "rotulo": {
-    "_nota": "Rótulo de la escena de cierre: la oferta (grande, sobre un panel oscuro) y el llamado a la acción (botón). Los textos se escriben tal cual llegan del CRM. Colores en RRGGBB.",
-    "fuente": "Arial",
-    "colorOferta": "FFFFFF",
-    "fondoOferta": "000000",
-    "opacidadFondo": 0.62,
-    "colorLlamado": "111111",
-    "fondoLlamado": "FFE600"
+    "fotogramasFinales": 6,
+    "_fotogramasFinales": "Cuántos fotogramas del video ya armado se le mandan al CRM para su control de calidad (hasta 6; 0 = ninguno): dos de los primeros 3 s, uno del cierre con la tarjeta y el resto repartidos.",
+    "dinamismo": {
+      "_nota": "Para que el video no se sienta estático. transiciones: efectos cortos al entrar cada escena (zoom, barrido, flash, glitch, deslizar, fundido o corte seco), elegidos según opciones.ritmo: \"muy-rapido\" (todas enérgicas y más intensas), \"rapido\" (las más enérgicas y fotos con más movimiento), \"medio\" (alterna con cortes secos) o \"calmado\" (solo cortes y fundidos, sin golpes de sonido); sin ritmo: rápido en los primeros 3 s y medio después. microZoom: cuánto se acerca o aleja cada clip mientras dura (0.04 = 4 %; 0 = quieto). sonidos: golpes de sonido en los cortes (fabricados con ffmpeg). efectosDb: su volumen. aperturaMaxSegundos: tope de la apertura de cortes rápidos. Para no marear, entre un efecto y el siguiente pasa un mínimo de tiempo según el ritmo; sobre la tarjeta de cierre nunca hay efectos.",
+      "transiciones": true,
+      "microZoom": 0.04,
+      "sonidos": true,
+      "efectosDb": -14,
+      "aperturaMaxSegundos": 3,
+      "cortesAlRitmo": true,
+      "margenGolpe": 0.15,
+      "_cortesAlRitmo": "Si el video lleva música, cada corte entre escenas se lleva al golpe más cercano de la pista cuando está a menos de margenGolpe segundos (nunca se corta una frase por eso).",
+      "acelerones": true,
+      "_acelerones": "En ritmo rápido y muy rápido, la toma entra acelerada un instante (y en muy rápido también sale acelerada). Nunca sobre un clip que habla.",
+      "golpesVisuales": true,
+      "_golpesVisuales": "Acercamientos bruscos dentro de una toma en los segundos que marque el CRM (escena.golpesVisuales), para que ninguna toma pase de ~3 s igual. En «muy-rapido», si la escena no trae marcas, se pone uno cada 1,5 s."
+    }
   },
   "musica": {
     "_nota": "Música de fondo. De dónde sale, por orden: (1) opciones.musica del trabajo = un enlace; (2) la carpeta musica\\ del trabajador, con una subcarpeta por tono (suspenso, energia, emotivo, neutro… las que quieras): el trabajo dice el tono con opciones.tonoMusica y, si no lo dice, se usa tonoPorDefecto; si no hay pistas de ese tono se usa tonoDeRespaldo; (3) si generarConKie es true, la genera Kie y la guarda en esa carpeta. Sin pista, el video sale sin música y lo avisa. automatica: false = solo se pone música cuando el trabajo trae enlace o tono. Niveles en LUFS (más negativo = más bajo): la voz va a -16; la música va a nivelBajoVozLufs y además baja sola mientras se habla.",
@@ -114,10 +131,66 @@
     "ladoFotograma": 768
   },
   "voz": {
-    "_nota": "ElevenLabs. Solo se usa si en el .env están ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID.",
-    "modelo": "eleven_turbo_v2_5",
-    "estabilidad": 0.5,
-    "similitud": 0.75
+    "_nota": "Narración con ElevenLabs. Solo se usa si el trabajo la pide (contexto.voz.motor: \"narracion\") Y en el .env están ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID. Una sola voz para todo el video. modelo: eleven_multilingual_v2 (el de mejor pronunciación en español). velocidad: 1 = normal; 1.08 = ritmo de anuncio. estabilidad baja = más expresiva. VERIFICAR con la primera llamada real: el rango de velocidad que acepta la cuenta y que el plan tenga la ruta con marcas de tiempo.",
+    "modelo": "eleven_multilingual_v2",
+    "velocidad": 1.08,
+    "estabilidad": 0.45,
+    "similitud": 0.8,
+    "estilo": 0,
+    "realce": true,
+    "normalizacion": "auto",
+    "formato": "mp3_44100_128",
+    "mandarIdioma": false,
+    "idioma": "es",
+    "_mandarIdioma": "language_code NO sirve con eleven_multilingual_v2. Solo ponerlo en true si se cambia a un modelo que lo acepte (flash/turbo v2.5).",
+    "narracion": {
+      "_nota": "Cómo se monta la narración. antes / despues = respiro antes y después de cada frase (pausas cortas). velocidadMax / lentoMax = cuánto se puede acelerar o frenar el clip para acompañar la frase. ambienteLufs = volumen del sonido del clip debajo de la voz (ambiente: false lo quita).",
+      "antes": 0.1,
+      "despues": 0.22,
+      "velocidadMax": 1.2,
+      "lentoMax": 1.25,
+      "ambiente": true,
+      "ambienteLufs": -38
+    },
+    "porPais": {
+      "_nota": "OPCIONAL. Voces por país: si el proyecto es de ese país y aquí hay una voz con «id», se usa esa en vez de ELEVENLABS_VOICE_ID. El ACENTO lo da la voz: para España hay que poner una voz española. Los «id» van VACÍOS a propósito: no se inventan. Cómo llenarlos: elevenlabs.io → Voices → Voice Library → filtra por idioma «Spanish» y acento → «Add to my voices» → en «My Voices» abre la voz y copia su Voice ID. sexo: \"mujer\" | \"hombre\".",
+      "ES": [
+        {
+          "nombre": "(elige en Voice Library: Spanish · acento Spain · mujer · narración/anuncio)",
+          "sexo": "mujer",
+          "id": ""
+        },
+        {
+          "nombre": "(Spanish · acento Spain · hombre)",
+          "sexo": "hombre",
+          "id": ""
+        }
+      ],
+      "MX": [
+        {
+          "nombre": "(Spanish · acento Mexican · mujer)",
+          "sexo": "mujer",
+          "id": ""
+        },
+        {
+          "nombre": "(Spanish · acento Mexican · hombre)",
+          "sexo": "hombre",
+          "id": ""
+        }
+      ],
+      "CO": [
+        {
+          "nombre": "(Spanish · acento Colombian · mujer)",
+          "sexo": "mujer",
+          "id": ""
+        },
+        {
+          "nombre": "(Spanish · acento Colombian · hombre)",
+          "sexo": "hombre",
+          "id": ""
+        }
+      ]
+    }
   },
   "simulado": {
     "_nota": "Segundos de espera falsa por escena, para ver el estado «Generando» en el CRM durante las pruebas.",
@@ -197,7 +270,7 @@
     "_entradaExtra": "Campos adicionales tal cual para «input» (p. ej. \"enable_translation\": false, \"watermark\": \"\"). Vacío = los de Kie por defecto.",
     "usdPorCredito": null,
     "_usdPorCredito": "VERIFICAR en kie.ai/pricing cuánto vale un crédito en dólares. Kie reporta los créditos reales de cada tarea; con este valor el CRM muestra además el costo en dólares. En null se reportan solo créditos y segundos.",
-    "instruccionSinVoz": "Sin diálogo ni voz en off.",
+    "instruccionSinVoz": "Sin diálogo ni voz en off: nadie habla. Solo sonido ambiente.",
     "sufijoPrompt": "Sin texto ni subtítulos en pantalla.",
     "maxLetrasPrompt": 4000,
     "consultarCadaSegundos": 10,
@@ -330,7 +403,7 @@
     "maxMbImagen": 15,
     "parametrosExtra": {},
     "_parametrosExtra": "Parámetros adicionales tal cual para «parameters» (p. ej. personGeneration). Vacío = los de Google por defecto.",
-    "instruccionSinVoz": "Sin diálogo ni voz en off.",
+    "instruccionSinVoz": "Sin diálogo ni voz en off: nadie habla. Solo sonido ambiente.",
     "sufijoPrompt": "Sin texto ni subtítulos en pantalla.",
     "maxLetrasPrompt": 4000,
     "consultarCadaSegundos": 10,

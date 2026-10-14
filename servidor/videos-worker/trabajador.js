@@ -8,6 +8,7 @@
 //   node trabajador.js --una-vez    atiende lo que haya en la cola y termina
 //   node trabajador.js --comprobar  revisa configuración, ffmpeg y conexión, y termina
 //   node trabajador.js --un-clip ["prompt"]   genera UN clip corto con el proveedor del .env (gasta lo mínimo) y termina
+//   node trabajador.js --plantillas-captions  lista las plantillas de subtítulos de la cuenta de Captions (nombre e id) y termina
 //   node trabajador.js --una-imagen ["prompt"] [--foto https://…]   genera UNA imagen base con el proveedor de imagen (gasta lo mínimo) y termina
 const fs = require("fs");
 const path = require("path");
@@ -23,7 +24,7 @@ const { unaImagen } = require("./lib/etapas");
 const { crearLimites } = require("./lib/limites");
 const { atenderCola } = require("./lib/cola");
 
-const modo = process.argv.includes("--una-imagen") ? "una-imagen" : process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
+const modo = process.argv.includes("--plantillas-captions") ? "plantillas-captions" : process.argv.includes("--una-imagen") ? "una-imagen" : process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
 
 function vivo(pid) {
   try {
@@ -43,6 +44,25 @@ async function principal() {
     process.exit(1);
   }
   for (const c of Object.values(cfg.carpetas)) fs.mkdirSync(c, { recursive: true });
+
+  if (modo === "plantillas-captions") {
+    // No toca el CRM ni genera nada: solo le pregunta a Captions qué plantillas tiene la cuenta.
+    const captions = require("./lib/captions");
+    if (!captions.disponible(cfg)) {
+      console.error("Falta CAPTIONS_API_KEY en el .env (se crea en platform.mirage.app → API Keys).");
+      process.exit(1);
+    }
+    try {
+      const lista = await captions.plantillas(cfg);
+      console.log(`Plantillas de subtítulos de la cuenta de Captions (${lista.length}):\n`);
+      for (const p of lista.sort((a, b) => a.nombre.localeCompare(b.nombre))) console.log(`  ${p.nombre.padEnd(22)} ${p.id}`);
+      console.log("\nPara usar una por defecto: config.json → captions → plantilla (el nombre o el id) y porDefecto: true.");
+      process.exit(0);
+    } catch (e) {
+      console.error(`No se pudieron leer las plantillas: ${String(e.message).split(cfg.captionsKey).join("[clave oculta]")}`);
+      process.exit(1);
+    }
+  }
   const registro = crearRegistro(cfg.carpetas.registro, secretos(cfg));
 
   // ------------------------------------------------- comprobaciones ----

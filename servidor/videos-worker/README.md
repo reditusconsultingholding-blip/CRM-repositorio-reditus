@@ -116,6 +116,80 @@ Recibe un video de referencia que la persona subió al CRM y devuelve su estruct
 
 Quién clasifica cada toma (tipo, encuadre, qué pasa) es el CRM con su IA de visión; el trabajador no describe personas ni lee textos.
 
+## 0d. Edición del video: cierre, narración, subtítulos y transiciones
+
+### Tarjeta de cierre (`lib\rotulo.js`)
+
+Sobre un fondo desenfocado y oscurecido (la foto del cierre o, si es de fondo blanco, el último cuadro de la escena anterior): el producto real grande con esquinas redondeadas y sombra, el titular enorme (`cierre.titular`), el detalle debajo (`cierre.detalle`), una etiqueta de urgencia si el CRM la manda (`cierre.urgencia`) y el botón del llamado en el color de la marca (`cierre.color`). Entra en 0,6 s y queda quieta. Nada en el 12 % de arriba ni en el 16 % de abajo; sin subtítulo encima. Trabajo viejo sin titular ni detalle: la oferta entera; sin color: `#0553C9`.
+
+### Narración con ElevenLabs (`lib\voz.js`; `config.json` → `voz`)
+
+Cuando el proyecto pide narración (`contexto.voz.motor: "narracion"`) y el `.env` tiene `ELEVENLABS_API_KEY` y `ELEVENLABS_VOICE_ID`:
+
+- **Una sola voz** para todo el video; cada escena lleva su frase completa y las frases vecinas como contexto, para que la entonación sea continua.
+- **Tiempo real de cada palabra** (la voz lo devuelve): los subtítulos van sincronizados palabra por palabra.
+- **Cifras dichas bien**: «79 €» → «79 euros», «99,14 %» → «99,14 por ciento», «2x1» → «dos por uno», «$» → la moneda del país.
+- **Ritmo de anuncio**: velocidad 1,08 y pausas cortas (0,1 s antes y 0,22 s después de cada frase).
+- **La escena dura lo que dura su frase**: el clip se acelera (hasta 1,2×), se frena (hasta 1,25×) o se recorta; la frase nunca se corta. El sonido del clip queda de ambiente, muy bajo, y encima va la música.
+- Los clips se piden **sin diálogo** (solo ambiente).
+- **Acento**: lo da la voz elegida. Para castellano de España hay que poner una voz española (`ELEVENLABS_VOICE_ID` o `voz.porPais` en `config.json`, que trae los países con el `id` vacío para llenarlo).
+- Una frase ya narrada no se vuelve a pedir: cambiar una frase solo paga esa.
+- Sin clave: no falla; el video sale con la voz del clip y lo avisa.
+
+**Costo estimado (VERIFICAR en elevenlabs.io/pricing; no se ha hecho ninguna llamada real):** ElevenLabs cobra por carácter narrado. Un anuncio de 50 s tiene unas 130–150 palabras, es decir 800–1.000 caracteres. Con el modelo multilingüe (1 crédito por carácter, a confirmar) y un plan de 100.000 créditos por unos 22 USD al mes, sale a **unos 0,20 USD por video** y alcanza para unos 100 videos al mes; con el plan de 30.000 créditos (unos 5 USD), unos 30 videos. El resultado de cada armado dice cuántos caracteres nuevos narró.
+
+### Subtítulos: cinco plantillas (`lib\subtitulos.js`)
+
+`opciones.estiloSubtitulos`: `impacto` (una palabra a la vez, enorme, con rebote), `karaoke` (frase corta con la palabra activa resaltada), `limpio` (dos renglones, blanco con sombra, las palabras van apareciendo), `titular` (mayúsculas condensadas sobre caja del color de la marca), `maquina` (letra a letra, como tecleado). Si el trabajo no dice cuál, cada producto usa siempre la misma y productos distintos se reparten entre las cinco.
+
+- El resaltado es el color de la marca (aclarado si es muy oscuro), o blanco con contorno; ya no hay amarillo fijo.
+- Siempre entre el 12 % y el 84 % del alto, apoyados en el 76 %. No se sabe dónde queda el producto dentro de un clip generado: si en un clip lo tapan, hay que cambiar la toma.
+- `escena.enfasis: ["palabra", …]` resalta esas palabras. **Emojis no**: la librería que dibuja los subtítulos no pinta emojis de color.
+- Tipografías con licencia libre (SIL OFL 1.1) en `fuentes\`: Montserrat, Manrope, Barlow Semi Condensed y Space Mono (ver `fuentes\LEEME.md`). No hay que instalarlas en Windows.
+
+### Transiciones y dinamismo (`lib\efectos.js`; `config.json` → `armado.dinamismo`)
+
+- Seis transiciones cortas (≤ 0,25 s): corte seco, zoom, barrido, flash, glitch y deslizar. `opciones.ritmo`: `rapido` (sin cortes secos) o `medio` (los alterna); sin ritmo, rápido en los primeros 3 s y medio después. Una escena puede pedir la suya con `transicion`. El video entra en seco y hacia el cierre va corte.
+- Micro-zoom del 4 % en cada clip para que nada quede quieto.
+- Golpes de sonido en los cortes (barrido e impacto), fabricados con ffmpeg: no hay sonidos de terceros.
+- **Apertura de cortes rápidos**: `apertura: [{ n, desde, hasta }]` en el trabajo saca trozos de 0,3–1,2 s de clips que ya existen y los pone al inicio (máximo 3 s). También sirven escenas normales muy cortas (desde 0,4 s si no tienen frase).
+
+### Lo que manda el CRM desde el 17 y 18-oct (ya soportado)
+
+- **Apertura en cortes**: la escena trae `cortes` y `duracionClip`. El clip se pide de `duracionClip` segundos y en el armado se usan solo esos tramos, pegados en seco.
+- **Estilos**: `palabra` = karaoke, `caja` = titular, `limpio`, `impacto`. Sin valor: karaoke. `auto`: una fija por producto.
+- **Ritmo**: `muy-rapido`, `rapido`, `medio`, `calmado` (solo cortes y fundidos, sin golpes de sonido). Un valor desconocido se trata como `rapido`.
+- **`escena.transicion`**: `zoom`, `barrido`, `deslizar`, `flash`, `glitch`, `fundido`. El cierre solo admite `fundido` (o corte).
+- **`escena.golpesVisuales`**: segundos dentro de la toma donde entra un acercamiento brusco (15 % en 2 cuadros) que se mantiene hasta la marca siguiente. En `muy-rapido`, si la escena no trae, se pone uno cada 1,5 s. No en la apertura en cortes ni en el cierre.
+- **Urgencia**: una línea corta en mayúsculas entre el detalle y el botón.
+- **Narración sin clave**: el armado **falla** con el motivo (los clips se pidieron sin diálogo: saldría mudo).
+
+### Transiciones más dinámicas
+
+Zoom con desenfoque de movimiento y sacudida, barrido con entrada de lado y estela, flash del color de la marca, acelerón al entrar a la toma (y al salir en `muy-rapido`; nunca sobre un clip que habla) y **cortes al golpe de la música**: se detectan los golpes graves de la pista y cada corte se lleva al más cercano si está a ±0,15 s (nunca se corta una frase por eso; con clips que hablan el corte solo puede atrasarse). Para no marear hay un mínimo entre efectos (0,7 s en rápido, 0,45 s en muy rápido) y sobre la tarjeta de cierre no hay ninguno.
+
+### Subtítulos con la API de Captions (opcional; `lib\captions.js`, `config.json` → `captions`)
+
+Con `CAPTIONS_API_KEY` en el `.env` y `opciones.subtitulos: { proveedor: "captions", plantilla: "Cove" }` en el trabajo (o `captions.porDefecto: true`):
+
+1. El video se arma **sin** subtítulos quemados.
+2. El cuerpo (todo menos la tarjeta de cierre) se manda a Captions con la plantilla elegida (nombre o id `ctpl_…`).
+3. Se espera, se descarga, y la tarjeta de cierre se pega **después** (así no le ponen subtítulos encima). La música se mezcla al final.
+
+Ver las plantillas de la cuenta: `.\probar.ps1 -PlantillasCaptions`.
+
+Respaldo automático a las plantillas propias, con aviso, si falta la clave, la API falla, tarda más de 8 minutos, el video no es 9:16, pesa más de 50 MB aun comprimido o la plantilla no existe. Un video ya subtitulado no se manda de nuevo (por ejemplo al cambiarle la música).
+
+**Sin probar con la cuenta real.** La documentación no dice el precio ni trae campo de costo, ni el idioma, ni cuánto tarda: está marcado «verificar» en `lib\captions.js`.
+
+### Ver muestras con clips de verdad (no gasta)
+
+```powershell
+node pruebas\muestras.js "C:\ruta\a\una\carpeta"   # con clips .mp4 y un archivo foto.png
+```
+
+Deja en `..\..\qa-capturas\trabajador-etapas\` el video completo con el cierre, las cinco plantillas y las transiciones.
+
 ## 1. Instalar
 
 1. Instala **Node.js 20 o superior** (https://nodejs.org) y **ffmpeg** (`winget install Gyan.FFmpeg`). Comprueba: `node -v` y `ffmpeg -version`.
@@ -132,6 +206,7 @@ Quién clasifica cada toma (tipo, encuadre, qué pasa) es el CRM con su IA de vi
 | `GEMINI_API_KEY` | Clave de la API de Gemini, para Veo directo (solo con `PROVEEDOR=veo`) |
 | `FAL_KEY` | Clave de fal.ai (solo con `PROVEEDOR=fal`) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Opcionales. Voz de ElevenLabs: solo se usa si el trabajo la pide. Vacías = habla siempre el propio clip |
+| `CAPTIONS_API_KEY` | Opcional. Subtítulos hechos por la API de Captions (Mirage). Vacía = plantillas propias |
 | `TRANSCRIPCION` | Opcional. Servicio de voz a texto para la etapa `analisis`. Vacío = ninguno (hoy no hay ninguno real implementado) |
 | `NOMBRE_TRABAJADOR`, `FFMPEG`, `FFPROBE`, `CARPETA_DATOS`, `CARPETA_MUSICA` | Opcionales |
 

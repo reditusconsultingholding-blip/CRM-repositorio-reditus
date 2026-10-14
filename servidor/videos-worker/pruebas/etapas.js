@@ -22,7 +22,10 @@ const { cargarProveedorImagen } = require("../proveedores-imagen");
 const kieImagen = require("../proveedores-imagen/kie");
 const kieVideo = require("../proveedores/kie");
 const { procesar } = require("../lib/trabajo");
-const { disenarCierre } = require("../lib/rotulo");
+const { prepararCierre, textosDelCierre } = require("../lib/rotulo");
+const subt = require("../lib/subtitulos");
+const efectos = require("../lib/efectos");
+const vozLib = require("../lib/voz");
 const { ENCABEZADO, ENCABEZADO_TIEMPOS } = require("../lib/etapas");
 const { crearLimites, crearSemaforo, crearPresupuesto, ajustesParalelo, prioridadDe } = require("../lib/limites");
 const { atenderCola } = require("../lib/cola");
@@ -256,34 +259,6 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   fs.mkdirSync(capturas, { recursive: true });
   const tiempos = [];
 
-  // ---- rótulo: el reparto del cuadro no se pisa (sin ffmpeg) ----
-  const pisa = (a, b) => a && b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-  const textos = [
-    ["2 unidades por $89.900 con envío gratis y pago contra entrega", "Pide el tuyo en el botón de abajo"],
-    ["50% OFF", "Compra ya"],
-    ["Lleva 3 y paga 2 solo por esta semana: envío gratis a todo el país, pago contra entrega y garantía de satisfacción de 30 días o te devolvemos tu dinero", "Toca el botón de abajo y pide el tuyo antes de que se agoten"],
-  ];
-  let bien = true;
-  for (const [ancho, alto] of [[1080, 1920], [1920, 1080], [1080, 1080]]) {
-    for (const [oferta, llamado] of textos) {
-      for (const conSubtitulos of [true, false]) {
-        const d = disenarCierre({ ancho, alto, oferta, llamado, conSubtitulos, dura: 5 });
-        const z = [d.zonas.oferta, d.zonas.llamado, d.zonas.subtitulos, d.caja].filter(Boolean);
-        const dentro = z.every((r) => r.x >= 0 && r.y >= Math.round(alto * 0.05) && r.x + r.w <= ancho && r.y + r.h <= Math.round(alto * 0.92) && r.w > 0 && r.h > 0);
-        const libre = z.every((a, i) => z.every((b, j) => i === j || !pisa(a, b)));
-        if (!dentro || !libre || d.caja.h < alto * 0.23) {
-          bien = false;
-          console.log("     reparto malo:", ancho, alto, oferta.slice(0, 20), conSubtitulos, JSON.stringify(d.zonas), JSON.stringify(d.caja));
-        }
-      }
-    }
-  }
-  ok(bien, "rótulo de cierre: oferta, botón, producto y subtítulos no se pisan y quedan dentro de los márgenes (9:16, 16:9 y 1:1; textos cortos y muy largos)");
-  const vacio = disenarCierre({ ancho: 1080, alto: 1920, oferta: "", llamado: "Pide el tuyo", conSubtitulos: true, dura: 5 });
-  ok(vacio.zonas.oferta === null && vacio.zonas.llamado && /sin oferta/.test(vacio.avisos.join(" ")) && !vacio.eventos.some((e) => /undefined|null/.test(e)), "rótulo: un renglón vacío no se dibuja ni se inventa, y se avisa");
-  const tal = disenarCierre({ ancho: 1080, alto: 1920, oferta: "2x1 {hoy} ¡Sólo $89.900!", llamado: "Pide el tuyo", conSubtitulos: true, dura: 5 });
-  ok(/¡Sólo/.test(tal.eventos.join(" ")) && /\$89\.900!/.test(tal.eventos.join(" ")) && /hoy/.test(tal.eventos.join(" ")) && !/\{hoy\}/.test(tal.eventos.join(" ")), "rótulo: el texto va tal cual llega (sin mayúsculas forzadas), sin llaves que rompan el dibujo");
-
   // ---- archivos fijos: fotos «reales» del producto, música y voz de mentira ----
   const producto = (tam, x, y, w, h) =>
     `color=c=0xF4F1EA:s=${tam}:d=1,drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=0x2E7D32:t=fill,drawbox=x=${x + w * 0.25}:y=${y - h * 0.16}:w=${w * 0.5}:h=${h * 0.16}:color=0x1B5E20:t=fill,drawbox=x=${x + w * 0.1}:y=${y + h * 0.3}:w=${w * 0.8}:h=${w * 0.8}:color=0xFFFFFF:t=fill,drawbox=x=${x + w * 0.3}:y=${y + h * 0.3 + w * 0.2}:w=${w * 0.4}:h=${w * 0.4}:color=0xC62828:t=fill`;
@@ -436,7 +411,7 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   crmFalso.encolar(V, "armado");
   r = await atender();
   tiempos.push(["rearmado tras corregir un clip (1 escena)", r.armado.segundos]);
-  ok(r.ok && pedidos.clip === 3 && crmFalso.visto.descargas.length === bajadas + 1 && r.armado.stats.segmentosHechos === 1, "corrección de un clip: se genera solo ese clip, se baja solo ese archivo y se recodifica solo esa escena");
+  ok(r.ok && pedidos.clip === 3 && crmFalso.visto.descargas.length === bajadas + 1 && r.armado.stats.segmentosHechos === 2 && r.armado.stats.segmentosReutilizados === 3, "corrección de un clip: se genera solo ese clip, se baja solo ese archivo y se recodifican solo esa escena y el cierre (su fondo es el último cuadro de ese clip)");
 
   // ---- música: baja bajo la voz; sin pista no se inventa ----
   const sinMusica = await volumen(path.join(carpetas.entregados, `${r.trabajo.id}.mp4`));
@@ -445,7 +420,7 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   tiempos.push(["rearmado al poner música (solo audio)", r.armado.segundos]);
   const conMusica = await volumen(path.join(carpetas.entregados, `${r.trabajo.id}.mp4`));
   info = await probar(path.join(carpetas.entregados, `${r.trabajo.id}.mp4`));
-  ok(r.ok && r.armado.stats.segmentosHechos === 0 && sinMusica < -80 && conMusica > -40 && Math.abs(info.dura - 19.5) < 0.25 && info.pistas === 2, `música: se mezcla sin recodificar el video (sin pista ${sinMusica} dB → con pista ${conMusica} dB), repetida hasta el final`);
+  ok(r.ok && r.armado.stats.segmentosHechos === 0 && sinMusica < -40 && conMusica > sinMusica + 15 && Math.abs(info.dura - 19.5) < 0.25 && info.pistas === 2, `música: se mezcla sin recodificar el video (sin pista ${sinMusica} dB → con pista ${conMusica} dB), repetida hasta el final`);
 
   // ---- voz: con clave (ElevenLabs de mentira) se narran también foto-real y cierre ----
   const vistoVoz = { llamadas: 0, textos: [] };
@@ -454,9 +429,14 @@ async function correrPruebas({ ok, hasta = "todo" }) {
     req.on("data", (d) => (c += d));
     req.on("end", () => {
       vistoVoz.llamadas++;
-      vistoVoz.textos.push(JSON.parse(c).text);
-      res.writeHead(200, { "content-type": "audio/mpeg" });
-      res.end(fs.readFileSync(path.join(fijos, "voz.mp3")));
+      const texto = JSON.parse(c).text;
+      vistoVoz.textos.push(texto);
+      const audio = fs.readFileSync(path.join(fijos, "voz.mp3"));
+      if (!req.url.includes("/with-timestamps")) return res.writeHead(200, { "content-type": "audio/mpeg" }), res.end(audio);
+      // La ruta con marcas de tiempo: el audio en base64 y cuándo suena cada letra.
+      const letras = [...texto];
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ audio_base64: audio.toString("base64"), alignment: { characters: letras, character_start_times_seconds: letras.map((_, i) => 0.1 + (i * 1.6) / letras.length), character_end_times_seconds: letras.map((_, i) => 0.1 + ((i + 1) * 1.6) / letras.length) } }));
     });
   });
   await new Promise((res) => eleven.listen(0, "127.0.0.1", res));
@@ -742,10 +722,10 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   // ---- fotogramas del video armado para el control de calidad del CRM, y confirmación de subtítulos ----
   const eQ = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
   const q1 = eQ.fotogramas && eQ.fotogramas.length ? crmFalso.archivos.get(eQ.fotogramas[0]) : null;
-  ok(eQ.subtitulos === true && Array.isArray(eQ.fotogramas) && eQ.fotogramas.length === 5 && eQ.fotogramas.every((f, i) => f.endsWith(`final-f${i + 1}.jpg`) && crmFalso.archivos.has(f)) && q1 && q1[0] === 0xff && q1[1] === 0xd8, "armado: manda 5 fotogramas del video ya armado (subida «fotograma-final») y confirma «subtitulos: true» para el control de calidad del CRM");
+  ok(eQ.subtitulos === true && Array.isArray(eQ.fotogramas) && eQ.fotogramas.length === 6 && eQ.fotogramas.every((f, i) => f.endsWith(`final-f${i + 1}.jpg`) && crmFalso.archivos.has(f)) && q1 && q1[0] === 0xff && q1[1] === 0xd8, "armado: manda 6 fotogramas del video ya armado (dos de los primeros 3 s y uno del cierre) (subida «fotograma-final») y confirma «subtitulos: true» para el control de calidad del CRM");
   if (q1) {
     fs.writeFileSync(path.join(capturas, "control-fotograma-1-gancho.jpg"), q1);
-    fs.writeFileSync(path.join(capturas, "control-fotograma-5-cierre.jpg"), crmFalso.archivos.get(eQ.fotogramas[4]));
+    fs.writeFileSync(path.join(capturas, "control-fotograma-5-cierre.jpg"), crmFalso.archivos.get(eQ.fotogramas[5]));
   }
 
   // ---- etapa «analisis»: desarmar un video de referencia ----
@@ -786,6 +766,348 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   const noVideo = crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1];
   ok(!r.ok && !r4.ok && !r5.ok && crmFalso.visto.fallos.length === fallosAn + 3 && /^no analizable: el video dura 7 s y el máximo es 5 s/.test(largo.motivo) && /^no analizable: el archivo pesa más de/.test(pesado.motivo) && /^no analizable: el archivo no es un video/.test(noVideo.motivo) && fs.readdirSync(carpetas.trabajos).every((d) => !fs.existsSync(path.join(carpetas.trabajos, d, "original.bin"))), "análisis: un video demasiado largo, demasiado pesado o que no es video se rechaza con un motivo claro («no analizable: …») y el original se borra igual");
   ok(cfg.config.analisis.maxSegundos === 180 && cfg.config.analisis.maxMb === 200 && cfg.config.analisis.maxTomas === 16, "análisis: límites por defecto los acordados con el CRM (3 minutos, 200 MB, 16 tomas)");
+
+  // ============== edición: cierre nuevo, plantillas de subtítulos, transiciones, narración ====
+  {
+    // ---- cifras y símbolos como se dicen ----
+    const d = (t, p) => vozLib.paraDecir(t, p).texto;
+    ok(d("Dos gafas por 79 €", "ES") === "Dos gafas por 79 euros" && d("Solo 79€ hoy", "ES") === "Solo 79 euros hoy" && d("Elimina el 99,14 % del ruido", "ES") === "Elimina el 99,14 por ciento del ruido" && d("99,14% menos", "ES") === "99,14 por ciento menos" && d("2x1 esta semana", "ES") === "dos por uno esta semana" && d("Llévalo por $89.900.", "CO") === "Llévalo por 89.900 pesos." && d("Por US$20", "CO") === "Por 20 dólares" && d("1 € más", "ES") === "1 euro más", "narración: las cifras se escriben como se dicen («79 €» → «79 euros», «99,14 %» → «99,14 por ciento», «2x1» → «dos por uno», «$89.900» → pesos en Colombia)");
+    const pd = vozLib.paraDecir("Solo 79€ y 2x1", "ES");
+    const dichas = pd.texto.split(" ").map((t, i) => ({ texto: t, inicio: i, fin: i + 0.9 }));
+    const tg = vozLib.tiemposDelGuion(pd.originales, pd.grupos, dichas);
+    ok(tg.length === 4 && tg[1].texto === "79€" && tg[1].inicio === 1 && tg[1].fin === 2.9 && tg[3].texto === "2x1" && tg[3].fin === 6.9 && vozLib.tiemposDelGuion(pd.originales, pd.grupos, dichas.slice(1)) === null, "narración: cada palabra ESCRITA del guion recibe el tiempo de lo que se dijo por ella (el subtítulo muestra «79€», la voz dice «79 euros»)");
+    const al = vozLib.palabrasDeAlineacion({ characters: [..."Hola tú"], character_start_times_seconds: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6], character_end_times_seconds: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7] });
+    ok(al.length === 2 && al[0].texto === "Hola" && al[0].fin === 0.4 && al[1].inicio === 0.5 && al[1].fin === 0.7, "narración: de la alineación por letras de ElevenLabs salen las palabras con su tiempo");
+    const conPais = { ...base, elevenVoz: "vozDelEnv0000000001", config: { ...base.config, voz: { ...base.config.voz, porPais: { ES: [{ nombre: "Lucía", sexo: "mujer", id: "vozEspanola000000001" }, { nombre: "Pablo", sexo: "hombre", id: "vozEspanol0000000002" }] } } } };
+    ok(vozLib.vozPara(conPais, { contexto: { pais: "ES" } }).id === "vozEspanola000000001" && vozLib.vozPara(conPais, { contexto: { voz: { idioma: "es-ES", sexo: "hombre" } } }).id === "vozEspanol0000000002" && vozLib.vozPara(conPais, { contexto: { pais: "CO" } }).id === "vozDelEnv0000000001" && vozLib.vozPara(base, { contexto: { pais: "ES" } }).origen === "ELEVENLABS_VOICE_ID" && vozLib.vozPara(conPais, { contexto: { pais: "ES", voz: { vozId: "vozDelTrabajo00000001" } } }).id === "vozDelTrabajo00000001", "voz por país: si config.json tiene una voz para el país (y sexo) se usa esa; si no, la del .env; los «id» vienen vacíos, no inventados");
+
+    // ---- transiciones: con qué criterio se eligen ----
+    const tr = (o) => efectos.elegirTransicion({ semilla: "x", ...o });
+    const rapidas = [1, 2, 3, 4].map((i) => tr({ indice: i, inicio: 1, ritmo: "rapido" }));
+    const medias = [1, 2, 3, 4, 5, 6].map((i) => tr({ indice: i, inicio: 20, ritmo: "medio" }));
+    ok(tr({ indice: 0, inicio: 0 }) === "corte" && tr({ indice: 3, inicio: 10, tipo: "cierre" }) === "corte" && tr({ indice: 2, inicio: 10, pedida: "glitch" }) === "glitch" && rapidas.every((t) => t !== "corte") && medias.includes("corte") && efectos.CICLO === undefined && tr({ indice: 1, inicio: 1 }) === tr({ indice: 1, inicio: 1, ritmo: "rapido" }) && tr({ indice: 1, inicio: 9 }) === tr({ indice: 1, inicio: 9, ritmo: "medio" }) && tr({ indice: 2, inicio: 5, activas: false }) === "corte", `transiciones: el video entra en seco, hacia el cierre va corte, «rapido» no usa cortes secos (${rapidas.join(", ")}), «medio» los alterna (${medias.join(", ")}); sin ritmo, rápido en los primeros 3 s`);
+    ok(efectos.TRANSICIONES.length === 7 && ["zoom", "barrido", "flash", "glitch", "deslizar", "fundido"].every((t) => efectos.TRANSICIONES.includes(t) && efectos.DURA[t] > 0 && efectos.DURA[t] <= 0.3), "transiciones: siete (corte, zoom, barrido, flash, glitch, deslizar, fundido), todas de tres décimas de segundo o menos");
+    const calmadas = [1, 2, 3, 4, 5, 6, 7].map((i) => tr({ indice: i, inicio: i * 4, ritmo: "calmado" }));
+    ok(calmadas.every((t) => t === "corte" || t === "fundido") && calmadas.includes("fundido"), `ritmo «calmado» (el tercero que manda el CRM): solo cortes secos y fundidos suaves (${calmadas.join(", ")})`);
+
+    // ---- plantillas de subtítulos ----
+    const palabras = subt.palabrasConTiempo("Dermatológicamente probado: bloquea el 99,14 % de la luz azul. ¡Pídelas hoy!", 0.2, 5);
+    const H16 = 1920;
+    let bien = true;
+    const fuentesVistas = new Set();
+    for (const estilo of subt.ESTILOS) {
+      const s = subt.subtitulosDeEscena({ estilo, palabras, ancho: 1080, alto: H16, marca: "#0553C9", enfasis: ["probado", "hoy"], hasta: 6 });
+      fuentesVistas.add(s.estilos[0].split(",")[1]);
+      fs.writeFileSync(path.join(datos, "cache", `prueba-${estilo}.ass`), subt.documentoAss({ ancho: 1080, alto: H16, estilos: s.estilos, eventos: s.eventos }));
+      // Se dibuja de verdad y se mira dónde cae cada cuadro: nada fuera de la zona segura.
+      const texto = await ff.informe(["-f", "lavfi", "-i", "color=black:s=1080x1920:r=10:d=6", "-vf", `ass=prueba-${estilo}.ass:fontsdir=fuentes,bbox=min_val=40`], path.join(datos, "cache"));
+      const cajas = [...texto.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].map((m) => m.slice(1).map(Number));
+      const arriba = Math.min(...cajas.map((c) => c[2]));
+      const abajo = Math.max(...cajas.map((c) => c[3]));
+      const izq = Math.min(...cajas.map((c) => c[0]));
+      const der = Math.max(...cajas.map((c) => c[1]));
+      const okZona = cajas.length > 20 && arriba >= H16 * 0.12 && abajo <= H16 * 0.84 && izq >= 1080 * 0.03 && der <= 1080 * 0.97;
+      if (!okZona || !s.eventos.length || /FFE600|00E6FF/i.test(s.eventos.join("") + s.estilos.join(""))) {
+        bien = false;
+        console.log(`     plantilla «${estilo}» fuera de zona:`, { cuadros: cajas.length, arriba, abajo, izq, der });
+      }
+    }
+    ok(bien && subt.ESTILOS.length === 5 && fuentesVistas.size === 5, `subtítulos: 5 plantillas (${subt.ESTILOS.join(", ")}) dibujadas de verdad con una frase larga: todas caen entre el 12 % y el 84 % del alto, sin salirse por los lados, y ninguna usa el amarillo fijo`);
+    const sinMarca = subt.subtitulosDeEscena({ estilo: "karaoke", palabras, ancho: 1080, alto: H16, marca: "", hasta: 6 });
+    const conMarca = subt.subtitulosDeEscena({ estilo: "karaoke", palabras, ancho: 1080, alto: H16, marca: "#0553C9", hasta: 6 });
+    ok(!/\\1c&H(?!FFFFFF)/.test(sinMarca.eventos.join("")) && new RegExp(`\\\\1c&H${subt.bgr(subt.colorLegible("#0553C9"))}&`).test(conMarca.eventos.join("")) && subt.luminancia(subt.colorLegible("#0553C9")) >= 0.42 && subt.colorLegible("#FFD60A") === "FFD60A", `subtítulos: el resaltado es el color de la marca (un azul oscuro se aclara a #${subt.colorLegible("#0553C9")} para leerse sobre video); sin color de marca, blanco con contorno`);
+    ok(subt.elegirEstilo("Máquina") === "maquina" && subt.elegirEstilo("palabra") === "karaoke" && subt.elegirEstilo("caja") === "titular" && subt.elegirEstilo("limpio") === "limpio" && subt.elegirEstilo("impacto") === "impacto" && subt.elegirEstilo("") === "karaoke" && subt.elegirEstilo(undefined, "x") === "karaoke" && subt.elegirEstilo("no-existe", "z") === "karaoke" && subt.elegirEstilo("auto", "producto A") === subt.elegirEstilo("auto", "producto A") && new Set(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].map((x) => subt.elegirEstilo("auto", x))).size >= 4, "subtítulos: valen los nombres que manda el CRM (palabra → karaoke, caja → titular, limpio, impacto) y los cinco propios; sin valor o desconocido → karaoke; «auto» → una fija por producto, repartida entre las cinco");
+
+    // ---- tarjeta de cierre: textos, color y reparto ----
+    const tc = textosDelCierre({ oferta: "2x1: dos gafas por 79 €", llamadoALaAccion: "Pídelas", titular: "2x1", detalle: "Dos gafas por 79 €", color: "#0553C9" });
+    const viejo = textosDelCierre({ oferta: "2 unidades por $89.900", llamadoALaAccion: "Pide el tuyo" });
+    const soloDetalle = textosDelCierre({ oferta: "x", detalle: "Dos gafas por 79 €", color: "#FFD60A" });
+    ok(tc.principal === "2x1" && tc.esTitular && tc.detalle === "Dos gafas por 79 €" && tc.color === "0553C9" && tc.textoBoton === "FFFFFF" && viejo.principal === "2 unidades por $89.900" && viejo.detalle === "" && viejo.color === "0553C9" && soloDetalle.principal === "" && soloDetalle.detalle === "Dos gafas por 79 €" && soloDetalle.textoBoton === "0B1220", "cierre: lee titular, detalle y color; trabajo viejo sin titular ni detalle → la oferta entera; sin color → #0553C9; botón claro → texto oscuro");
+    const pisa = (a, b) => a && b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    fs.copyFileSync(path.join(fijos, "cuadrada.jpg"), path.join(datos, "cache", "f-prueba-cuadrada.jpg"));
+    await ff.ffmpeg(["-f", "lavfi", "-i", "testsrc2=s=900x1200:d=1", "-frames:v", "1", "-q:v", "3", "-update", "1", "f-prueba-oscura.jpg"], path.join(datos, "cache"));
+    let reparto = true;
+    const casos = [
+      [1080, 1920, { titular: "2x1", detalle: "Dos gafas Ceryon Eclipse por 79 €", llamadoALaAccion: "Pídelas en el enlace de abajo", color: "#0553C9" }],
+      [1080, 1920, { titular: "50% de descuento hoy", detalle: "Lleva tres y paga dos solo por esta semana, con envío gratis a todo el país", llamadoALaAccion: "Toca el botón de abajo y pide el tuyo antes de que se agoten", urgencia: "Solo esta semana", color: "#C2185B" }],
+      [1080, 1920, { oferta: "Lleva 3 y paga 2 solo por esta semana: envío gratis a todo el país y pago contra entrega", llamadoALaAccion: "Pide el tuyo" }],
+      [1920, 1080, { titular: "2x1", detalle: "Dos gafas Ceryon Eclipse por 79 €", llamadoALaAccion: "Pídelas en el enlace de abajo", urgencia: "Últimos días", color: "#0553C9" }],
+      [1080, 1080, { titular: "2x1", detalle: "Dos gafas por 79 €", llamadoALaAccion: "Pídelas ya", color: "#FFD60A" }],
+    ];
+    let conUrgencia = null;
+    for (const [w, h, c] of casos) {
+      const t = await prepararCierre({ ff, carpeta: path.join(datos, "cache"), ancho: w, alto: h, fps: 30, dura: 5, foto: "f-prueba-cuadrada.jpg", previa: null, cierre: c });
+      const z = [t.zonas.producto, t.zonas.urgencia, t.zonas.principal, t.zonas.detalle, t.zonas.boton].filter(Boolean);
+      const dentro = z.every((r) => r.x >= 0 && r.x + r.w <= w && r.y >= t.zonas.seguro.y0 && r.y + r.h <= t.zonas.seguro.y1);
+      const libre = z.every((a, i) => z.every((b, j) => i === j || !pisa(a, b)));
+      if (c.urgencia && h > w) conUrgencia = t;
+      if (!dentro || !libre || /FFE600|00E6FF/i.test(t.eventos.join("")) || (h > w && t.zonas.producto.w < w * 0.3)) {
+        reparto = false;
+        console.log("     reparto malo:", w, h, JSON.stringify(t.zonas));
+      }
+    }
+    const normal = await prepararCierre({ ff, carpeta: path.join(datos, "cache"), ancho: 1080, alto: 1920, fps: 30, dura: 5, foto: "f-prueba-cuadrada.jpg", previa: null, cierre: casos[0][2] });
+    ok(reparto && Math.abs(normal.zonas.producto.w - 1080 * 0.62) < 12 && normal.zonas.principal.h > 150 && new RegExp(`\\\\1c&H${subt.bgr("0553C9")}&`).test(normal.eventos.join("")), `tarjeta de cierre: producto, titular, detalle, botón y etiqueta no se pisan y quedan entre el 12 % de arriba y el 16 % de abajo (vertical, horizontal y cuadrado; textos cortos y muy largos); el producto ocupa ${Math.round((normal.zonas.producto.w / 1080) * 100)} % del ancho y el botón lleva el color de la marca`);
+    ok(conUrgencia && conUrgencia.zonas.urgencia && conUrgencia.zonas.urgencia.y >= conUrgencia.zonas.detalle.y + conUrgencia.zonas.detalle.h && conUrgencia.zonas.urgencia.y + conUrgencia.zonas.urgencia.h <= conUrgencia.zonas.boton.y && conUrgencia.eventos.some((e) => /SOLO ESTA SEMANA/.test(e)) && !normal.zonas.urgencia && !normal.eventos.some((e) => /SEMANA|ÚLTIM/i.test(e)), "cierre con urgencia: una línea corta en mayúsculas entre el detalle y el botón, solo si el CRM manda `urgencia` y con sus palabras; si no la manda, no se inventa nada");
+    const oscura = await prepararCierre({ ff, carpeta: path.join(datos, "cache"), ancho: 1080, alto: 1920, fps: 30, dura: 5, foto: "f-prueba-oscura.jpg", previa: { archivo: "f-prueba-cuadrada.jpg", segundo: null }, cierre: casos[0][2] });
+    const sinNada = await prepararCierre({ ff, carpeta: path.join(datos, "cache"), ancho: 1080, alto: 1920, fps: 30, dura: 5, foto: null, previa: null, cierre: casos[0][2] });
+    ok(normal.fotoClara && normal.fondoDe === "degradado" && oscura.fondoDe === "foto" && !oscura.fotoClara && sinNada.fondoDe === "degradado" && sinNada.zonas.producto === null && /sin foto|no trae foto/.test(sinNada.avisos.join(" ")), "cierre: el fondo es la propia foto desenfocada; si la foto es de fondo blanco, el último cuadro de la escena anterior; y si no hay de dónde, un degradado del color de la marca (nunca un gris plano)");
+  }
+
+  // ---- armado con la edición nueva: cierre sin subtítulo, subtítulo que no se repite, plantilla elegida ----
+  crmFalso.encolar(HB, "armado", null, { musica: false, estiloSubtitulos: "impacto" });
+  r = await atender(depsH);
+  ok(r.ok && r.armado.estiloSubtitulos === "impacto" && r.armado.segmentos[3].subtitulo === null && r.armado.segmentos[0].subtitulo.palabras === 6 && r.armado.cierres[0].fondo === "escena-anterior" && r.armado.transiciones[0] === "corte" && r.armado.transiciones[3] === "corte" && r.armado.transiciones.slice(1, 3).every((t) => efectos.TRANSICIONES.includes(t)), `armado: el cierre va SIN subtítulo quemado (la tarjeta ya lo dice), su fondo sale del último clip, y las escenas entran con ${r.armado.transiciones.slice(1, 3).join(" y ")}`);
+  const frH = path.join(carpetas.entregados, `${r.trabajo.id}.mp4`);
+  const cierreH = r.armado.cierres[0];
+  for (const s of [0.2, 0.6, 2]) await fotograma(frH, cierreH.inicio + s, path.join(capturas, `cierre-simulado-${String(s).replace(".", "_")}s.png`));
+  ph.escenas[1].voz = ph.escenas[0].voz; // dos escenas seguidas con la misma frase
+  crmFalso.encolar(HB, "armado", null, { musica: false, estiloSubtitulos: "impacto" });
+  r = await atender(depsH);
+  ok(r.ok && r.armado.segmentos[0].subtitulo && r.armado.segmentos[1].subtitulo === null, "subtítulos: si dos escenas seguidas traen la misma frase, no se repite en pantalla");
+  ph.escenas[1].voz = "Yo lo arreglé con esto.";
+
+  // ---- apertura de cortes rápidos sobre clips que ya existen ----
+  crmFalso.encolar(HB, "armado", null, { musica: false }, { apertura: [{ n: 1, desde: 1.2, hasta: 1.7 }, { n: 2, desde: 1.0, hasta: 1.6 }, { n: 1, desde: 2.5, hasta: 3.1 }, { n: 99, desde: 0, hasta: 1 }] });
+  r = await atender(depsH);
+  const ap = r.armado.segmentos.slice(0, 3);
+  ok(r.ok && r.armado.segmentos.length === 7 && ap.every((s) => String(s.n).startsWith("apertura-") && s.dura >= 0.45 && s.dura <= 0.65 && s.subtitulo === null && s.audio === "silencio") && ap.slice(1).some((s) => s.transicion !== "corte") && r.armado.segmentos[3].n === 1, `apertura: ${ap.length} cortes de ~0,5 s sacados de clips del proyecto antes de la escena 1, sin subtítulo, con transición rápida pero sin pasarse del tope de efectos por segundo (${ap.slice(1).map((s) => s.transicion).join(", ")}); el corte que apunta a una escena que no existe se ignora`);
+
+  // ---- apertura en cortes como la manda el CRM: UN clip de `duracionClip` s del que se usan solo los `cortes` ----
+  const pedidosCortes = [];
+  const pcx = crmFalso.crearProyecto("guion-cortes", "9:16", contexto(), [
+    { n: 1, tipo: "generada", duracion: 3, duracionClip: 8, cortes: [{ desde: 0, hasta: 1 }, { desde: 2.2, hasta: 2.9 }, { desde: 4.2, hasta: 4.9 }, { desde: 6.2, hasta: 6.8 }], voz: "", promptImagen: "i", promptVideo: "cuatro momentos" },
+    { n: 2, tipo: "generada", duracion: 4, voz: "", promptImagen: "i", promptVideo: "v" },
+  ]);
+  for (const e of pcx.escenas) Object.assign(e.imagen, { estado: "aprobada", url: crmFalso.fijo("cuadrada.jpg"), intentos: 1 });
+  crmFalso.encolar("guion-cortes", "clips");
+  r = await atender({ ...deps, proveedor: { ...simVideo, generarEscena: (c) => (pedidosCortes.push(c.escena.duracion), simVideo.generarEscena(c)) } });
+  for (const n of [1, 2]) crmFalso.aprobar("guion-cortes", "clip", n);
+  crmFalso.encolar("guion-cortes", "armado", null, { musica: false, estiloSubtitulos: "palabra", ritmo: "calmado" });
+  r = await atender();
+  const sc = r.armado.segmentos;
+  ok(r.ok && pedidosCortes.sort().join() === "4,8" && sc[0].cortes === 4 && Math.abs(sc[0].dura - 3) < 0.07 && sc[1].cortes === 0 && Math.abs(sc[1].dura - 4) < 0.07 && r.armado.estiloSubtitulos === "karaoke" && ["corte", "fundido"].includes(sc[1].transicion), `apertura en cortes (forma del CRM): el clip se pide de 8 s (duracionClip) y en el armado la escena usa solo sus 4 tramos, pegados en seco: dura ${sc[0].dura.toFixed(2)} s; «palabra» se entiende como karaoke y «calmado» entra con ${sc[1].transicion}`);
+  pcx.escenas[0].cortes = [{ desde: 0, hasta: 1 }, { desde: 7.9, hasta: 9 }, { desde: 20, hasta: 21 }];
+  crmFalso.encolar("guion-cortes", "armado", null, { musica: false });
+  r = await atender();
+  ok(r.ok && r.armado.segmentos[0].cortes === 1 && Math.abs(r.armado.segmentos[0].dura - 1) < 0.07, "cortes que se salen del clip: el tramo se recorta al final del clip y, si queda en menos de 0,3 s, se salta");
+
+  // ---- narración de ElevenLabs con tiempos por palabra (servidor de mentira) ----
+  const en = { pedidos: [], rutas: [], sinTiempos: false };
+  const elevenT = http.createServer((req, res) => {
+    let c = "";
+    req.on("data", (x) => (c += x));
+    req.on("end", () => {
+      const cuerpo = JSON.parse(c);
+      en.pedidos.push(cuerpo);
+      en.rutas.push(req.url);
+      if (req.headers["xi-api-key"] !== "clave-eleven-de-mentira") return res.writeHead(401), res.end("{}");
+      const audio = fs.readFileSync(path.join(fijos, "voz.mp3")); // 1,8 s
+      if (!req.url.includes("/with-timestamps")) return res.writeHead(200, { "content-type": "audio/mpeg" }), res.end(audio);
+      if (en.sinTiempos) return res.writeHead(404), res.end('{"detail":"not found"}');
+      // Cada letra ocupa su parte de 1,6 s (de 0,1 a 1,7), como la alineación real.
+      const letras = [...cuerpo.text];
+      const paso = 1.6 / letras.length;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ audio_base64: audio.toString("base64"), alignment: { characters: letras, character_start_times_seconds: letras.map((_, i) => 0.1 + i * paso), character_end_times_seconds: letras.map((_, i) => 0.1 + (i + 1) * paso) } }));
+    });
+  });
+  await new Promise((res) => elevenT.listen(0, "127.0.0.1", res));
+  const cfgN = { ...base, elevenKey: "clave-eleven-de-mentira", elevenVoz: "vozDeMentira00000001", elevenBase: `http://127.0.0.1:${elevenT.address().port}` };
+  const NR = "guion-narrado";
+  const pn = crmFalso.crearProyecto(NR, "9:16", { ...contexto(), pais: "ES", voz: { motor: "narracion", idioma: "es-ES" }, cierre: { oferta: "2x1: dos gafas por 79 €", llamadoALaAccion: "Pídelas hoy", titular: "2x1", detalle: "Dos gafas por 79 €", color: "#0553C9" } }, [
+    { n: 1, tipo: "generada", duracion: 6, voz: "¿Te duelen los ojos?", locucion: "narrador", promptImagen: "i", promptVideo: "v1\nAUDIO: sin voz, solo sonido ambiente." },
+    { n: 2, tipo: "generada", duracion: 6, voz: "Bloquean el 99,14 % por 79 €.", locucion: "narrador", promptImagen: "i", promptVideo: "v2" },
+    { n: 3, tipo: "foto-real", duracion: 4, voz: "Míralas de cerca.", fotoUrl: crmFalso.fijo("cuadrada.jpg") },
+    { n: 4, tipo: "cierre", duracion: 5, voz: "Pídelas hoy.", fotoUrl: crmFalso.fijo("cuadrada.jpg") },
+  ]);
+  for (const e of pn.escenas.filter((x) => x.tipo === "generada")) Object.assign(e.imagen, { estado: "aprobada", url: crmFalso.fijo("cuadrada.jpg"), intentos: 1 });
+  // Con narración los clips se piden SIN diálogo: si el CRM ya lo dice en su bloque AUDIO no se agrega nada; si no, lo agrega el trabajador.
+  const tNarr = { formato: "ugc", imagenesProducto: [], opciones: {}, contexto: pn.contexto };
+  const pSin = (prompt) => kieVideo.armarEntrada(cfgN, { escena: { prompt, duracion: 8, usaImagenProducto: false, voz: "Hola.", locucion: "narrador" }, trabajo: tNarr, relacion: "9:16", audio: "elevenlabs", audioEnPrompt: /(^|\n)\s*AUDIO\b/.test(prompt) }, kieVideo.modeloPara(cfgN, tNarr, false)).input.prompt;
+  ok(habla.decidirAudio(cfgN, tNarr, true).modo === "elevenlabs" && /nadie habla\. Solo sonido ambiente/.test(pSin("Plano de la mesa")) && !/Hola\./.test(pSin("Plano de la mesa")) && !/nadie habla/.test(pSin("Plano\nAUDIO: sin voz, solo sonido ambiente.")), "narración: los clips se piden sin diálogo, solo con sonido ambiente (y si el CRM ya lo dice en su bloque AUDIO, no se repite)");
+  const depsN = { ...deps, cfg: cfgN, proveedor: { ...hablador, async generarEscena(c) { // clips con ambiente continuo, sin voz
+    await c.ff.ffmpeg(["-f", "lavfi", "-i", "testsrc2=s=720x1280:r=24:d=4", "-f", "lavfi", "-i", "anoisesrc=color=brown:duration=4:seed=5:amplitude=0.4", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-t", "4", c.salida], c.carpeta);
+    return { segundos: 4, modelo: "hablador", costoUsd: null };
+  } } };
+  crmFalso.encolar(NR, "clips");
+  r = await atender(depsN);
+  for (const n of [1, 2]) crmFalso.aprobar(NR, "clip", n);
+  crmFalso.encolar(NR, "armado", null, { musica: false, estiloSubtitulos: "karaoke" });
+  r = await atender(depsN);
+  const eN = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+  const sN = r.armado.segmentos;
+  const p2 = en.pedidos[1] || {};
+  ok(r.ok && en.pedidos.length === 4 && en.rutas.every((u) => u.includes("/vozDeMentira00000001/with-timestamps")) && en.pedidos.every((p) => p.model_id === "eleven_multilingual_v2" && p.voice_settings.speed === 1.08 && !("language_code" in p)), "narración: UNA sola voz para todo el video (4 frases, la misma voz), modelo multilingüe, ritmo de anuncio, por la ruta con marcas de tiempo");
+  ok(p2.text === "Bloquean el 99,14 por ciento por 79 euros." && p2.previous_text === "¿Te duelen los ojos?" && p2.next_text === "Míralas de cerca.", "narración: cada escena lleva su frase completa con las cifras dichas bien, y la frase anterior y la siguiente como contexto (entonación continua)");
+  ok(sN.slice(0, 3).every((s) => s.audio === "voz" && Math.abs(s.dura - (0.1 + 1.8 + 0.22)) < 0.08) && sN[0].velocidad === 1.2 && sN[3].dura >= 5 && eN.sinVoz === false && /Narración de ElevenLabs/.test(eN.avisos.join(" ")), `narración: cada escena dura lo que dura su frase (${sN[0].dura.toFixed(2)} s para una frase de 1,8 s, con pausas cortas); el clip de 4 s se acelera ${sN[0].velocidad}× y se recorta, sin cortar la frase`);
+  ok(Math.abs(sN[1].subtitulo.desde - 0.2) < 0.06 && sN[1].subtitulo.palabras === 7 && Math.abs(sN[1].subtitulo.dura - 1.6) < 0.08, "narración: los subtítulos usan el tiempo REAL de cada palabra que devuelve la voz (empiezan a 0,2 s y duran 1,6 s, como la alineación)");
+  const finalN = path.join(carpetas.entregados, `${r.trabajo.id}.mp4`);
+  const volVozN = await tramoVol(finalN, 0.25, 1.3);
+  const volAmbN = await tramoVol(finalN, sN[0].dura - 0.2, 0.18);
+  ok(volVozN - volAmbN > 12 && volAmbN > -70, `narración: el sonido del clip queda de ambiente, muy por debajo de la voz (${volVozN} dB con voz, ${volAmbN} dB el ambiente solo)`);
+  const antesN = en.pedidos.length;
+  crmFalso.encolar(NR, "armado", null, { musica: false, estiloSubtitulos: "limpio" });
+  r = await atender(depsN);
+  ok(r.ok && en.pedidos.length === antesN && r.armado.caracteresNarrados === 0 && r.armado.stats.segmentosHechos === 3, "narración: al cambiar la plantilla de subtítulos NO se vuelve a pedir (ni a pagar) la voz; solo se recodifican las escenas con subtítulo");
+  en.sinTiempos = true;
+  pn.escenas[0].voz = "¿Te arden los ojos de noche?";
+  crmFalso.encolar(NR, "armado", null, { musica: false, estiloSubtitulos: "limpio" });
+  r = await atender(depsN);
+  ok(r.ok && r.armado.segmentos[0].audio === "voz" && r.armado.segmentos[0].subtitulo && /tiempos estimados/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "narración: si la cuenta no tiene la ruta con marcas de tiempo (404), se narra igual por la ruta normal y los subtítulos van con tiempos estimados, avisando");
+  crmFalso.encolar(NR, "armado", null, { musica: false });
+  r = await atender(deps); // el mismo proyecto en un servidor SIN clave de ElevenLabs
+  ok(!r.ok && /^No se puede armar con narración: el servidor no tiene ELEVENLABS_API_KEY/.test(crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1].motivo), "narración pedida por el CRM y servidor SIN clave: el armado falla con un motivo claro (no se entrega un video mudo)");
+  if (false) ok(true, "narración sin clave en el servidor: no falla; sigue con el audio del clip y lo avisa");
+  elevenT.close();
+
+  // ================== transiciones v2, cortes al golpe de la música y subtítulos de Captions ====
+  {
+    const tr = (o) => efectos.elegirTransicion({ semilla: "x", ...o });
+    const muy = [1, 2, 3, 4, 5, 6].map((i) => tr({ indice: i, inicio: i * 2, ritmo: "muy-rapido" }));
+    ok(efectos.normalizarRitmo("Muy rápido") === "muy-rapido" && efectos.normalizarRitmo("muy_rapido") === "muy-rapido" && efectos.normalizarRitmo("calmado") === "calmado" && efectos.normalizarRitmo("otro") === "rapido" && efectos.normalizarRitmo("") === "" && muy.every((t) => ["zoom", "flash", "glitch", "barrido"].includes(t)) && muy.every((t) => t !== "corte" && t !== "fundido") && efectos.INTENSIDAD["muy-rapido"] > efectos.INTENSIDAD.rapido && efectos.INTENSIDAD.rapido > efectos.INTENSIDAD.medio, `ritmo «muy rápido» (nuevo): todas las transiciones son enérgicas (${muy.join(", ")}) y más intensas que en «rápido»`);
+    ok(tr({ indice: 2, inicio: 5, ritmo: "rapido", desdeUltimo: 0.5 }) === "corte" && tr({ indice: 2, inicio: 5, ritmo: "rapido", desdeUltimo: 0.9 }) !== "corte" && tr({ indice: 2, inicio: 5, ritmo: "muy-rapido", desdeUltimo: 0.5 }) !== "corte" && tr({ indice: 2, inicio: 5, ritmo: "muy-rapido", desdeUltimo: 0.3 }) === "corte" && tr({ indice: 3, inicio: 9, ritmo: "muy-rapido", tipo: "cierre", pedida: "zoom" }) === "corte" && tr({ indice: 3, inicio: 9, tipo: "cierre", pedida: "fundido" }) === "fundido", "nada de mareo: entre un efecto y el siguiente pasa un mínimo (0,7 s en rápido, 0,45 s en muy rápido); sobre la tarjeta de cierre nunca hay efecto aunque se pida (solo el fundido suave que manda el CRM)");
+    const z = efectos.entrada("zoom", { W: 1080, i: 1 });
+    const b = efectos.entrada("barrido", { W: 1080, i: 1.3 });
+    const f = efectos.entrada("flash", { W: 1080, i: 1, marca: "0553C9" });
+    ok(/gblur/.test(z.cadena) && /sin\(/.test(z.dx) && /tmix/.test(b.cadena) && /pow/.test(b.dx) && /0x0553C9@/.test(f.cadena) && /sin\(/.test(f.dx) && !/FFFFFF/.test(f.cadena) && /0xFFFFFF@/.test(efectos.entrada("flash", { W: 1080 }).cadena), "transiciones más dinámicas: zoom con desenfoque de movimiento y sacudida, barrido con entrada de lado y estela, y flash del color de la marca (blanco si no hay color)");
+    const a1 = efectos.aceleron("rapido", 3);
+    const a2 = efectos.aceleron("muy-rapido", 3);
+    ok(/^setpts='if\(lt\(T,/.test(a1.filtro) && a2.filtro.length > a1.filtro.length && efectos.aceleron("medio", 3).filtro === "" && efectos.aceleron("rapido", 1).filtro === "" && a1.deMas > 0 && a1.deMas < 0.3, "acelerón (speed-ramp): la toma entra acelerada en «rápido»; en «muy rápido» también sale acelerada; nunca en «medio» ni en tomas de menos de 1,6 s");
+    ok(efectos.golpeCercano({ golpes: [0.5, 1, 1.5], dura: 2 }, 1.1) === 1 && efectos.golpeCercano({ golpes: [0.5, 1, 1.5], dura: 2 }, 1.25) === null && efectos.golpeCercano({ golpes: [0.5, 1, 1.5], dura: 2 }, 4.45) === 4.5 && efectos.golpeCercano(null, 1) === null, "cortes al golpe: se busca el golpe más cercano dentro de ±0,15 s (la pista se repite si es más corta que el video)");
+  }
+  {
+    // golpes visuales dentro de la toma (contrato del 18-oct)
+    const g = efectos.golpesVisuales([2.7, 5.3], { dura: 8, H: 1920, fps: 30 });
+    const g3 = efectos.golpesVisuales([5.9, 2, 4, 2.1, 0.1], { dura: 6.2, H: 1920, fps: 30 });
+    const auto = efectos.golpesVisuales(undefined, { dura: 6, H: 1920, cadaSiFaltan: 1.5 });
+    ok(g.marcas.join() === "2.7,5.3" && /^0\.15\*clip\(\(t-2\.7\)\/0\.067,0,1\)-0\.15\*clip\(\(t-5\.3\)/.test(g.zoom) && g.dy === "" && g3.marcas.join() === "2,4" && efectos.golpesVisuales([], { dura: 8, H: 1920 }).zoom === "" && auto.marcas.join() === "1.5,3,4.5" && /-\d+\*\(clip/.test(auto.dy), "golpes visuales: en cada marca un acercamiento brusco (15 % en 2 cuadros) que se mantiene hasta la siguiente y vuelve; se descartan las marcas pegadas a los bordes o entre sí; el segundo acercamiento ancla en el tercio superior; en «muy rápido», una cada 1,5 s si la escena no trae");
+  }
+  // Una pista con pulso claro (un golpe grave cada 0,5 s), fabricada con ffmpeg.
+  await ff.ffmpeg(["-f", "lavfi", "-i", "sine=frequency=60:duration=0.09,volume=6,apad=whole_dur=0.5,aloop=loop=15:size=22050", "-t", "8", "-c:a", "libmp3lame", "-b:a", "128k", "pulso.mp3"], fijos);
+  const pulso = await efectos.golpesDeMusica(ff, "pulso.mp3", fijos);
+  const pasos = pulso.golpes.slice(1).map((g, i) => g - pulso.golpes[i]);
+  ok(pulso.golpes.length >= 13 && pulso.golpes.length <= 16 && pasos.every((p) => Math.abs(p - 0.5) < 0.05), `golpes de la música: en una pista con un golpe cada 0,5 s se detectan ${pulso.golpes.length} golpes, separados ${Math.min(...pasos).toFixed(2)}–${Math.max(...pasos).toFixed(2)} s`);
+  const RB = "guion-al-ritmo";
+  const prb = crmFalso.crearProyecto(RB, "9:16", { ...contexto(), producto: "Otro producto" }, [
+    { n: 1, tipo: "generada", duracion: 2.1, voz: "", promptImagen: "i", promptVideo: "v" },
+    { n: 2, tipo: "generada", duracion: 2.1, voz: "", promptImagen: "i", promptVideo: "v" },
+    { n: 3, tipo: "generada", duracion: 1.9, voz: "", promptImagen: "i", promptVideo: "v" },
+    { n: 4, tipo: "cierre", duracion: 5, voz: "", fotoUrl: crmFalso.fijo("cuadrada.jpg") },
+  ]);
+  for (const e of prb.escenas.filter((x) => x.tipo === "generada")) Object.assign(e.imagen, { estado: "aprobada", url: crmFalso.fijo("cuadrada.jpg"), intentos: 1 });
+  crmFalso.encolar(RB, "clips");
+  await atender();
+  for (const n of [1, 2, 3]) crmFalso.aprobar(RB, "clip", n);
+  crmFalso.encolar(RB, "armado", null, { musica: crmFalso.fijo("pulso.mp3"), ritmo: "muy rapido" });
+  r = await atender();
+  const cortesRB = r.armado.segmentos.slice(1).map((x) => x.inicio);
+  const alGolpe = cortesRB.every((c) => pulso.golpes.some((g) => Math.abs(((c % pulso.dura) + pulso.dura) % pulso.dura - g) < 0.04 || Math.abs(c - g) < 0.04));
+  ok(r.ok && r.armado.cortesAlGolpe === 3 && alGolpe && r.armado.transiciones.slice(1, 3).every((t) => t !== "corte") && r.armado.transiciones[3] === "corte", `cortes al ritmo de la música: las escenas pedían cortar en 2,1 / 4,2 / 6,1 s y los cortes quedaron en ${cortesRB.map((c) => c.toFixed(2)).join(" / ")} s, sobre los golpes de la pista; «muy rápido» entra con ${r.armado.transiciones.slice(1, 3).join(" y ")} y el cierre en corte`);
+  crmFalso.encolar(RB, "armado", null, { musica: crmFalso.fijo("pulso.mp3"), ritmo: "calmado" });
+  r = await atender();
+  ok(r.ok && r.armado.cortesAlGolpe === 0 && Math.abs(r.armado.segmentos[1].inicio - 2.1) < 0.04, "en «calmado» no se mueven los cortes ni hay golpes de sonido");
+
+  // ---- lo que manda el CRM desde el 18-oct: transición por escena, golpes visuales y cierre con fundido ----
+  ph.escenas[1].transicion = "glitch";
+  ph.escenas[2].transicion = "deslizar";
+  ph.escenas[2].golpesVisuales = [1.3, 2.6];
+  ph.escenas[3].transicion = "fundido";
+  crmFalso.encolar(HB, "armado", null, { musica: false, ritmo: "muy-rapido", estiloSubtitulos: "impacto" });
+  r = await atender(depsH);
+  const s18 = r.armado.segmentos;
+  ok(r.ok && r.armado.transiciones.join() === "corte,glitch,deslizar,fundido" && s18[2].golpesVisuales.join() === "1.3,2.6" && s18[0].golpesVisuales.length >= 1 && s18[3].golpesVisuales.length === 0 && s18[3].tipo === "cierre", `campos del 18-oct: cada escena entra con la transición que manda el CRM (${r.armado.transiciones.join(", ")}), los golpes visuales van donde los marca, en «muy-rapido» se ponen solos donde faltan (escena 1: ${s18[0].golpesVisuales.join(" y ")} s) y nunca en el cierre`);
+  for (const e of ph.escenas) {
+    delete e.transicion;
+    delete e.golpesVisuales;
+  }
+
+  // ---- Captions (Mirage): servidor de mentira con el contrato de su documentación ----
+  const kc = { plantillas: 0, envios: [], consultas: 0, descargas: 0, modo: "bien", subido: null };
+  const todasCap = [["ctpl_yvE0ZnYzEj6ClCD2ee1f", "Buzz"], ["ctpl_FbiwB6xaJm9CQA3Ot4Tx", "Cove"], ["ctpl_DxflLOnuKkb198FNdI9E", "Heat"]];
+  const capFalso = http.createServer((req, res) => {
+    const trozos = [];
+    req.on("data", (d) => trozos.push(d));
+    req.on("end", () => {
+      const cuerpo = Buffer.concat(trozos);
+      const json = (codigo, o) => (res.writeHead(codigo, { "content-type": "application/json" }), res.end(JSON.stringify(o)));
+      const u = new URL(req.url, "http://x");
+      if (u.pathname === "/archivo.mp4") return res.writeHead(200, { "content-type": "video/mp4" }), res.end(kc.subido);
+      if (req.headers["x-api-key"] !== "clave-captions-de-mentira") return json(401, { error: { code: "unauthorized", message: "Invalid API key" } });
+      if (req.method === "GET" && u.pathname === "/v1/videos/captions/templates") {
+        kc.plantillas++;
+        // De a dos por página, para probar la paginación con `after`.
+        const desde = u.searchParams.get("after") ? todasCap.findIndex((t) => t[0] === u.searchParams.get("after")) + 1 : 0;
+        const pagina = todasCap.slice(desde, desde + 2);
+        return json(200, { object: "list", data: pagina.map(([id, name]) => ({ id, object: "caption_template", name, preview_url: null, created_at: 1730000000 })), has_more: desde + 2 < todasCap.length });
+      }
+      if (req.method === "POST" && u.pathname === "/v1/videos/captions") {
+        const texto = cuerpo.toString("latin1");
+        const plantilla = (/name="caption_template_id"\r\n\r\n([^\r]+)/.exec(texto) || [])[1];
+        const ini = texto.indexOf("\r\n\r\n", texto.indexOf('name="video"')) + 4;
+        const fin = texto.lastIndexOf("\r\n--");
+        kc.subido = cuerpo.subarray(ini, fin);
+        kc.envios.push({ plantilla, bytes: kc.subido.length, multipart: /^multipart\/form-data/.test(req.headers["content-type"] || "") });
+        kc.consultas = 0;
+        return json(200, { id: `video_cap${kc.envios.length}`, object: "video", status: "QUEUED", progress: 0, error: null, caption_template_id: plantilla });
+      }
+      const m = /^\/v1\/videos\/(video_cap\d+)(\/content)?$/.exec(u.pathname);
+      if (req.method === "GET" && m && m[2]) {
+        kc.descargas++;
+        return res.writeHead(302, { location: `http://127.0.0.1:${capFalso.address().port}/archivo.mp4` }), res.end();
+      }
+      if (req.method === "GET" && m) {
+        kc.consultas++;
+        if (kc.modo === "falla") return json(200, { id: m[1], object: "video", status: "FAILED", error: { code: "processing_error", message: "no se pudo" } });
+        if (kc.modo === "lento") return json(200, { id: m[1], object: "video", status: "PROCESSING", progress: 10, error: null });
+        return json(200, { id: m[1], object: "video", status: kc.consultas === 1 ? "PROCESSING" : "COMPLETE", progress: kc.consultas === 1 ? 50 : 100, error: null });
+      }
+      json(404, { error: { code: "not_found", message: "not found" } });
+    });
+  });
+  await new Promise((res) => capFalso.listen(0, "127.0.0.1", res));
+  const captionsLib = require("../lib/captions");
+  const cfgC = { ...base, captionsKey: "clave-captions-de-mentira", captionsBase: `http://127.0.0.1:${capFalso.address().port}`, config: { ...base.config, captions: { ...base.config.captions, consultarCadaSegundos: 0.1 } } };
+  const depsC = { ...depsH, cfg: cfgC };
+  const listaC = await captionsLib.plantillas(cfgC);
+  ok(listaC.length === 3 && kc.plantillas === 2 && listaC[1].nombre === "Cove" && (await captionsLib.resolverPlantilla(cfgC, "cove")).id === "ctpl_FbiwB6xaJm9CQA3Ot4Tx" && (await captionsLib.resolverPlantilla(cfgC, "ctpl_DxflLOnuKkb198FNdI9E")).id === "ctpl_DxflLOnuKkb198FNdI9E" && cfg.config.captions.porDefecto === false, "Captions: lista las plantillas de la cuenta (con paginación) y resuelve una por nombre («cove») o por su id; viene APAGADO por defecto");
+  const conCap = { subtitulos: { proveedor: "captions", plantilla: "Cove" }, musica: false };
+  crmFalso.encolar(HB, "armado", null, conCap);
+  r = await atender(depsC);
+  const eC = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+  fs.writeFileSync(path.join(datos, "enviado-a-captions.mp4"), kc.subido);
+  const capEnviado = await probar(path.join(datos, "enviado-a-captions.mp4"));
+  const cuerpoH = r.armado.segmentos.filter((x) => x.tipo !== "cierre").reduce((a, x) => a + x.dura, 0);
+  ok(r.ok && kc.envios.length === 1 && kc.envios[0].plantilla === "ctpl_FbiwB6xaJm9CQA3Ot4Tx" && kc.envios[0].multipart && kc.descargas === 1 && r.armado.estiloSubtitulos === "captions:Cove" && r.armado.segmentos.every((x) => x.subtitulo === null) && eC.subtitulos === true && /Subtítulos hechos por Captions, plantilla «Cove»/.test(eC.avisos.join(" ")), "Captions: con clave y opciones.subtitulos.proveedor = \"captions\", el video se arma SIN subtítulos quemados, se manda con la plantilla elegida (multipart, x-api-key), se espera (QUEUED → PROCESSING → COMPLETE) y se descarga");
+  ok(Math.abs(capEnviado.dura - cuerpoH) < 0.3 && Math.abs(r.armado.duracion - (cuerpoH + 5)) < 0.4 && capEnviado.video.width === 1080 && capEnviado.video.height === 1920, `Captions: a la API va solo el cuerpo (${capEnviado.dura.toFixed(1)} s, 9:16); la tarjeta de cierre (5 s) se pega DESPUÉS, sin subtítulos encima (final de ${r.armado.duracion.toFixed(1)} s)`);
+  crmFalso.encolar(HB, "armado", null, { ...conCap, musica: crmFalso.fijo("musica.mp3") });
+  r = await atender(depsC);
+  ok(r.ok && kc.envios.length === 1 && r.armado.captions && r.armado.captions.yaEstaba && r.armado.conMusica, "Captions: al rearmar (aquí, para ponerle música) no se manda ni se paga de nuevo: se reutiliza el video ya subtitulado");
+  const respaldo = async (cfgX, opciones, cambia) => {
+    if (cambia) cambia();
+    crmFalso.encolar(HB, "armado", null, opciones);
+    const rr = await atender({ ...depsH, cfg: cfgX });
+    return { rr, avisos: crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ") };
+  };
+  // Para forzar un envío nuevo en cada caso se cambia la duración de una escena (cambia el cuerpo que se manda).
+  const otraFrase = (d) => () => (ph.escenas[2].duracion = d);
+  const capSinClave = await respaldo(base, conCap);
+  kc.modo = "falla";
+  const capFallo = await respaldo(cfgC, conCap, otraFrase(3.6));
+  kc.modo = "lento";
+  const capLento = await respaldo({ ...cfgC, config: { ...cfgC.config, captions: { ...cfgC.config.captions, limiteMinutos: 0.01 } } }, conCap, otraFrase(3.2));
+  kc.modo = "bien";
+  const capPesado = await respaldo({ ...cfgC, config: { ...cfgC.config, captions: { ...cfgC.config.captions, maxMb: 0.05 } } }, conCap, otraFrase(2.8));
+  const sinPlantilla = await respaldo(cfgC, { subtitulos: { proveedor: "captions", plantilla: "Velocity" }, musica: false });
+  const propios = (x) => x.rr.ok && x.rr.armado.segmentos[0].subtitulo && !/^captions:/.test(x.rr.armado.estiloSubtitulos);
+  ok(propios(capSinClave) && /no tiene CAPTIONS_API_KEY/.test(capSinClave.avisos) && propios(capFallo) && /Captions no se pudieron hacer \(.*FAILED/.test(capFallo.avisos) && propios(capLento) && /lleva más de/.test(capLento.avisos) && propios(capPesado) && /pesa más de/.test(capPesado.avisos) && propios(sinPlantilla) && /ninguna plantilla llamada «Velocity»/.test(sinPlantilla.avisos), "Captions, respaldo automático: sin clave, si la API falla, si tarda de más, si el video no baja de 50 MB ni comprimido, o si la plantilla no existe, el video sale con las plantillas propias y lo avisa (nunca falla)");
+  ph.escenas[2].duracion = 4;
+  crmFalso.encolar(H, "armado", null, { subtitulos: { proveedor: "captions", plantilla: "Cove" } });
+  r = await atender({ ...deps, cfg: cfgC });
+  ok(r.ok && /solo subtitula videos verticales 9:16/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "Captions: un video horizontal no se manda (la API solo admite 9:16): plantillas propias y aviso");
+  const logC = fs.readFileSync(registro.archivo, "utf8");
+  ok(!logC.includes("clave-captions-de-mentira"), "Captions: la clave no queda escrita en el registro");
+  capFalso.close();
 
   // =========================================== varios trabajos a la vez ====
   // Piezas sueltas de lib/limites.js

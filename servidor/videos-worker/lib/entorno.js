@@ -38,6 +38,8 @@ function cargar() {
     falKey: dato("FAL_KEY"),
     elevenKey: dato("ELEVENLABS_API_KEY"),
     elevenVoz: dato("ELEVENLABS_VOICE_ID"),
+    // Subtítulos hechos por la API de Captions/Mirage (opcional).
+    captionsKey: dato("CAPTIONS_API_KEY"),
     // Servicio de voz a texto para la etapa «analisis». Vacío = ninguno (transcripcion: null con el motivo).
     transcripcion: (dato("TRANSCRIPCION") || "ninguno").toLowerCase(),
     nombre: dato("NOMBRE_TRABAJADOR") || require("os").hostname(),
@@ -59,7 +61,7 @@ function cargar() {
 
 /** Los valores que jamás deben aparecer en el registro. */
 function secretos(cfg) {
-  return [cfg.secreto, cfg.kieKey, cfg.geminiKey, cfg.falKey, cfg.elevenKey].filter((s) => s && s.length >= 6);
+  return [cfg.secreto, cfg.kieKey, cfg.geminiKey, cfg.falKey, cfg.elevenKey, cfg.captionsKey].filter((s) => s && s.length >= 6);
 }
 
 module.exports = { cargar, secretos, leerEnv, RAIZ };

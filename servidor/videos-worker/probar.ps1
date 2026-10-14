@@ -5,6 +5,7 @@
 #                                                    -Etapa clips          imagenes | clips | armado (armado = recorrido completo)
 #                                                    -Etapa armado
 #   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -ConCrm          además atiende la cola real del CRM una vez (solo con el simulado)
+#   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -PlantillasCaptions   lista las plantillas de subtítulos de la cuenta de Captions
 #   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -UnaImagen       UNA imagen base con el proveedor REAL de imagen (gasta lo mínimo)
 #   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -UnClip          UN clip corto con el proveedor REAL del .env (gasta lo mínimo)
 #
@@ -23,6 +24,7 @@ param(
   [switch]$ConCrm,
   [switch]$UnClip,
   [switch]$UnaImagen,
+  [switch]$PlantillasCaptions,
   [ValidateSet("", "imagenes", "clips", "armado")][string]$Etapa = "",
   [string]$Prompt = "",
   [string]$Foto = ""
@@ -35,6 +37,16 @@ $node = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $node) {
   Write-Host "No se encontró Node.js (versión 20 o superior): https://nodejs.org" -ForegroundColor Red
   exit 1
+}
+
+if ($PlantillasCaptions) {
+  # Lista las plantillas de subtítulos de la cuenta de Captions (nombre e id). No genera nada ni toca el CRM.
+  if (-not (Test-Path ".env")) {
+    Write-Host "Falta el archivo .env con CAPTIONS_API_KEY." -ForegroundColor Red
+    exit 1
+  }
+  & $node trabajador.js --plantillas-captions
+  exit $LASTEXITCODE
 }
 
 if ($UnClip -or $UnaImagen) {

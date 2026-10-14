@@ -1,3 +1,44 @@
+# Cambios del 16-oct: cierre de calidad, narración, plantillas de subtítulos y transiciones
+
+## Pasos para actualizar el servidor
+
+1. Detén la tarea «Reditus - Trabajador de videos».
+2. Copia la carpeta nueva encima de la que hay **sin tocar** `.env`, `datos\` ni `musica\`. Hay una carpeta nueva, **`fuentes\`** (tipografías): cópiala entera.
+3. `config.json`: guarda el del servidor como `config.anterior.json`, pon el nuevo y vuelve a escribir a mano lo que se le hubiera cambiado (por ejemplo `kie.usdPorCredito`). Secciones nuevas: `armado.dinamismo`, `voz` (cambió entera), `subtitulos` (nota nueva). `rotulo` ya no existe.
+4. `.env`: `PROVEEDOR=kie` y `KIE_API_KEY` se quedan como están. Para la narración, llena `ELEVENLABS_API_KEY` y `ELEVENLABS_VOICE_ID` (dónde se sacan: `.env.ejemplo`).
+5. Comprueba: `powershell -ExecutionPolicy Bypass -File .\probar.ps1` (debe terminar en «TODO OK»; no gasta).
+6. Arranca la tarea.
+
+El primer armado de cada proyecto vuelve a codificar sus escenas una vez (cambió la edición).
+
+## Alineado con el CRM (17 y 18-oct) y añadidos del mismo paquete
+
+- **Apertura en cortes** como la manda el CRM (`escena.cortes` + `duracionClip`); la forma `apertura` del trabajo sigue valiendo.
+- **Estilos** del CRM: `palabra` → karaoke, `caja` → titular. **Ritmos**: `muy-rapido`, `rapido`, `medio`, `calmado`.
+- **`escena.transicion`** (incluye `fundido`, también para el cierre) y **`escena.golpesVisuales`**.
+- **Urgencia** como línea entre el detalle y el botón (antes era una etiqueta arriba).
+- **Narración sin clave**: el armado falla con el motivo (antes seguía con el audio del clip).
+- **Fotogramas de control**: 6 (dos de los primeros 3 s y uno del cierre).
+- **Transiciones más dinámicas**, acelerones y **cortes al golpe de la música** (`lib/efectos.js`).
+- **Subtítulos con la API de Captions**, opcional (`lib/captions.js`, nuevo; variable `CAPTIONS_API_KEY`; `.\probar.ps1 -PlantillasCaptions`).
+
+## Qué cambió
+
+- **Tarjeta de cierre** nueva (`lib/rotulo.js`, reescrito): fondo desenfocado, producto grande con sombra, titular, detalle, etiqueta de urgencia opcional y botón del color de la marca, con entrada de 0,6 s. Sin subtítulo encima.
+- **Narración con ElevenLabs** (`lib/voz.js`, reescrito): una voz para todo el video, tiempos reales por palabra, cifras dichas bien, la escena dura lo que su frase, ambiente del clip por debajo. Sin clave, sigue con la voz del clip.
+- **Subtítulos**: cinco plantillas con tipografías propias (`lib/subtitulos.js`, reescrito; carpeta `fuentes/` nueva). Resaltado con el color de la marca.
+- **Transiciones, micro-zoom, golpes de sonido y apertura rápida** (`lib/efectos.js`, nuevo).
+- `lib/armado.js` reescrito para todo lo anterior. `lib/etapas.js`, `proveedores/kie.js` y `veo.js`: con narración los clips se piden sin diálogo.
+- `pruebas/muestras.js` (nuevo): muestras con clips de verdad. `pruebas/etapas.js`: pruebas de todo lo nuevo.
+
+## Sin probar con servicios reales
+
+- **ElevenLabs** (voz, acento, tiempos por palabra, costo): solo contra un servidor de mentira. Hace falta la clave.
+- Clips reales pedidos «sin diálogo» a Kie.
+- Las transiciones y plantillas sí se vieron sobre clips reales (los de Ceryon), en el equipo de desarrollo.
+
+---
+
 # Cambios del 14-oct: habla el clip, uniones, música por tono y análisis de referencia
 
 Se monta encima de las versiones de abajo. El acuerdo con el CRM está en `..\CONTRATO-PROYECTO-VIDEO.md` (secciones del 14-oct).

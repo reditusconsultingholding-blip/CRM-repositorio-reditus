@@ -183,13 +183,16 @@ async function procesarEtapa(trabajo, deps) {
       // Fotogramas del video YA armado, para el control de calidad del CRM (gancho, producto, cierre con
       // rótulo, subtítulos): el primero del primer segundo, el último del cierre, el resto repartidos.
       const fotogramas = [];
-      const cuantos = Math.max(0, Math.min(6, Math.floor(Number((cfg.config.armado || {}).fotogramasFinales ?? 5))));
+      const cuantos = Math.max(0, Math.min(6, Math.floor(Number((cfg.config.armado || {}).fotogramasFinales ?? 6))));
       if (cuantos >= 1) {
         try {
           const ultimoCierre = r.cierres[r.cierres.length - 1];
-          const primero = Math.min(1, r.duracion / 4);
+          const primero = Math.min(0.6, r.duracion / 6);
           const ultimo = ultimoCierre ? ultimoCierre.inicio + Math.min(ultimoCierre.dura - 0.4, Math.max(1, ultimoCierre.dura * 0.6)) : Math.max(primero, r.duracion - 0.8);
-          const momentos = cuantos === 1 ? [primero] : Array.from({ length: cuantos }, (_, i) => primero + ((ultimo - primero) * i) / (cuantos - 1));
+          // Dos de los primeros 3 s (el gancho y la apertura), uno del cierre y el resto repartidos.
+          const segundo = Math.min(2.2, r.duracion / 3);
+          const medio = Math.max(0, cuantos - 3);
+          const momentos = cuantos === 1 ? [primero] : cuantos === 2 ? [primero, ultimo] : [primero, segundo, ...Array.from({ length: medio }, (_, i) => segundo + ((ultimo - segundo) * (i + 1)) / (medio + 1)), ultimo];
           for (const [i, s] of momentos.entries()) {
             const jpg = `final-f${i + 1}.jpg`;
             await ff.ffmpeg(["-ss", String(redondo(Math.max(0, Math.min(r.duracion - 0.1, s)), 2)), "-i", r.archivo, "-frames:v", "1", "-vf", "scale='if(gt(iw,ih),768,-2)':'if(gt(iw,ih),-2,768)'", "-q:v", "4", "-update", "1", jpg], carpeta);
@@ -208,7 +211,7 @@ async function procesarEtapa(trabajo, deps) {
           r.archivo,
           {
             duracion: redondo(r.duracion, 2),
-            subtitulos: r.segmentos.some((s) => s.subtitulo),
+            subtitulos: r.subtitulosPuestos,
             ...(fotogramas.length ? { fotogramas } : {}),
             proveedor: "armado",
             modelos: [],
@@ -356,10 +359,10 @@ async function procesarEtapa(trabajo, deps) {
                 cfg, registro, ff,
                 // El proveedor de video recibe la imagen aprobada como «foto» de la escena: es su primer fotograma.
                 trabajo: { ...trabajo, imagenesProducto: [imagen.url], opciones: { ...(trabajo.opciones || {}) } },
-                escena: { n, nombre: escena.nombre || `Escena ${n}`, prompt, duracion: Number(escena.duracion) > 0 ? Number(escena.duracion) : 4, usaImagenProducto: true, voz: escena.voz || "", locucion: escena.locucion },
+                escena: { n, nombre: escena.nombre || `Escena ${n}`, prompt, duracion: Number(escena.duracionClip) > 0 ? Number(escena.duracionClip) : Number(escena.duracion) > 0 ? Number(escena.duracion) : 4, usaImagenProducto: true, voz: escena.voz || "", locucion: escena.locucion },
                 primerFotograma: true,
                 // Si el CRM ya trae su bloque «AUDIO» en el prompt, el proveedor no agrega otra instrucción de voz.
-                audioEnPrompt: audio === "veo" && audioYaEnPrompt(trabajo, prompt),
+                audioEnPrompt: /(^|\n)\s*AUDIO\b/.test(prompt) || (audio === "veo" && audioYaEnPrompt(trabajo, prompt)),
                 carpeta, salida, ancho, alto, relacion: trabajo.relacionAspecto, audio,
                 ...extra,
               }),
