@@ -1,15 +1,22 @@
 "use strict";
-// Trabajador de prospección por correo de Reditus.
+// Trabajador de prospección de Reditus (versión 2: correo + búsqueda + hoja).
 //
-//   node trabajador.js               residente: envía y lee la bandeja sin parar
+//   node trabajador.js               residente: no para nunca
 //   node trabajador.js --comprobar   revisa .env, CRM y (en modo real) el acceso a Gmail; no envía nada
 //   node trabajador.js --ciclos N    hace N vueltas y sale (para pruebas)
 //
-// Qué hace en cada vuelta:
+// Qué hace en cada vuelta (cada 20 segundos):
 //   1. Entrega al CRM los reportes que tenga guardados (envíos hechos, respuestas, rebotes).
 //   2. Por cada cuenta, si ya pasó la espera: le pide al CRM UN correo, lo envía y lo reporta.
 //      Luego espera entre 2,5 y 5 minutos al azar antes del siguiente de esa cuenta.
 //   3. Cada pocos minutos lee la bandeja (solo lo nuevo) y reporta respuestas y rebotes.
+//
+// Y con su propio reloj interno, sin depender de ninguna tarea de Windows:
+//   · cada minuto: latido al CRM (avisa que sigue vivo y se lleva las órdenes del panel);
+//   · cada 10 minutos: pregunta si toca buscar tiendas. El CRM dice que sí cada 6 horas
+//     (o lo que diga el panel) y solo si queda presupuesto; entonces busca, analiza y reporta;
+//   · cada 15 minutos: le pide al CRM sincronizar la hoja de prospectos;
+//   · una vez al día: limpieza y comprobación del acceso a Gmail.
 //
 // El CRM es quien decide qué puede salir: aprobación, tope del día con
 // calentamiento, horario laboral del país, exclusiones. Aquí no hay forma de
@@ -25,6 +32,9 @@ const { crearRegistro, tapar } = require("./lib/registro");
 const { crearCrm } = require("./lib/crm");
 const { crearCorreo, noSalio } = require("./lib/correo");
 const { analizar } = require("./lib/analizar");
+const { buscar } = require("./lib/buscar");
+
+const VERSION = "2.0.0";
 
 const cfg = cargar();
 // Con reloj de prueba cada línea del registro lleva además la hora simulada.
@@ -51,9 +61,9 @@ const dormir = (milis) => new Promise((r) => setTimeout(r, Math.max(50, milis / 
 function leerEstado() {
   try {
     const e = JSON.parse(fs.readFileSync(ARCHIVO_ESTADO, "utf8"));
-    return { enCurso: e.enCurso || null, reportes: Array.isArray(e.reportes) ? e.reportes : [], bandeja: e.bandeja || {}, cuenta: e.cuenta || {} };
+    return { enCurso: e.enCurso || null, reportes: Array.isArray(e.reportes) ? e.reportes : [], bandeja: e.bandeja || {}, cuenta: e.cuenta || {}, diaria: e.diaria || "" };
   } catch {
-    return { enCurso: null, reportes: [], bandeja: {}, cuenta: {} };
+    return { enCurso: null, reportes: [], bandeja: {}, cuenta: {}, diaria: "" };
   }
 }
 function guardarEstado(e) {
@@ -131,7 +141,9 @@ async function enviarUno(linea, estado, crm, correo) {
   // problema de acceso no le gasta intentos a ningún lead.
   try {
     await correo.verificarEnvio(linea);
+    salud.cuentas[linea] = { ok: true, detalle: "" };
   } catch (e) {
+    salud.cuentas[linea] = { ok: false, detalle: `${e.code || ""} ${e.responseCode || ""} ${e.message}`.trim().slice(0, 180) };
     c.proximo = ms() + cfg.config.esperaTrasFalloCuentaSegundos * 1000;
     log.error(`[${linea}] Gmail no aceptó la cuenta para enviar (${e.code || ""} ${e.message}). Reintenta en ${cfg.config.esperaTrasFalloCuentaSegundos / 60} min.`);
     return;
@@ -206,6 +218,110 @@ async function leerBandeja(linea, estado, correo) {
   if (leido.mensajes.length) log.info(`[${linea}] bandeja: ${leido.mensajes.length} nuevos → ${cuenta.respuesta} respuestas, ${cuenta.rebote} rebotes, ${cuenta.ignorar} sin interés`);
 }
 
+// ------------------------------------------------- latido, búsqueda y hoja ----
+// Lo que el trabajador sabe de sí mismo y lo último que ordenó el panel del CRM.
+const salud = { cuentas: {}, ultimoError: "", ordenes: null };
+const proxima = { latido: 0, tareas: 0, busqueda: 0, hoja: 0 };
+/** Trabajos largos que corren al lado del ciclo (búsqueda, hoja): no frenan los envíos. */
+const enSegundoPlano = { busqueda: null, hoja: null };
+
+async function latir(estado, crm) {
+  if (proxima.latido > ms()) return;
+  proxima.latido = ms() + cfg.config.latidoSegundos * 1000;
+  const tareas = proxima.tareas <= ms();
+  if (tareas) proxima.tareas = ms() + cfg.config.tareasSegundos * 1000;
+  try {
+    const r = await crm.latido({ trabajador: cfg.nombre, version: VERSION, modo: cfg.modo, busqueda: cfg.busqueda, cuentas: salud.cuentas, reportesPendientes: estado.reportes.length, ultimoError: salud.ultimoError, tareas });
+    const antes = salud.ordenes;
+    salud.ordenes = r;
+    if (!antes || antes.pausa !== r.pausa) log.info(r.pausa ? "El panel tiene la PAUSA TOTAL: no se envía ni se busca. La bandeja se sigue leyendo." : "Sin pausa: trabajando normal.");
+    const hecho = r.hecho || {};
+    if (hecho.entregas) log.info(`el CRM preparó ${hecho.entregas} entrega(s) de video aprobado`);
+    if (hecho.videosAgendados) log.info(`el CRM agendó ${hecho.videosAgendados} video(s) de prospectos`);
+    if (hecho.entregasError) log.aviso(`el CRM no pudo preparar entregas: ${hecho.entregasError}`);
+  } catch (e) {
+    // Sin latido se sigue con las últimas órdenes conocidas; el CRM igual decide en cada pedido.
+    log.aviso(`no se pudo dar el latido: ${e.message}`);
+  }
+}
+
+async function unaBusqueda(crm) {
+  const permiso = await crm.permisoBusqueda();
+  if (!permiso.permitido) {
+    if (salud.ultimoMotivoBusqueda !== permiso.motivo) log.info(`[búsqueda] no toca: ${permiso.motivo}`);
+    salud.ultimoMotivoBusqueda = permiso.motivo;
+    return;
+  }
+  salud.ultimoMotivoBusqueda = "";
+  const c = permiso.corrida;
+  log.info(`[búsqueda] empieza la corrida ${c.id} · ${c.nombrePais} · hasta ${c.anunciosMax} anuncios · frases: ${c.palabras.join(" | ")}`);
+  let r;
+  try {
+    r = await buscar(c, cfg, crm, log);
+  } catch (e) {
+    r = { fuente: "", anuncios: 0, usd: 0, hallazgos: [], vistos: [], nota: `La búsqueda falló: ${e.message}`.slice(0, 280) };
+    log.error(`[búsqueda] falló: ${e.message}`);
+  }
+  // El resultado se reporta siempre (también el fallo): así el CRM cierra la corrida y anota lo gastado.
+  const res = await crm.resultadoBusqueda({ corridaId: c.id, ...r });
+  log.info(`[búsqueda] corrida ${c.id} cerrada: ${r.anuncios} anuncios leídos · ${res.agregados} tiendas a la cola · ${res.descartados} descartadas · ${Number(res.usd || 0).toFixed(2)} USD${r.nota ? ` · ${r.nota}` : ""}`);
+}
+
+function lanzar(nombre, cadaSegundos, activa, fn) {
+  if (proxima[nombre] > ms() || enSegundoPlano[nombre]) return;
+  proxima[nombre] = ms() + cadaSegundos * 1000;
+  if (!activa) return;
+  enSegundoPlano[nombre] = fn()
+    .catch((e) => log.aviso(`[${nombre}] ${e.message}`))
+    .finally(() => {
+      enSegundoPlano[nombre] = null;
+    });
+}
+
+function tareasDeFondo(crm) {
+  const o = salud.ordenes;
+  if (!o) return; // todavía no se sabe qué ordenó el panel
+  lanzar("busqueda", cfg.config.consultaBusquedaSegundos, o.busqueda && o.busqueda.activa, () => unaBusqueda(crm));
+  lanzar("hoja", cfg.config.hojaSegundos, o.hoja && o.hoja.activa, async () => {
+    const r = await crm.sincronizarHoja();
+    if (r.omitida) return;
+    if (r.error) log.aviso(`[hoja] ${r.error}`);
+    else if (r.importadas || r.actualizadas || r.agregadas) log.info(`[hoja] ${r.leidas} filas · ${r.importadas} nuevas al CRM · ${r.actualizadas} estados a la hoja · ${r.agregadas} tiendas agregadas`);
+  });
+}
+
+/** Una vez al día: borra lo simulado de hace más de 14 días y vuelve a comprobar que Gmail acepta las cuentas. */
+async function tareaDiaria(estado, correo) {
+  const ahora = reloj.ahora();
+  const dia = ahora.toISOString().slice(0, 10);
+  if (estado.diaria === dia || ahora.getHours() < cfg.config.horaTareaDiaria) return;
+  estado.diaria = dia;
+  guardarEstado(estado);
+  let borrados = 0;
+  const carpeta = path.join(cfg.carpetas.simulacion, "enviados");
+  try {
+    for (const n of fs.readdirSync(carpeta)) {
+      const ruta = path.join(carpeta, n);
+      if (Date.now() - fs.statSync(ruta).mtimeMs > 14 * 86_400_000) {
+        fs.unlinkSync(ruta);
+        borrados++;
+      }
+    }
+  } catch {
+    /* sin carpeta de simulación no hay nada que limpiar */
+  }
+  for (const linea of cfg.lineas) {
+    try {
+      await correo.verificarLectura(linea);
+      salud.cuentas[linea] = { ok: true, detalle: "" };
+    } catch (e) {
+      salud.cuentas[linea] = { ok: false, detalle: `lectura: ${e.code || ""} ${e.message}`.trim().slice(0, 180) };
+      log.error(`[${linea}] comprobación diaria: Gmail no acepta la cuenta para leer (${e.code || ""} ${e.message})`);
+    }
+  }
+  log.info(`Tarea diaria hecha · cuentas: ${cfg.lineas.map((l) => `${l}=${salud.cuentas[l] && salud.cuentas[l].ok ? "bien" : "con problema"}`).join(", ")}${borrados ? ` · ${borrados} archivos de simulación viejos borrados` : ""}`);
+}
+
 // -------------------------------------------------------------- principal ----
 async function comprobar(crm, correo) {
   let bien = true;
@@ -268,7 +384,15 @@ async function main() {
     estado.cuenta[l] = { ultimoEnvio: ultimo, proximo: Math.max(0, falta) };
   }
 
-  log.info(`Arranca · modo ${cfg.modo.toUpperCase()} · cuentas: ${cfg.lineas.map((l) => `${l}=${tapar(cfg.cuentas[l].usuario)}`).join(", ")} · CRM ${cfg.crmUrl}${reloj.dePrueba ? ` · RELOJ DE PRUEBA ${cfg.prueba.ahora} ×${cfg.prueba.acelerar}` : ""}`);
+  // El último error queda a la vista en el panel del CRM (viaja en el latido).
+  const errorOriginal = log.error;
+  log.error = (...p) => {
+    salud.ultimoError = `${new Date().toISOString().slice(0, 16)}Z ${p.map((x) => (x instanceof Error ? x.message : String(x))).join(" ")}`.slice(0, 280);
+    errorOriginal(...p);
+  };
+  for (const l of cfg.lineas) salud.cuentas[l] = { ok: true, detalle: cfg.modo === "real" ? "sin comprobar todavía" : "simulación" };
+
+  log.info(`Arranca v${VERSION} · correo ${cfg.modo.toUpperCase()} · búsqueda ${cfg.busqueda.toUpperCase()} · cuentas: ${cfg.lineas.map((l) => `${l}=${tapar(cfg.cuentas[l].usuario)}`).join(", ")} · CRM ${cfg.crmUrl}${reloj.dePrueba ? ` · RELOJ DE PRUEBA ${cfg.prueba.ahora} ×${cfg.prueba.acelerar}` : ""}`);
   if (estado.enCurso) {
     log.aviso(`Un envío quedó a mitad en el arranque anterior (${estado.enCurso.id}). Se reporta como incierto: no se repite solo.`);
     estado.reportes.push({ ruta: "enviado", cuerpo: { id: estado.enCurso.id, resultado: "incierto", error: "El trabajador se reinició a mitad del envío." } });
@@ -278,6 +402,9 @@ async function main() {
 
   for (let ciclo = 0; ciclo < maxCiclos; ciclo++) {
     try {
+      await latir(estado, crm);
+      tareasDeFondo(crm);
+      await tareaDiaria(estado, correo);
       // Sin reportes al día no se pide nada nuevo: el CRM tiene que saber qué salió antes de entregar más.
       if (await entregarReportes(estado, crm)) {
         for (const linea of cfg.lineas) {
@@ -293,6 +420,8 @@ async function main() {
     }
     if (ciclo + 1 < maxCiclos) await dormir(cfg.config.cicloSegundos * 1000);
   }
+  // En una corrida con --ciclos se espera a que termine lo que quedó en segundo plano.
+  await Promise.all(Object.values(enSegundoPlano).filter(Boolean));
   soltarCandado();
 }
 

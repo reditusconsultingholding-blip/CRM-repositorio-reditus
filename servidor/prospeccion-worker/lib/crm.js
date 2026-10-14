@@ -1,7 +1,8 @@
 "use strict";
-// Cliente de la API del CRM para la prospección por correo
-// (`/api/servidor/prospeccion/**`). El contrato está en el CRM:
-// `src/app/api/servidor/prospeccion/pendientes-envio/route.ts`.
+// Cliente de la API del CRM para la prospección (`/api/servidor/prospeccion/**`).
+// El contrato está en el CRM:
+//   correos    → `src/app/api/servidor/prospeccion/pendientes-envio/route.ts`
+//   automático → `src/app/api/servidor/prospeccion/latido/route.ts`
 
 class ErrorCrm extends Error {
   constructor(mensaje, estado) {
@@ -15,7 +16,7 @@ class ErrorCrm extends Error {
 }
 
 function crearCrm(cfg, reloj) {
-  async function llamar(ruta, cuerpo) {
+  async function llamar(ruta, cuerpo, esperaMs = 90_000) {
     // Solo en simulación con reloj de prueba se le dicta la hora al CRM (y el CRM solo la acepta en `next dev`).
     const completo = reloj.dePrueba ? { ...cuerpo, ahora: reloj.ahora().toISOString() } : cuerpo;
     let res;
@@ -24,7 +25,7 @@ function crearCrm(cfg, reloj) {
         method: "POST",
         headers: { authorization: `Bearer ${cfg.secreto}`, "content-type": "application/json" },
         body: JSON.stringify(completo),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(esperaMs),
       });
     } catch (e) {
       throw new ErrorCrm(`sin conexión con el CRM (${e && e.name === "TimeoutError" ? "tardó demasiado" : (e && e.message) || "error de red"})`, 0);
@@ -42,7 +43,7 @@ function crearCrm(cfg, reloj) {
 
   return {
     llamar,
-    /** Lo próximo que toca enviar por una cuenta: primero prospectos (entrega y seguimientos), luego campañas en frío. */
+    /** Lo próximo que toca enviar por una cuenta: primero respuestas aprobadas, entregas y seguimientos; luego recordatorios y correos nuevos. */
     async siguiente(linea) {
       const a = await llamar("pendientes-envio", { linea, max: 1 });
       if (a.envios && a.envios.length) return { envio: a.envios[0], cuenta: (a.cuentas || [])[0], motivo: a.motivo };
@@ -50,6 +51,12 @@ function crearCrm(cfg, reloj) {
       const b = await llamar("campanas/siguientes", { linea, max: 1 });
       return { envio: (b.envios || [])[0] || null, cuenta: (b.cuentas || [])[0], motivo: b.motivo };
     },
+    /** Señal de vida. Devuelve las órdenes del panel: pausa, búsqueda, envío, hoja. */
+    latido: (cuerpo) => llamar("latido", cuerpo, cuerpo.tareas ? 280_000 : 60_000),
+    permisoBusqueda: () => llamar("busqueda/permiso", {}),
+    dominiosNuevos: async (dominios) => (await llamar("busqueda/dominios", { dominios })).nuevos || [],
+    resultadoBusqueda: (cuerpo) => llamar("busqueda/resultado", cuerpo, 280_000),
+    sincronizarHoja: () => llamar("hoja", {}, 280_000),
     /** Comprueba dirección y secreto sin tocar nada: una baja sin correo responde 400. */
     async comprobar() {
       try {

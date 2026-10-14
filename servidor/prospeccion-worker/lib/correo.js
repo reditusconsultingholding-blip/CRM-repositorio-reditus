@@ -15,6 +15,17 @@ function noSalio(e) {
   return !!(e && (e.responseCode || ["EAUTH", "ECONNECTION", "EDNS", "EENVELOPE", "ESOCKET", "ETLS"].includes(e.code)) && e.command !== "DATA");
 }
 
+/**
+ * Cabeceras de baja. Con el enlace del CRM (`bajaUrl`) el programa de correo
+ * de quien recibe muestra su propio botón «Cancelar suscripción» y la baja es
+ * de un clic (RFC 8058); la dirección mailto queda como segunda vía.
+ */
+function cabecerasDeBaja(envio, cuenta) {
+  const porCorreo = `<mailto:${cuenta}?subject=no>`;
+  if (!envio.bajaUrl || !/^https:\/\//.test(envio.bajaUrl)) return { "List-Unsubscribe": porCorreo };
+  return { "List-Unsubscribe": `<${envio.bajaUrl}>, ${porCorreo}`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
+}
+
 function crearCorreoReal(cfg, log) {
   const nodemailer = require("nodemailer");
   const { ImapFlow } = require("imapflow");
@@ -58,7 +69,7 @@ function crearCorreoReal(cfg, log) {
         text: envio.cuerpo,
         inReplyTo: envio.enRespuestaA ? `<${envio.enRespuestaA}>` : undefined,
         references: envio.referencias && envio.referencias.length ? envio.referencias.map((r) => `<${r}>`) : undefined,
-        headers: { "List-Unsubscribe": `<mailto:${c.usuario}?subject=no>` },
+        headers: cabecerasDeBaja(envio, c.usuario),
       });
       if (info.rejected && info.rejected.length) {
         const e = new Error(`Gmail rechazó al destinatario: ${info.response || "sin detalle"}`);
@@ -127,13 +138,14 @@ function crearCorreoSimulado(cfg) {
         `Id del CRM: ${envio.id}`,
         `Message-ID: <${messageId}>`,
         envio.enRespuestaA ? `In-Reply-To: <${envio.enRespuestaA}>` : "",
+        ...Object.entries(cabecerasDeBaja(envio, cfg.cuentas[linea].usuario)).map(([k, v]) => `${k}: ${v}`),
         `Para: ${envio.para}`,
         `Asunto: ${envio.asunto}`,
         "",
         envio.cuerpo,
         "",
       ]
-        .filter((l, i) => l !== "" || i >= 6)
+        .filter((l, i, todas) => l !== "" || i >= todas.indexOf(`Asunto: ${envio.asunto}`))
         .join("\n");
       fs.writeFileSync(path.join(enviados, nombre), contenido);
       return { messageId };
@@ -153,4 +165,4 @@ function crearCorreo(cfg, log) {
   return cfg.modo === "real" ? crearCorreoReal(cfg, log) : crearCorreoSimulado(cfg);
 }
 
-module.exports = { crearCorreo, noSalio };
+module.exports = { crearCorreo, noSalio, cabecerasDeBaja };

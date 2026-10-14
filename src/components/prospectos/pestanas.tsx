@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 const PESTANAS = [
   { clave: "embudo", href: "/prospectos", texto: "Embudo" },
   { clave: "campanas", href: "/prospectos/campanas", texto: "Campañas" },
+  { clave: "control", href: "/prospectos/control", texto: "Automático" },
 ] as const;
 
 /** Pestañas de /prospectos: el embudo y las campañas de correo en frío. */

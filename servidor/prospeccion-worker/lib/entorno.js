@@ -48,6 +48,11 @@ function cargar() {
     remitente: dato("NOMBRE_REMITENTE") || "Sebastian Vargas",
     cuentas,
     lineas: LINEAS.filter((l) => cuentas[l]),
+    // La búsqueda tiene su propio modo: se puede buscar de verdad con el correo aún en simulación, y al revés.
+    busqueda: (dato("MODO_BUSQUEDA") || "simulacion").toLowerCase(),
+    apify: { token: dato("APIFY_TOKEN"), actor: dato("APIFY_ACTOR_ANUNCIOS") || "apify~facebook-ads-scraper" },
+    meta: { token: dato("META_AD_LIBRARY_TOKEN") },
+    nombre: dato("NOMBRE_SERVIDOR") || require("os").hostname(),
     prueba: { acelerar: acelerar > 0 ? acelerar : 1, ahora: ahoraPrueba && Number.isFinite(Date.parse(ahoraPrueba)) ? ahoraPrueba : "" },
     carpetas: {
       datos,
@@ -64,6 +69,9 @@ function revisar(cfg) {
   if (!cfg.crmUrl) p.push("Falta CRM_URL en el .env.");
   if (!cfg.secreto) p.push("Falta SERVIDOR_SECRET en el .env.");
   if (cfg.modo !== "simulacion" && cfg.modo !== "real") p.push("MODO debe ser «simulacion» o «real».");
+  if (cfg.busqueda !== "simulacion" && cfg.busqueda !== "real") p.push("MODO_BUSQUEDA debe ser «simulacion» o «real».");
+  if (cfg.busqueda === "real" && !cfg.apify.token && !cfg.meta.token) p.push("MODO_BUSQUEDA=real y no hay APIFY_TOKEN ni META_AD_LIBRARY_TOKEN en el .env.");
+  if (cfg.busqueda === "real" && (cfg.prueba.acelerar !== 1 || cfg.prueba.ahora)) p.push("PRUEBA_ACELERAR y PRUEBA_AHORA no se permiten con MODO_BUSQUEDA=real: quítalas.");
   if (cfg.modo === "real") {
     if (!cfg.lineas.length) p.push("MODO=real y no hay ninguna cuenta completa (GMAIL_VIDEO_USER + GMAIL_VIDEO_APP_PASSWORD, o las de LANDING).");
     if (cfg.prueba.acelerar !== 1 || cfg.prueba.ahora) p.push("PRUEBA_ACELERAR y PRUEBA_AHORA solo se permiten con MODO=simulacion: quítalas.");
@@ -77,7 +85,7 @@ function revisar(cfg) {
 
 /** Los valores que jamás deben aparecer en el registro. */
 function secretos(cfg) {
-  return [cfg.secreto, ...Object.values(cfg.cuentas).map((c) => c.clave)].filter((s) => s && s.length >= 6);
+  return [cfg.secreto, cfg.apify.token, cfg.meta.token, ...Object.values(cfg.cuentas).map((c) => c.clave)].filter((s) => s && s.length >= 6);
 }
 
 module.exports = { cargar, revisar, secretos, leerEnv, RAIZ, LINEAS };

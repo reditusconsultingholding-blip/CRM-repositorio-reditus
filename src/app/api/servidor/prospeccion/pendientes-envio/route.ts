@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { atender } from "@/lib/servidor-api";
 import { pendientesEnvio, relojDe } from "@/lib/prospeccion-correo-server";
+import { respuestasAprobadas } from "@/lib/prospeccion-auto-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,10 +41,14 @@ export const maxDuration = 60;
 //   500 fallo del almacenamiento (se puede reintentar) · 503 falta SERVIDOR_SECRET.
 //   Solo en `next dev`: el campo `ahora` (ISO) del cuerpo dicta la hora, para pruebas.
 
-// Correos a prospectos: entrega aprobada y seguimientos que tocan hoy. Contrato en `pendientes-envio/route.ts`.
+// Correos a prospectos: respuestas aprobadas, entrega aprobada y seguimientos que tocan hoy. Contrato en `pendientes-envio/route.ts`.
 export async function POST(request: NextRequest) {
   return atender(request, async (cuerpo) => {
-    const r = await pendientesEnvio(createAdminClient(), cuerpo, relojDe(cuerpo));
+    const admin = createAdminClient();
+    // Primero, las respuestas que una persona ya aprobó: alguien las está esperando.
+    const aprobadas = await respuestasAprobadas(admin, cuerpo, relojDe(cuerpo));
+    if (aprobadas.envios.length || aprobadas.motivo) return NextResponse.json({ ok: true, ...aprobadas });
+    const r = await pendientesEnvio(admin, cuerpo, relojDe(cuerpo));
     return NextResponse.json({ ok: true, ...r });
   });
 }

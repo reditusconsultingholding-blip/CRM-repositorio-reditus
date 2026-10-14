@@ -29,6 +29,9 @@ const PUBLIC_PATHS = [
   "/manifest.webmanifest",
   "/sw.js",
   "/privacidad",
+  // Baja en un clic de los correos de prospección: la abre quien recibe el correo, sin sesión.
+  "/baja",
+  "/api/baja",
 ];
 // INGRESOS_ROLES/ADMIN_ROLES vienen de lib/roles.ts (antes eran una copia
 // hardcodeada aparte, aquí mismo, que se desincronizó — directora_operativa

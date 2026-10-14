@@ -110,6 +110,8 @@ export async function atender(
   try {
     return await fn(await cuerpoJson(request));
   } catch (e) {
+    // En local se deja la traza en la consola de `next dev`; en producción solo viaja el mensaje.
+    if (process.env.NODE_ENV !== "production") console.error(`[api/servidor] ${request.nextUrl.pathname}:`, e);
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error inesperado." }, { status: 500 });
   }
 }

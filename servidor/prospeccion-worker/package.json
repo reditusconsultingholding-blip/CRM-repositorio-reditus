@@ -1,8 +1,8 @@
 {
   "name": "reditus-prospeccion-worker",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Trabajador de prospección por correo de Reditus: envía de uno en uno lo que el CRM autoriza y le reporta respuestas y rebotes.",
+  "description": "Trabajador de prospección de Reditus: busca tiendas, envía de uno en uno lo que el CRM autoriza, y le reporta respuestas y rebotes.",
   "main": "trabajador.js",
   "type": "commonjs",
   "engines": {

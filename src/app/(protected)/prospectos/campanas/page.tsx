@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireProfile, INGRESOS_ROLES } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ROLES_ACTIVAN_ENVIO, type ConfigCorreo, type ResumenCampana, type UsoCuenta } from "@/lib/prospeccion-correo";
+import { CONFIG_AUTO_BASE } from "@/lib/prospeccion-auto";
 import { leerConfig, resumenCampanas, usoCuentas } from "@/lib/prospeccion-correo-server";
 import { PestanasProspectos } from "@/components/prospectos/pestanas";
 import { Campanas } from "@/components/prospectos/campanas";
@@ -16,7 +17,7 @@ export default async function CampanasPage() {
   const profile = await requireProfile();
   if (!(INGRESOS_ROLES as string[]).includes(profile.role)) redirect("/dashboard");
 
-  let config: ConfigCorreo = { pausaGeneral: false, exclusiones: [], inicio: { video: null, landing: null } };
+  let config: ConfigCorreo = { pausaGeneral: false, pausaInfo: null, auto: CONFIG_AUTO_BASE, exclusiones: [], inicio: { video: null, landing: null } };
   let uso: UsoCuenta[] = [];
   let campanas: ResumenCampana[] = [];
   let error: string | null = null;

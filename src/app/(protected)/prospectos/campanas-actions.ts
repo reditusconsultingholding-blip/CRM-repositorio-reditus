@@ -97,8 +97,8 @@ export async function estadoCampanaAccion(id: string, estado: EstadoCampana): Pr
 }
 
 export async function pausaGeneralAccion(pausar: boolean): Promise<Resultado> {
-  return seguro(pausar ? "ingresos" : "envio", async (_p, admin) => {
-    await guardarConfig(admin, { pausaGeneral: !!pausar });
+  return seguro(pausar ? "ingresos" : "envio", async (profile, admin) => {
+    await guardarConfig(admin, { pausaGeneral: !!pausar, pausaInfo: { por: `${profile.name} (${pausar ? "pausó" : "reanudó"})`, fecha: new Date().toISOString() } });
     return {};
   });
 }

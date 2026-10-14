@@ -20,6 +20,7 @@
 //    dentro de la misma columna jsonb `respuestas_calificacion`, clave
 //    `correos`, al lado de `prospeccion`.
 import { CALENDLY_URL, SERVICIOS, type Servicio } from "@/lib/prospeccion";
+import type { ConfigAuto } from "@/lib/prospeccion-auto";
 
 export type Linea = Servicio;
 export const LINEAS = SERVICIOS;
@@ -47,6 +48,41 @@ export const ZONA_CUENTA = "America/Bogota";
 
 export const FIRMA = "Sebastian Vargas · Reditus Consulting";
 export const LINEA_BAJA = "Si prefieres no recibir más correos, responde «no» y no te vuelvo a escribir.";
+
+/** Enlace de agenda que va en la entrega y en los seguimientos. Lo define `URL_AGENDA_VIDEOS`; si falta, el Calendly de siempre. */
+export function urlAgenda(): string {
+  const u = (process.env.URL_AGENDA_VIDEOS || process.env.NEXT_PUBLIC_URL_AGENDA_VIDEOS || "").trim();
+  return /^https:\/\/[^\s]+$/.test(u) ? u : CALENDLY_URL;
+}
+
+export type DatosPie = { nombre: string; empresa: string; direccion: string; web: string; motivo: string; enlaceBaja: string };
+
+/**
+ * Pie de todo correo comercial: quién escribe (nombre, empresa, dirección y
+ * web), por qué le llega y cómo darse de baja en un clic. Es lo que pide la
+ * ley española (LSSI art. 20 y 21, RGPD art. 14 y 21) para un correo comercial.
+ */
+export function pieLegal(d: DatosPie): string {
+  const quien = [d.nombre, d.empresa, d.direccion, d.web].map((x) => x.trim()).filter(Boolean).join(" · ");
+  return `—\n${quien}\n${d.motivo.trim()} Para no recibir más correos, baja en un clic: ${d.enlaceBaja} (o basta con responder «no»).`;
+}
+
+/** Deja el cuerpo con la firma y UN solo pie legal al final (quita la línea de baja vieja o un pie anterior). */
+export function ponerPie(cuerpo: string, d: DatosPie): string {
+  let c = String(cuerpo ?? "").replace(/\r\n/g, "\n");
+  const corte = c.indexOf("\n—\n");
+  if (corte >= 0) c = c.slice(0, corte);
+  c = c
+    .split("\n")
+    .filter((l) => !/responde[n]?\s+[«"“']?no[»"”']?\s+y no te vuelvo a escribir/i.test(l) && !/baja en un clic/i.test(l))
+    .join("\n")
+    .trim();
+  // El pie ya identifica a quien escribe: si el cuerpo termina con la firma suelta, se quita para no repetirla.
+  const firmas = [FIRMA, `${d.nombre.trim()} · ${d.empresa.trim()}`];
+  const lineas = c.split("\n");
+  if (firmas.includes((lineas[lineas.length - 1] ?? "").trim())) c = lineas.slice(0, -1).join("\n").trim();
+  return `${c}\n\n${pieLegal(d)}`;
+}
 
 const ZONAS: Record<string, string> = {
   colombia: "America/Bogota",
@@ -279,6 +315,8 @@ export type Campana = {
   consecutivo: number;
   /** Correos confirmados como enviados, por día de Bogotá. */
   enviosPorDia: Record<string, number>;
+  /** Campaña que llena sola la búsqueda automática y la hoja de prospectos (una por país). Solo envía con el interruptor «Envío» encendido. */
+  auto?: { pais: string } | null;
   /** Filas que no entraron al importar, con su motivo. */
   descartes: { correo: string; tienda: string; motivo: string }[];
   historial: { fecha: string; quien: string; accion: string }[];
@@ -296,10 +334,11 @@ export const ESTADO_LEAD_LABELS: Record<EstadoLead, string> = {
   fallidos: "No se pudo enviar",
 };
 
-export const CLASIFICACIONES = ["interesado", "no_interesado", "automatica", "otro_correo", "rebote", "por_revisar"] as const;
+export const CLASIFICACIONES = ["interesado", "pregunta", "no_interesado", "automatica", "otro_correo", "rebote", "por_revisar"] as const;
 export type Clasificacion = (typeof CLASIFICACIONES)[number];
 export const CLASIFICACION_LABELS: Record<Clasificacion, string> = {
-  interesado: "Interesado",
+  interesado: "Acepta el video",
+  pregunta: "Hace una pregunta",
   no_interesado: "No interesado",
   automatica: "Respuesta automática",
   otro_correo: "Pide escribir a otro correo",
@@ -330,6 +369,29 @@ export type Lead = {
   rebote: { fecha: string; diagnostico: string } | null;
   prospectoId: string | null;
   nota: string;
+  /** Recordatorios enviados al que no respondió el primer correo. */
+  seguimientos?: { n: number; fecha: string; messageId: string | null }[];
+  /** Recordatorio que el trabajador tiene en la mano. */
+  enEnvioSeguimiento?: { n: number; desde: string; marca: string } | null;
+  /** De dónde salió y cómo se calificó (búsqueda automática u hoja de prospectos). */
+  extra?: LeadExtra;
+};
+
+export type LeadExtra = {
+  origen: "busqueda" | "hoja";
+  idHoja: string;
+  dominio: string;
+  puntaje: number | null;
+  nivel: string;
+  evidencia: string;
+  /** Verdadero si la falencia sale de datos observados en la biblioteca de anuncios (se puede mencionar como observación). */
+  observado: boolean;
+  plataforma: string;
+  precio: string;
+  telefono: string;
+  instagram: string;
+  anuncios: number | null;
+  anunciosVideo: number | null;
 };
 
 export type LeadEntrada = Pick<Lead, "tienda" | "url" | "correo" | "producto" | "falencia" | "pais"> & { linea: string };
@@ -441,6 +503,25 @@ ${FIRMA}
 ${LINEA_BAJA}`,
 };
 
+/**
+ * Plantilla de las campañas automáticas (línea video). A esas tiendas se llega
+ * por sus anuncios en la biblioteca pública de Meta, así que el correo puede
+ * decirlo; la IA, si está activa, lo adapta con lo que se observó de cada una.
+ */
+export const PLANTILLA_AUTOMATICA = `Asunto: Un video de muestra para {{producto}}
+
+Hola, equipo de {{tienda}}.
+
+Soy Sebastian, de Reditus Consulting. Hacemos videos publicitarios para tiendas en línea.
+
+Estuve viendo sus anuncios de {{producto}} en Meta y creo que un buen video les puede ayudar a venderlo mejor. Me gustaría prepararles uno de muestra, sin costo, para que vean cómo trabajamos antes de decidir nada.
+
+¿Les interesa? Con responder «sí» a este correo lo preparo.
+
+${FIRMA}
+
+${LINEA_BAJA}`;
+
 /** Reemplaza `{{variable}}`. Lo que no exista queda vacío. */
 export function aplicarPlantilla(plantilla: string, lead: Pick<Lead, "tienda" | "producto" | "falencia" | "pais" | "url">): string {
   return plantilla.replace(/\{\{\s*([a-zA-Záéíóúñ_]+)\s*\}\}/g, (_, nombre: string) => {
@@ -479,16 +560,28 @@ export function problemasPlantilla(plantilla: string): string[] {
 }
 
 /** Los tres seguimientos sin IA. `n` de 1 a 3. */
-export function seguimientoBase(n: number, d: { nombre: string; producto: string; pieza: string; enlace: string }): string {
+export function seguimientoBase(n: number, d: { nombre: string; producto: string; pieza: string; enlace: string; agenda?: string }): string {
+  const agenda = d.agenda || urlAgenda();
   // El nombre suele ser el de la tienda («Tienda Uno»): saludar con su primera palabra queda raro.
   const hola = "Hola de nuevo.";
   const producto = d.producto || "tu producto";
   const cuerpos = [
     `${hola}\n\n¿Pudiste ver ${d.pieza} de ${producto}? Te dejo el enlace otra vez:\n${d.enlace}\n\nSi quieres que le ajuste algo, dime y lo cambio.`,
-    `${hola}\n\nTe escribo corto: si ${d.pieza} te sirvió, en 15 minutos te muestro cómo sería un paquete completo para tu tienda. Puedes agendar aquí:\n${CALENDLY_URL}\n\nSi prefieres coordinar por WhatsApp, pásame tu número.`,
-    `${hola}\n\nEste es mi último mensaje sobre ${d.pieza} de ${producto}, para no llenarte la bandeja. Queda disponible aquí:\n${d.enlace}\n\nSi más adelante quieres retomarlo, responde este correo o agenda cuando te quede bien:\n${CALENDLY_URL}`,
+    `${hola}\n\nTe escribo corto: si ${d.pieza} te sirvió, en 15 minutos te muestro cómo sería un paquete completo para tu tienda. Puedes agendar aquí:\n${agenda}\n\nSi prefieres coordinar por WhatsApp, pásame tu número.`,
+    `${hola}\n\nEste es mi último mensaje sobre ${d.pieza} de ${producto}, para no llenarte la bandeja. Queda disponible aquí:\n${d.enlace}\n\nSi más adelante quieres retomarlo, responde este correo o agenda cuando te quede bien:\n${agenda}`,
   ];
   return `${cuerpos[Math.min(3, Math.max(1, n)) - 1]}\n\n${FIRMA}\n\n${LINEA_BAJA}`;
+}
+
+/** Recordatorio al que no respondió el primer correo. `n` 1 o 2. Corto, en el mismo hilo. */
+export function seguimientoFrioBase(n: number, lead: Pick<Lead, "producto" | "linea">): string {
+  const producto = lead.producto || "su producto";
+  const [una, la] = lead.linea === "landing" ? ["una muestra de página", "la muestra de página"] : ["un video de muestra", "el video de muestra"];
+  const cuerpos = [
+    `Hola de nuevo.\n\nSolo quería confirmar si vieron mi correo anterior: la propuesta sigue en pie, ${una} para ${producto}, sin costo y sin compromiso.\n\nSi les interesa, respondan «sí» y lo preparo.`,
+    `Hola.\n\nEste es mi último correo sobre ${la} para ${producto}, para no llenarles la bandeja. Si más adelante quieren verlo, basta con responder a este mensaje.`,
+  ];
+  return `${cuerpos[Math.min(2, Math.max(1, n)) - 1]}\n\n${FIRMA}`;
 }
 
 // ---------------------------------------------------------- clasificación ----
@@ -517,7 +610,7 @@ export function soloLoEscrito(texto: string): string {
 export function clasificarPorReglas(
   textoCrudo: string,
   remitente: string,
-): { clasificacion: Clasificacion; baja: boolean; otroCorreo: string | null } | null {
+): { clasificacion: Clasificacion; baja: boolean; otroCorreo: string | null; pregunta?: boolean } | null {
   const escrito = soloLoEscrito(textoCrudo);
   const t = sinAcentos(escrito).toLowerCase().replace(/[¡!¿?.,;:«»"“”']+/g, " ").replace(/\s+/g, " ").trim();
   if (!t) return null;
@@ -535,12 +628,17 @@ export function clasificarPorReglas(
   if (/^(no|no gracias|no thanks|no thank you|nop|nope)( gracias)?$/.test(t) || /\bno (me|nos|estamos|estoy) interesa(dos|do|da|n)?\b|\bno (estamos|estoy) interesad|\bno gracias\b|\bnot interested\b|\bno por ahora\b|\bpor ahora no\b/.test(t)) {
     return { clasificacion: "no_interesado", baja: true, otroCorreo: null };
   }
+  // Una pregunta abierta nunca se contesta sola: va a la cola con un borrador para que una persona lo apruebe.
+  const pregunta =
+    /[?¿]/.test(escrito) ||
+    /\b(cuanto (cuesta|vale|cobra|cobran|sale)|que precio|precios?|tarifas?|cuanto seria|como funciona|que incluye|en que consiste|quien(es)? (eres|son)|de donde (son|eres|sacaste|sacaron)|cuentame mas|mas informacion|mas info|podrias explicar)\b/.test(t);
   if (
-    /^(si|claro|dale|ok|okay|listo|perfecto|de una|adelante|hagamoslo|va|bueno|genial|yes|sure|por supuesto|me interesa|nos interesa|si por favor|si claro|si gracias)\b/.test(t) ||
-    /\b(me interesa|nos interesa|si quiero|si queremos|envi[ae]n?(me|lo|nos|melo|noslo)|mand[ae]n?(me|lo|nos|melo)|quiero (el|la|ver)|queremos (el|la|ver)|cuentame mas|mas informacion|im interested)\b/.test(t)
+    /^(si|claro|dale|ok|okay|listo|perfecto|de una|adelante|hagamoslo|va|vale|bueno|genial|yes|sure|por supuesto|me interesa|nos interesa|si por favor|si claro|si gracias)\b/.test(t) ||
+    /\b(me interesa|nos interesa|si quiero|si queremos|envi[ae]n?(me|lo|nos|melo|noslo)|mand[ae]n?(me|lo|nos|melo)|quiero (el|la|ver)|queremos (el|la|ver)|im interested)\b/.test(t)
   ) {
-    return { clasificacion: "interesado", baja: false, otroCorreo: null };
+    return { clasificacion: "interesado", baja: false, otroCorreo: null, pregunta };
   }
+  if (pregunta) return { clasificacion: "pregunta", baja: false, otroCorreo: null, pregunta: true };
   return null;
 }
 
@@ -674,13 +772,19 @@ export function proximoSeguimiento(c: CorreosProspecto, paisDelLead: string): { 
 // --------------------------------------------------------------- resumen ----
 
 export type ConfigCorreo = {
+  /** Pausa total de emergencia: no sale ningún correo, no se busca y no se prepara ninguna entrega. La bandeja se sigue leyendo (las bajas no esperan). */
   pausaGeneral: boolean;
+  /** Quién pulsó la pausa o la quitó, y cuándo. */
+  pausaInfo: { por: string; fecha: string } | null;
+  /** La prospección automática (búsqueda, topes, entrega, hoja). */
+  auto: ConfigAuto;
   exclusiones: string[];
   /** Día (Bogotá) del primer envío real de cada cuenta: de ahí cuenta el calentamiento. */
   inicio: Record<Linea, string | null>;
 };
 
-export type UsoCuenta = { linea: Linea; tope: number; semana: number; usados: number };
+/** `tope`: correos totales del día por calentamiento. `topeNuevos`: de esos, cuántos pueden ser primer contacto. */
+export type UsoCuenta = { linea: Linea; tope: number; semana: number; usados: number; nuevos: number; topeNuevos: number };
 
 export type ResumenCampana = {
   campana: Campana;

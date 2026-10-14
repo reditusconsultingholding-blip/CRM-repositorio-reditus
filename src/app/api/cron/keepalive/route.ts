@@ -4,6 +4,7 @@ import { notify } from "@/lib/notify";
 import { syncCalendlyBookings } from "@/lib/calendly";
 import { sendWeeklyCeoInsight } from "@/lib/ceo-insight";
 import { tareasDeCronSeguimiento } from "@/lib/seguimiento-server";
+import { avisoServidorCaido } from "@/lib/prospeccion-auto-server";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,19 @@ export async function GET(request: NextRequest) {
       }
       tasks.push("recordatorio_costos");
     }
+  }
+
+  // Prospección automática: si está encendida y el servidor lleva horas sin
+  // dar señal, se le avisa al CEO (el ecosistema no debe quedarse parado sin
+  // que nadie se entere).
+  try {
+    const aviso = await avisoServidorCaido(now);
+    if (aviso) {
+      for (const id of ceoIds) await notify(supabase, id, "recomendacion_ceo", aviso, "/prospectos/control");
+      tasks.push("prospeccion_sin_senal");
+    }
+  } catch {
+    /* el aviso es mejor esfuerzo */
   }
 
   // Lunes: avisar que el checklist de nómina de la semana pasada está listo.

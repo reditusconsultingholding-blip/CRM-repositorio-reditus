@@ -1,5 +1,5 @@
 {
-  "_leeme": "Ajustes del trabajador de prospección. Las claves NO van aquí: van en el archivo .env. Los campos que empiezan por _ son notas. El tope diario, el calentamiento y el horario los decide el CRM (src/lib/prospeccion-correo.ts), no este archivo.",
+  "_leeme": "Ajustes del trabajador de prospección. Las claves NO van aquí: van en el archivo .env. Los campos que empiezan por _ son notas. Lo que decide el negocio (tope diario, calentamiento, horario, cada cuántas horas se busca, cuánto se puede gastar, pausa total) NO está aquí: se cambia en el CRM, en Prospectos → Automático.",
   "esperaEntreEnviosSegundos": {
     "_nota": "Pausa al azar entre un correo y el siguiente de la MISMA cuenta. 150–300 = de 2,5 a 5 minutos.",
     "min": 150,
@@ -10,6 +10,23 @@
   "leerBandejaSegundos": 180,
   "_leerBandejaSegundos": "Cada cuánto revisa la bandeja de entrada de cada cuenta.",
   "cicloSegundos": 20,
+  "latidoSegundos": 60,
+  "_latidoSegundos": "Cada cuánto le avisa al CRM que sigue vivo y se lleva las órdenes del panel (pausa, interruptores).",
+  "tareasSegundos": 300,
+  "_tareasSegundos": "Cada cuánto el latido le pide al CRM preparar las entregas de videos ya aprobados.",
+  "consultaBusquedaSegundos": 600,
+  "_consultaBusquedaSegundos": "Cada cuánto pregunta si ya toca buscar. El CRM solo dice que sí cada N horas (6 por defecto) y si queda presupuesto.",
+  "hojaSegundos": 900,
+  "_hojaSegundos": "Cada cuánto le pide al CRM sincronizar la hoja de prospectos.",
+  "horaTareaDiaria": 6,
+  "_horaTareaDiaria": "Hora del servidor a la que hace la limpieza diaria (archivos de simulación viejos) y vuelve a comprobar el acceso a Gmail.",
+  "busqueda": {
+    "maxTiendasPorCorrida": 40,
+    "_maxTiendasPorCorrida": "Tiendas nuevas que analiza como máximo en una búsqueda (leer cada una toma unos segundos).",
+    "pausaEntrePaginasMs": 1500,
+    "_pausaEntrePaginasMs": "Pausa entre una página y otra de la misma tienda. Con menos, Shopify bloquea (429).",
+    "esperaApifySegundos": 300
+  },
   "primeraLecturaDias": 2,
   "_primeraLecturaDias": "La primera vez que lee una bandeja mira solo los mensajes de estos últimos días.",
   "maxBytesMensaje": 2000000,
