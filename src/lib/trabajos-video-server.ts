@@ -16,6 +16,7 @@ import {
   ETAPA_LABELS,
   EXT_IMAGEN,
   MAX_REPORTES,
+  type ReporteEscena,
   MAX_TOMAS_ANALISIS,
   escenasSinReportar,
   type EtapaTrabajo,
@@ -713,6 +714,46 @@ export async function tomarTrabajo(admin: Admin, trabajador: string): Promise<Re
   });
 }
 
+// ---- candado por trabajo ----
+// El trabajador reporta varias escenas a la vez (cada una: pedir subida → subir → progreso) y cada
+// petición cae en una instancia distinta. Todas leían el JSON del trabajo, lo cambiaban y lo
+// escribían ENTERO: la que escribía de última borraba los reportes de las otras (así se perdieron
+// escenas ya cobradas). Ahora cada lectura-cambio-escritura del trabajo corre con su candado:
+// crear un archivo SIN reemplazar es una sola operación en Storage y solo a una le funciona.
+const rutaCandadoTrabajo = (id: string) => `${RAIZ_COLA}-candados/t-${id}.json`;
+const CANDADO_TRABAJO_VENCE_MS = 60_000;
+const CANDADO_TRABAJO_ESPERA_MS = 25_000;
+
+/** Corre `fn` con el candado del trabajo. Espera hasta ~25 s; si no lo consigue devuelve null (se responde 503: el trabajador reintenta). */
+async function conCandadoTrabajo<R>(admin: Admin, id: string, fn: () => Promise<R>): Promise<R | null> {
+  const almacen = admin.storage.from(BUCKET_TRABAJOS);
+  const archivo = rutaCandadoTrabajo(id);
+  const fin = Date.now() + CANDADO_TRABAJO_ESPERA_MS;
+  for (let vuelta = 0; ; vuelta++) {
+    const { error } = await almacen.upload(archivo, JSON.stringify({ desde: new Date().toISOString() }), { contentType: "application/json", upsert: false });
+    if (!error) break;
+    // Un candado que nadie soltó (la función murió a medias) vence solo.
+    if (vuelta % 10 === 5) {
+      const { data } = await almacen.list(`${RAIZ_COLA}-candados`, { search: `t-${id}`, limit: 2 });
+      const viejo = (data ?? []).find((x) => x.name === `t-${id}.json`);
+      if (viejo && Date.now() - Date.parse(viejo.created_at ?? "") > CANDADO_TRABAJO_VENCE_MS) await almacen.remove([archivo]);
+    }
+    if (Date.now() >= fin) return null;
+    await new Promise((r) => setTimeout(r, 90 + Math.floor(Math.random() * 160)));
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      await almacen.remove([archivo]);
+    } catch {
+      /* si no se pudo soltar, vence solo */
+    }
+  }
+}
+
+const OCUPADO = "El trabajo está guardando otro reporte. No se guardó nada de este: reinténtalo en unos segundos.";
+
 /** Trae un trabajo en curso y comprueba que quien reporta es quien lo tomó. */
 async function enCursoDe(id: string, toma: unknown): Promise<RespuestaServidor<TrabajoVideo>> {
   if (!ID_TRABAJO.test(id)) return no(400, "Id de trabajo inválido.");
@@ -812,7 +853,45 @@ async function anotarEscenas(admin: Admin, t: TrabajoVideo, crudas: unknown[], i
   return salida;
 }
 
+/**
+ * Al cerrar un trabajo de imágenes o de clips: las escenas que nadie reportó pero cuyo archivo
+ * está en la carpeta del trabajo (`e{n}-imagen.*`, `e{n}-clip.mp4`) se dan por entregadas: ya se
+ * pagaron. Sus créditos: lo que falte entre el total del trabajo y lo que consta en los reportes,
+ * repartido entre ellas. Devuelve los números de escena adoptados. Modifica `t`.
+ */
+async function adoptarArchivos(admin: Admin, t: TrabajoVideo, iso: string): Promise<number[]> {
+  if (t.etapa !== "imagenes" && t.etapa !== "clips") return [];
+  const sin = escenasSinReportar(t);
+  if (!sin.length) return [];
+  const tipo: TipoPieza = t.etapa === "imagenes" ? "imagen" : "clip";
+  const exts = tipo === "clip" ? ["mp4"] : Object.keys(EXT_IMAGEN);
+  const almacen = admin.storage.from(BUCKET_VIDEOS_GENERADOS);
+  const { data } = await almacen.list(carpetaProyecto(t), { limit: 200 });
+  const nuevos: ReporteEscena[] = [];
+  for (const e of sin) {
+    const archivo = (data ?? []).find((o) => exts.some((ext) => o.name === `e${e.n}-${tipo}.${ext}`) && Number((o.metadata as { size?: number } | null)?.size ?? 0) >= 200);
+    if (!archivo) continue;
+    const rutaArchivo = `${carpetaProyecto(t)}/${archivo.name}`;
+    nuevos.push({ n: e.n, tipo, creditos: 0, segundos: tipo === "clip" ? e.duracion : 0, fecha: iso, url: almacen.getPublicUrl(rutaArchivo).data.publicUrl, ruta: rutaArchivo, error: "" });
+  }
+  if (!nuevos.length) return [];
+  const consta = t.reportes.reduce((a, r) => a + r.creditos, 0);
+  const cadaUna = Math.round((Math.max(0, t.creditos - consta) / nuevos.length) * 100) / 100;
+  for (const r of nuevos) r.creditos = cadaUna;
+  t.reportes = [...t.reportes, ...nuevos].slice(-MAX_REPORTES);
+  return nuevos.map((r) => r.n);
+}
+
 export async function reportarProgreso(
+  admin: Admin,
+  id: string,
+  cuerpo: Record<string, unknown>,
+): Promise<RespuestaServidor<{ estado: EstadoTrabajo; escenas?: EscenaRecibida[] }>> {
+  if (!ID_TRABAJO.test(id)) return no(400, "Id de trabajo inválido.");
+  return (await conCandadoTrabajo(admin, id, () => progresoConCandado(admin, id, cuerpo))) ?? no(503, OCUPADO);
+}
+
+async function progresoConCandado(
   admin: Admin,
   id: string,
   cuerpo: Record<string, unknown>,
@@ -865,6 +944,21 @@ export async function recibirResultado(
   id: string,
   cuerpo: Record<string, unknown>,
 ): Promise<RespuestaServidor<{ subida: SubidaFirmada } | ResultadoRecibido>> {
+  if (!ID_TRABAJO.test(id)) return no(400, "Id de trabajo inválido.");
+  // Pedir una URL de subida solo LEE el trabajo: no escribe nada, así que no necesita turno
+  // (antes guardaba el latido con una copia vieja del trabajo y borraba reportes de otras escenas).
+  if (cuerpo.pedirSubida === true && cuerpo.etapa !== "analisis") {
+    const previo = await leerEn(CARPETAS.enCurso, id);
+    if (previo && previo.etapa !== "analisis") return resultadoConCandado(admin, id, cuerpo);
+  }
+  return (await conCandadoTrabajo(admin, id, () => resultadoConCandado(admin, id, cuerpo))) ?? no(503, OCUPADO);
+}
+
+async function resultadoConCandado(
+  admin: Admin,
+  id: string,
+  cuerpo: Record<string, unknown>,
+): Promise<RespuestaServidor<{ subida: SubidaFirmada } | ResultadoRecibido>> {
   const r = await enCursoDe(id, cuerpo.toma);
   if (!r.ok) {
     // Reintento de un resultado que ya había entrado: se responde lo mismo.
@@ -895,8 +989,6 @@ export async function recibirResultado(
     const destino = rutaPieza(t, n, tipo, ext);
     const { data, error } = await almacen.createSignedUploadUrl(destino, { upsert: true });
     if (error || !data) return no(500, `No se pudo preparar la subida: ${error?.message ?? "sin respuesta"}`);
-    t.latidoAt = new Date().toISOString();
-    await escribir(admin, CARPETAS.enCurso, t);
     return {
       ok: true,
       dato: {
@@ -930,6 +1022,7 @@ export async function recibirResultado(
     const creditos = numero(cuerpo.creditos);
     if (creditos !== null) t.creditos = Math.max(t.creditos, Math.round(creditos * 100) / 100);
     anotarGasto(t, cuerpo);
+    const adoptadas = await adoptarArchivos(admin, t, iso);
     const faltaron = escenasSinReportar(t).map((e) => e.n);
     const bien = t.reportes.filter((x) => !x.error).length;
     t.terminadoAt = iso;
@@ -937,7 +1030,7 @@ export async function recibirResultado(
     t.toma = null;
     t.progreso = null;
     t.motivo = "";
-    anotar(t, "listo", `${ETAPA_LABELS[t.etapa as EtapaTrabajo]}: ${bien} entregadas${faltaron.length ? `, ${faltaron.length} sin entregar` : ""}. Quedan por aprobar`, iso);
+    anotar(t, "listo", `${ETAPA_LABELS[t.etapa as EtapaTrabajo]}: ${bien} entregadas${adoptadas.length ? ` (${adoptadas.length} recuperadas del almacenamiento: escena ${adoptadas.join(", ")})` : ""}${faltaron.length ? `, ${faltaron.length} sin entregar` : ""}. Quedan por aprobar`, iso);
     const w = await escribir(admin, CARPETAS.enCurso, t);
     if (w.error) return no(500, w.error);
     await mover(admin, t.id, CARPETAS.enCurso, CARPETAS.listos);
@@ -955,8 +1048,6 @@ export async function recibirResultado(
   if (cuerpo.pedirSubida === true) {
     const { data, error } = await almacen.createSignedUploadUrl(esperada, { upsert: true });
     if (error || !data) return no(500, `No se pudo preparar la subida: ${error?.message ?? "sin respuesta"}`);
-    t.latidoAt = new Date().toISOString();
-    await escribir(admin, CARPETAS.enCurso, t);
     return {
       ok: true,
       dato: {
@@ -1104,6 +1195,15 @@ async function recibirAnalisis(admin: Admin, t: TrabajoVideo, cuerpo: Record<str
 }
 
 export async function reportarFallo(
+  admin: Admin,
+  id: string,
+  cuerpo: Record<string, unknown>,
+): Promise<RespuestaServidor<{ estado: EstadoTrabajo; intentos: number; maxIntentos: number; reintentaDesde: string | null }>> {
+  if (!ID_TRABAJO.test(id)) return no(400, "Id de trabajo inválido.");
+  return (await conCandadoTrabajo(admin, id, () => falloConCandado(admin, id, cuerpo))) ?? no(503, OCUPADO);
+}
+
+async function falloConCandado(
   admin: Admin,
   id: string,
   cuerpo: Record<string, unknown>,
