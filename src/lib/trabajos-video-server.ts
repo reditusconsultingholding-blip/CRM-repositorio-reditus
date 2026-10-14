@@ -470,7 +470,7 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     duracionObjetivo: etapa === "armado" ? duracionTotal(proyecto) : escenas.reduce((x, e) => x + e.duracion, 0),
     escenas: [],
     imagenesProducto: proyecto.contexto.fotos.slice(0, MAX_IMAGENES_PRODUCTO),
-    opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica, estiloSubtitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).subtitulos, ritmo: leerEdicion(proyecto.contexto.edicion, p.formato.slug).ritmo, estiloTitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).titulos ?? "caja" },
+    opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica, estiloSubtitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).subtitulos, ritmo: leerEdicion(proyecto.contexto.edicion, p.formato.slug).ritmo, estiloTitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).titulos ?? "caja", ...(cfg.captions ? { proveedorSubtitulos: "captions", plantillaCaptions: cfg.plantillaCaptions } : {}) },
     pedidoPor: p.quien,
     origen: "manual",
     // El cierre viaja completo: titular + detalle (la oferta en dos líneas) y el color de marca del botón.

@@ -83,6 +83,9 @@ export type OpcionesVideo = {
   ritmo?: string;
   /** Plantilla de los títulos de apoyo (caja, subrayado, etiqueta). */
   estiloTitulos?: string;
+  /** "captions" = el servidor pide los subtítulos a la API de Captions con `plantillaCaptions`. */
+  proveedorSubtitulos?: string;
+  plantillaCaptions?: string;
 };
 
 export const OPCIONES_VIDEO_BASE: OpcionesVideo = { subtitulos: true, voz: true, musica: null, modelo: null };
@@ -339,6 +342,8 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
       ...(txt(op.estiloSubtitulos, 20) ? { estiloSubtitulos: txt(op.estiloSubtitulos, 20) } : {}),
       ...(txt(op.ritmo, 20) ? { ritmo: txt(op.ritmo, 20) } : {}),
       ...(txt(op.estiloTitulos, 20) ? { estiloTitulos: txt(op.estiloTitulos, 20) } : {}),
+      ...(txt(op.proveedorSubtitulos, 20) ? { proveedorSubtitulos: txt(op.proveedorSubtitulos, 20) } : {}),
+      ...(txt(op.plantillaCaptions, 80) ? { plantillaCaptions: txt(op.plantillaCaptions, 80) } : {}),
     },
     etapa: (ETAPAS_TRABAJO as readonly string[]).includes(txt(o.etapa, 12)) ? (txt(o.etapa, 12) as EtapaTrabajo) : null,
     contexto: o.contexto ? leerContexto(o.contexto) : null,

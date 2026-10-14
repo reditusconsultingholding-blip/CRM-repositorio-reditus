@@ -29,6 +29,10 @@ export type ConfigVideos = {
   creditosPorProyecto: number | null;
   /** Gasto máximo en créditos por día (todos los proyectos); null = sin límite. */
   creditosPorDia: number | null;
+  /** Subtítulos con la API de Captions (si falla, el servidor usa las plantillas propias). */
+  captions: boolean;
+  /** Plantilla de Captions por nombre (p. ej. «Cove») o id ctpl_…; vacío = la del servidor. */
+  plantillaCaptions: string;
   actualizadoPor: string;
   actualizadoAt: string;
 };
@@ -44,6 +48,8 @@ export const CONFIG_VIDEOS_BASE: ConfigVideos = {
   intentosPorEscena: 3,
   creditosPorProyecto: null,
   creditosPorDia: null,
+  captions: false,
+  plantillaCaptions: "",
   actualizadoPor: "",
   actualizadoAt: "",
 };
@@ -66,6 +72,8 @@ export function leerConfigVideos(raw: unknown): ConfigVideos {
     intentosPorEscena: entero(o.intentosPorEscena, b.intentosPorEscena, 1, 6),
     creditosPorProyecto: limite(o.creditosPorProyecto),
     creditosPorDia: limite(o.creditosPorDia),
+    captions: o.captions === true,
+    plantillaCaptions: typeof o.plantillaCaptions === "string" ? o.plantillaCaptions.trim().slice(0, 80) : "",
     actualizadoPor: typeof o.actualizadoPor === "string" ? o.actualizadoPor.slice(0, 160) : "",
     actualizadoAt: typeof o.actualizadoAt === "string" ? o.actualizadoAt.slice(0, 40) : "",
   };
