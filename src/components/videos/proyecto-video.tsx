@@ -207,7 +207,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
   async function rehacerPlan() {
     const texto = "Se propone el plan de nuevo desde el guion. Las imágenes y clips de este plan se descartan (lo ya gastado sigue contando)." + (auto.activo ? " El modo automático está encendido: las imágenes se piden de inmediato." : "");
     if (!(await confirmar(texto, { titulo: "¿Proponer el plan de nuevo?", si: "Sí, proponer de nuevo" }))) return;
-    if (await correr("plan", () => crearProyecto(id, { fotos: fotos.length ? fotos : proyecto.contexto.fotos, ficha, reemplazar: true, directo: auto.activo }), "Plan propuesto de nuevo")) setSerie((s) => s + 1);
+    if (await correr("rehacer", () => crearProyecto(id, { fotos: fotos.length ? fotos : proyecto.contexto.fotos, ficha, reemplazar: true, directo: auto.activo }), "Plan propuesto de nuevo")) setSerie((s) => s + 1);
   }
 
   async function aprobarFinal() {
@@ -606,6 +606,7 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
             return ok;
           }}
           onRehacer={() => void rehacerPlan()}
+          rehaciendo={accion === "rehacer"}
         />
       )}
       {(paso ? paso === 4 && !!final.url : vista === "corregir") && (

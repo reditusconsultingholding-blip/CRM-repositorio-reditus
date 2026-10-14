@@ -104,7 +104,9 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
   }
 
   async function refrescar() {
+    setOcupado("refrescar");
     const r = await videosDeProspectos();
+    setOcupado(null);
     if (!("error" in r)) setFilas(r.filas);
   }
 
@@ -140,12 +142,12 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
         </CardDescription>
         {!soloUno && (
           <CardAction className="flex gap-1">
-            <Button variant="ghost" size="sm" onClick={() => void refrescar()}>
-              Actualizar
+            <Button variant="ghost" size="sm" disabled={ocupado === "refrescar"} onClick={() => void refrescar()}>
+              {ocupado === "refrescar" ? "Actualizando…" : "Actualizar"}
             </Button>
             {esCeo && (
               <Button variant="outline" size="sm" disabled={!!ocupado} onClick={() => void ultimos()}>
-                <Play /> Generar ahora para los últimos 3 prospectos
+                <Play /> {ocupado === "ultimos" ? "Agendando…" : "Generar ahora para los últimos 3 prospectos"}
               </Button>
             )}
           </CardAction>
@@ -186,8 +188,8 @@ export function VideosProspectos({ filas: iniciales, esCeo, pideAprobacion, solo
                 (esCeo ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">¿Hacer video para este prospecto?</span>
-                    <Button size="sm" disabled={!!ocupado} onClick={() => void decidir(c.id, true)}>
-                      <Check /> Sí
+                    <Button size="sm" disabled={!!ocupado} aria-busy={ocupado === c.id} onClick={() => void decidir(c.id, true)}>
+                      <Check /> {ocupado === c.id ? "Guardando…" : "Sí"}
                     </Button>
                     <Button variant="outline" size="sm" disabled={!!ocupado} onClick={() => void decidir(c.id, false)}>
                       <X /> No

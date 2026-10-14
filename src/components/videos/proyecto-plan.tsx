@@ -51,6 +51,8 @@ type Props = {
   ocupado: boolean;
   onGuardar: (escenas: EscenaProyecto[], opciones: OpcionesProyecto, extra: { vozProyecto: VozProyecto; tonoMusica: TonoMusica }) => Promise<boolean>;
   onRehacer: () => void;
+  /** Se está proponiendo el plan de nuevo (la IA tarda): el botón lo dice. */
+  rehaciendo?: boolean;
 };
 
 /**
@@ -58,7 +60,7 @@ type Props = {
  * (generada, foto real animada o cierre), qué foto usa y en qué orden van. El
  * estimado de lo que se va a generar se recalcula mientras se edita.
  */
-export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer }: Props) {
+export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer, rehaciendo }: Props) {
   const [escenas, setEscenas] = useState<Borrador[]>(() => aBorrador(proyecto.escenas));
   const [opciones, setOpciones] = useState<OpcionesProyecto>(proyecto.opciones);
   const [vozP, setVozP] = useState<VozProyecto>(proyecto.contexto.voz);
@@ -428,7 +430,7 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
           </Button>
         )}
         <Button variant="ghost" className="ml-auto" disabled={quieto} onClick={onRehacer}>
-          Proponer el plan de nuevo
+          {rehaciendo ? "Proponiendo el plan…" : "Proponer el plan de nuevo"}
         </Button>
       </div>
       {sucio && <p className={cn(ETIQUETA, "normal-case tracking-normal")}>Hay cambios sin guardar en el plan: guárdalos antes de generar.</p>}

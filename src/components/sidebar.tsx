@@ -86,7 +86,18 @@ function SubCreativos({ enSeccion }: { enSeccion: boolean }) {
   return (
     <>
       {VISTAS_CREATIVOS.filter((v) => v.enMenu).map((v) => (
-        <Link key={v.clave} href={`/videos?vista=${v.clave}`} aria-current={actual === v.clave ? "page" : undefined} className={SUBENLACE}>
+        <Link
+          key={v.clave}
+          href={`/videos?vista=${v.clave}`}
+          aria-current={actual === v.clave ? "page" : undefined}
+          className={SUBENLACE}
+          onClick={(e) => {
+            // Ya dentro de Creativos la pantalla tiene todo cargado: solo cambia la dirección (sin ir al servidor).
+            if (!enSeccion || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            window.history.pushState(null, "", `/videos?vista=${v.clave}`);
+          }}
+        >
           {v.nombre}
         </Link>
       ))}

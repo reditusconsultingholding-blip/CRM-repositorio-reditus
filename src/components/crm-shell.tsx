@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { AppSwitcherNav } from "@/components/app-switcher";
 import { NotificationBell } from "@/components/notification-bell";
 import { BotonTema, TemaGuardia } from "@/components/tema";
+import { CargadorDeNavegacion } from "@/components/cargador-seccion";
 
 // Armazón del CRM: barra superior de cristal (dónde estás, selector
 // CRM/Pulso, tema y avisos), barra lateral de noche y el área de trabajo
@@ -101,7 +102,11 @@ export function CrmShell({
           />
         )}
 
-        <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 p-4 md:p-6">{children}</main>
+        <main className="relative mx-auto w-full min-w-0 max-w-6xl flex-1 p-4 md:p-6">
+          {children}
+          {/* Al hacer clic en cualquier enlace: el aro con el logo, aquí, hasta que la página cambie. */}
+          <CargadorDeNavegacion />
+        </main>
       </div>
     </div>
   );
