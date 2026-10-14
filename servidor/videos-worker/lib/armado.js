@@ -30,9 +30,10 @@ const efectos = require("./efectos");
 const captions = require("./captions");
 const voces = require("./voces");
 const { tituloDeEscena, elegirEstiloTitulos } = require("./titulos");
+const lectura = require("./lectura");
 
 // Si cambia la forma de codificar un segmento, se sube este número: invalida la caché.
-const VERSION = 5;
+const VERSION = 6;
 const MOVIMIENTOS = ["acercar", "alejar", "paneo-izq", "paneo-der", "quieto"];
 const redondo = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 const BITEXACTO = ["-map_metadata", "-1", "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact"];
@@ -126,6 +127,19 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
   const contexto = trabajo.contexto || {};
   const cierre = { ...(trabajo.cierre && typeof trabajo.cierre === "object" ? trabajo.cierre : {}), ...(contexto.cierre || {}) };
   const opciones = trabajo.opciones || {};
+  // Con narración, el audio del clip queda de ambiente muy bajo (−38 LUFS). Pero si el clip trae VOZ
+  // (proyectos viejos con diálogo), a ese volumen se oye un murmullo debajo del narrador: se silencia.
+  //   opciones.audioClip: "silencio" (siempre callado) | "ambiente" (siempre de fondo) | "auto" (lo normal)
+  const audioClip = /^sil/i.test(String(opciones.audioClip || "")) ? "silencio" : /^amb/i.test(String(opciones.audioClip || "")) ? "ambiente" : N.silenciarClipConVoz === false ? "ambiente" : "auto";
+  const clipsCallados = new Set();
+  const ambienteSinVoz = async (n, fuente) => {
+    if (audioClip === "ambiente") return true;
+    if (audioClip === "silencio" || (await ff.detectarVoz(fuente, carpeta)).voz) {
+      clipsCallados.add(n);
+      return false;
+    }
+    return true;
+  };
   const conSubtitulos = opciones.subtitulos !== false;
   // La plantilla y las transiciones salen del PRODUCTO (no del guion): así las variaciones de un proyecto
   // comparten estilo con el original y sus escenas iguales no se recodifican.
@@ -350,7 +364,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
           } else if (dicho) sinNarrar.push(escena.n);
           if (conAudio && N.ambiente !== false) {
             medidaClip = await ff.medirAudio(fuente, carpeta, { ruidoDb: H.ruidoDb, silencioMinimo: H.silencioMinimo });
-            ambiente = !medidaClip.mudo;
+            ambiente = !medidaClip.mudo && (await ambienteSinVoz(escena.n, fuente));
           }
         }
       } else if (escena._corte) {
@@ -407,7 +421,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
         // El audio del clip (sin diálogo: solo ambiente) queda de fondo, muy bajo.
         if (conAudio && N.ambiente !== false) {
           medidaClip = await ff.medirAudio(fuente, carpeta, { ruidoDb: H.ruidoDb, silencioMinimo: H.silencioMinimo });
-          ambiente = !medidaClip.mudo;
+          ambiente = !medidaClip.mudo && (await ambienteSinVoz(escena.n, fuente));
         }
       }
     } else {
@@ -648,6 +662,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
   if (!algunaVoz && modo !== "ninguno" && escenas.some((e) => String(e.voz || "").trim())) avisos.unshift("OJO: este video salió SIN VOZ en todas sus escenas.");
   if (modo === "ninguno" && escenas.some((e) => String(e.voz || "").trim())) avisos.push(opciones.voz === false ? "Se pidió sin voz." : "Este formato está configurado sin audio.");
   if (!hayCierre && (cierre.oferta || cierre.llamadoALaAccion || cierre.titular)) avisos.push("El proyecto no tiene escena de cierre: la tarjeta con la oferta no se dibujó.");
+  if (clipsCallados.size) avisos.push(audioClip === "silencio" ? "Audio de los clips en silencio (opciones.audioClip): solo se oye la narración y la música." : `${clipsCallados.size === 1 ? "El clip de la escena" : "Los clips de las escenas"} ${[...clipsCallados].sort((x, y) => x - y).join(", ")} ${clipsCallados.size === 1 ? "traía" : "traían"} voz: se dejó en silencio para que no se oiga un murmullo debajo de la narración.`);
   if (conSubtitulos && !escenas.some((e) => String(e.voz || "").trim())) avisos.push("Las escenas no traen frases habladas: el video sale sin subtítulos.");
   if (modo === "elevenlabs" && vozElegida) avisos.push(`Voz: ${vozElegida.nombre || vozElegida.id} · ${vozElegida.acento} (ElevenLabs, ${vozElegida.origen})`, `Narración de ElevenLabs${stats.caracteresVoz ? `: ${stats.caracteresVoz} caracteres nuevos` : " (ya estaba hecha: no se cobró de nuevo)"}.`);
   if (sinTiempos) avisos.push("La voz no devolvió el tiempo de cada palabra: los subtítulos van con tiempos estimados.");
@@ -667,6 +682,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
   // -------------------------------------- 2b. subtítulos de Captions ----
   let piezas = segmentos.map((x) => x.archivo);
   let infoCaptions = null;
+  let transcripcionCaptions = _interno.transcripcionCaptions || null;
   if (usarCaptions && segmentos.some((x) => x.tipo !== "cierre")) {
     try {
       const C = cfg.config.captions || {};
@@ -705,7 +721,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
             /* primera vez */
           }
           const yaSubtitulado = existe(crudo) && Math.abs((await ff.duracion(crudo, carpeta)) - duraCuerpo) < 0.6;
-          const rc = yaSubtitulado ? { id: null, costo: null, yaEstaba: true } : await captions.subtitular({ cfg, registro, archivo: enCarpeta(sinSub), plantillaId: plantilla.id, destino: enCarpeta(`tmp-${crudo}`), memoria, recordar: (m) => (m ? fs.writeFileSync(enCarpeta(memo), JSON.stringify(m)) : fs.rmSync(enCarpeta(memo), { force: true })), latir });
+          const rc = yaSubtitulado ? { id: null, costo: null, yaEstaba: true, segundos: null } : await captions.subtitular({ cfg, registro, archivo: enCarpeta(sinSub), plantillaId: plantilla.id, destino: enCarpeta(`tmp-${crudo}`), memoria, recordar: (m) => (m ? fs.writeFileSync(enCarpeta(memo), JSON.stringify(m)) : fs.rmSync(enCarpeta(memo), { force: true })), latir });
           if (!yaSubtitulado) fs.renameSync(enCarpeta(`tmp-${crudo}`), enCarpeta(crudo));
           // Los títulos de apoyo se pintan AQUÍ, por nuestro lado, encima de lo que devolvió Captions.
           let pintar = "";
@@ -726,21 +742,65 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
           );
           if (Math.abs((await ff.duracion(`tmp-${listo}`, carpeta)) - duraCuerpo) > 0.6) throw new Error("el video que devolvió Captions no dura lo mismo que el que se mandó");
           fs.renameSync(enCarpeta(`tmp-${listo}`), enCarpeta(listo));
-          infoCaptions = { plantilla: plantilla.nombre, plantillaId: plantilla.id, trabajo: rc.id, costo: rc.costo, yaEstaba: !!rc.yaEstaba };
+          infoCaptions = { plantilla: plantilla.nombre, plantillaId: plantilla.id, trabajo: rc.id, costo: rc.costo, yaEstaba: !!rc.yaEstaba, segundos: rc.segundos };
         } finally {
           for (const f of [sinSub, `tmp-${crudo}`, `lista-${idCap}.txt`, `tmp-${listo}`]) fs.rmSync(enCarpeta(f), { force: true });
         }
       });
       usados.add(listo);
       if (existe(crudo)) usados.add(crudo);
-      if (!infoCaptions) infoCaptions = { plantilla: plantilla.nombre, plantillaId: plantilla.id, trabajo: null, costo: null, yaEstaba: true };
+      if (!infoCaptions) infoCaptions = { plantilla: plantilla.nombre, plantillaId: plantilla.id, trabajo: null, costo: null, yaEstaba: true, segundos: null };
+      // ¿Escribió bien la marca? Su API no acepta vocabulario ni devuelve el texto: se LEE el video (lib/lectura.js).
+      const dichoDe = (s) => (s.tipo === "cierre" || String(s.n).startsWith("apertura-") ? "" : String((escenas.find((e) => e.n === s.n) || {}).voz || ""));
+      const guion = cuerpo.map(dichoDe).join(" ");
+      const nombres = [contexto.producto, contexto.marca, contexto.nombreMarca, trabajo.producto, (contexto.cliente && contexto.cliente.marca) || ""].filter((x) => typeof x === "string" && x.trim());
+      const palabras = lectura.palabrasDeMarca(nombres, guion);
+      const memoLectura = `capx-${idEnvio}-${huella("lectura-v1", palabras, guion)}.lectura.json`;
+      if (C.revisarMarca !== false) {
+        let lec = null;
+        try {
+          lec = JSON.parse(fs.readFileSync(enCarpeta(memoLectura), "utf8"));
+        } catch {
+          /* todavía no se ha leído */
+        }
+        if (!lec && existe(crudo)) {
+          // Cada 0,25 s en las escenas donde se dice la marca; cada segundo en el resto (para la lectura del CRM).
+          const momentos = [];
+          for (const s of cuerpo) {
+            const conMarca = palabras.length && lectura.palabrasDeMarca(nombres, dichoDe(s)).length;
+            const paso = conMarca ? 0.25 : 1;
+            for (let t = s.inicio + Math.min(0.12, s.dura / 4); t < s.inicio + s.dura - 0.05; t += paso) momentos.push(redondo(t, 2));
+          }
+          await latir("Revisando lo que escribió Captions");
+          try {
+            const leido = await lectura.leerVideo({ ff, carpeta, video: crudo, momentos, base: `lec-${idEnvio}` });
+            const marcas = palabras.length ? lectura.revisarMarcas(leido.lecturas, palabras, guion) : [];
+            lec = { transcripcion: leido.transcripcion, marcas, leidas: momentos.length };
+          } catch (e) {
+            lec = { transcripcion: null, marcas: [], sinOcr: true, motivo: registro.limpiar(e.message || String(e)).slice(0, 160) };
+          }
+          fs.writeFileSync(enCarpeta(memoLectura), JSON.stringify(lec));
+        }
+        if (lec) {
+          usados.add(memoLectura);
+          transcripcionCaptions = lec.transcripcion || null;
+          const malas = (lec.marcas || []).filter((m) => m.malEscrita);
+          if (malas.length && C.respaldoSiMarcaMal !== false) {
+            const como = malas.map((m) => `«${Object.keys(m.mal).sort((a, b) => m.mal[b] - m.mal[a])[0]}» en vez de «${m.palabra}»`).join(", ");
+            throw Object.assign(new Error(`Captions escribió mal la marca (${como})`), { marcaMal: como, transcripcionCaptions });
+          }
+          if (lec.sinOcr) avisos.push(`No se pudo comprobar cómo escribió Captions la marca (${lec.motivo || "sin OCR en este equipo"}).`);
+          else if ((lec.marcas || []).length) avisos.push(`Captions escribió bien la marca (${lec.marcas.map((m) => m.palabra).join(", ")}).`);
+        }
+      }
       piezas = [listo, ...cola.map((x) => x.archivo)];
-      avisos.push(`Subtítulos hechos por Captions, plantilla «${plantilla.nombre}»${infoCaptions.yaEstaba ? " (ya estaban: no se mandó de nuevo)" : ""}${infoCaptions.costo !== null ? ` · costo informado: ${infoCaptions.costo}` : ""}.`);
+      avisos.push(`Subtítulos hechos por Captions, plantilla «${plantilla.nombre}»${infoCaptions.yaEstaba ? " (ya estaban: no se mandó de nuevo)" : infoCaptions.segundos !== null ? ` (tardó ${Math.round(infoCaptions.segundos)} s)` : ""}${infoCaptions.costo !== null ? ` · costo informado: ${infoCaptions.costo}` : ""}.`);
     } catch (e) {
       // Respaldo: se arma otra vez con las plantillas propias. Lo ya hecho (voz, clips, cierre) se reutiliza.
       const motivo = registro.limpiar(e.message || String(e)).slice(0, 220);
       registro.aviso(`captions: no se pudo (${motivo}); se arma con las plantillas propias`);
-      return armar({ cfg, ff, registro, trabajo, carpeta, latir, conCerrojo, _interno: { sinCaptions: true, avisoCaptions: `Los subtítulos de Captions no se pudieron hacer (${motivo}): se usaron las plantillas propias.` } });
+      const avisoCaptions = e.marcaMal ? `Captions escribió mal la marca (${e.marcaMal}): se usaron los subtítulos propios.` : `Los subtítulos de Captions no se pudieron hacer (${motivo}): se usaron las plantillas propias.`;
+      return armar({ cfg, ff, registro, trabajo, carpeta, latir, conCerrojo, _interno: { sinCaptions: true, avisoCaptions, transcripcionCaptions: e.transcripcionCaptions || transcripcionCaptions } });
     }
   }
 
@@ -795,7 +855,7 @@ async function armar({ cfg, ff, registro, trabajo, carpeta, latir = async () => 
   registro.info(
     `Armado de ${trabajo.guionId || trabajo.id}: ${segmentos.length} escenas, ${redondo(duracion, 1)} s de video en ${segundos} s · descargas ${stats.descargas} (ya en disco ${stats.reutilizados}) · escenas codificadas ${stats.segmentosHechos} (reutilizadas ${stats.segmentosReutilizados})${stats.finalReutilizado ? " · final sin cambios" : ""}${pista ? " · con música" : ""} · subtítulos «${estiloSub}»${modo === "elevenlabs" ? ` · narración (${stats.caracteresVoz} caracteres nuevos)` : ""}`,
   );
-  return { archivo: enCarpeta(final), duracion, sinVoz: !algunaVoz, avisos, stats, segundos, cierres, segmentos, modo, conMusica: !!pista, tonoMusica, sinAudio, sinLocucion, estiloSubtitulos: infoCaptions ? `captions:${infoCaptions.plantilla}` : estiloSub, subtitulosPuestos: !!infoCaptions || segmentos.some((x) => x.subtitulo), estiloTitulos: estiloTit, titulosDeApoyo: segmentos.filter((x) => x.titulo).length, voz: vozElegida, captions: infoCaptions, transiciones, cortesAlGolpe, golpesDeLaMusica: ritmoMusica ? ritmoMusica.golpes.length : 0, caracteresNarrados: stats.caracteresVoz };
+  return { archivo: enCarpeta(final), duracion, sinVoz: !algunaVoz, avisos, stats, segundos, cierres, segmentos, modo, conMusica: !!pista, tonoMusica, sinAudio, sinLocucion, estiloSubtitulos: infoCaptions ? `captions:${infoCaptions.plantilla}` : estiloSub, subtitulosPuestos: !!infoCaptions || segmentos.some((x) => x.subtitulo), transcripcionCaptions, captionsSegundos: infoCaptions ? infoCaptions.segundos : null, audioClip, clipsCallados: [...clipsCallados], estiloTitulos: estiloTit, titulosDeApoyo: segmentos.filter((x) => x.titulo).length, voz: vozElegida, captions: infoCaptions, transiciones, cortesAlGolpe, golpesDeLaMusica: ritmoMusica ? ritmoMusica.golpes.length : 0, caracteresNarrados: stats.caracteresVoz };
 }
 
 module.exports = { armar, modoAudio, movimiento, filtroLienzo, asegurarFuentes };

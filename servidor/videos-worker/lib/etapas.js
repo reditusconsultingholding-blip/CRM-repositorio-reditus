@@ -22,6 +22,7 @@ const { armar } = require("./armado");
 const { analizar } = require("./analisis");
 const { decidirAudio, seHabla, audioYaEnPrompt } = require("./habla");
 const vozTts = require("./voz");
+const { controlDelClip } = require("./clipcontrol");
 
 const ETAPAS = ["imagenes", "clips", "armado", "analisis"];
 const dos = (n) => String(n).padStart(2, "0");
@@ -213,6 +214,7 @@ async function procesarEtapa(trabajo, deps) {
             duracion: redondo(r.duracion, 2),
             subtitulos: r.subtitulosPuestos,
             ...(fotogramas.length ? { fotogramas } : {}),
+            ...(r.transcripcionCaptions ? { transcripcionCaptions: r.transcripcionCaptions } : {}),
             proveedor: "armado",
             modelos: [],
             sinVoz: r.sinVoz,
@@ -389,6 +391,31 @@ async function procesarEtapa(trabajo, deps) {
 
         hecho++;
         const tSubida = Date.now();
+        // Fotogramas del clip y su estabilidad, para la auditoría automática del CRM (lib/clipcontrol.js).
+        // Son opcionales: si algo falla (o el CRM no acepta ese tipo de subida), el clip se reporta igual.
+        const CC = cfg.config.controlClips || {};
+        if (tipo === "clip" && !memo.fotogramas && CC.fotogramas !== 0 && CC.activo !== false) {
+          try {
+            const cc = await controlDelClip({ ff, carpeta, archivo, n, cortes: escena.cortes, maximo: Math.max(3, Math.min(5, Number(CC.fotogramas) || 5)), medir: CC.estabilidad !== false });
+            memo.estabilidad = cc.estabilidad;
+            const rutas = [];
+            try {
+              for (const [i, jpg] of cc.archivos.entries()) rutas.push(await crm.subir(trabajo, path.join(carpeta, jpg), { tipo: "fotograma-clip", escena: n, indice: i + 1 }));
+            } catch (e) {
+              if (e instanceof TrabajoSoltado) throw e;
+              rutas.length = 0;
+              registro.aviso(`Trabajo ${trabajo.id}: no se subieron los fotogramas del clip ${n} (${registro.limpiar(e.message || String(e)).slice(0, 140)}); el clip se reporta igual.`);
+            }
+            memo.fotogramas = rutas;
+            if (cc.estabilidad && cc.estabilidad.inestable) registro.aviso(`Trabajo ${trabajo.id}: el clip ${n} tiene saltos bruscos de imagen en ${cc.estabilidad.saltos.join(", ")} s (SSIM mínimo ${cc.estabilidad.ssimMinimo}).`);
+          } catch (e) {
+            if (e instanceof TrabajoSoltado) throw e;
+            memo.fotogramas = [];
+            registro.aviso(`Trabajo ${trabajo.id}: no se sacaron los fotogramas del clip ${n} (${registro.limpiar(e.message || String(e)).slice(0, 140)}).`);
+          }
+          estado.escenas[n] = memo;
+          guardar();
+        }
         // Subir y reportar. El CRM contesta por escena si la registró (`ok`); si dice que no
         // (el archivo aún no estaba, la ruta no era la entregada), se sube y se reporta UNA vez más.
         for (let vuelta = 1; ; vuelta++) {
@@ -398,7 +425,7 @@ async function procesarEtapa(trabajo, deps) {
             guardar();
           }
           const resp = await reportar(`Escena ${n}: ${tipo === "imagen" ? "imagen lista" : "clip listo"} (${hecho} de ${total})`, true, [
-            { n, tipo, ruta: memo.ruta, ...(memo.creditos !== null && memo.creditos !== undefined ? { creditos: memo.creditos } : {}), ...(tipo === "clip" ? { segundos: memo.segundos } : {}), ...(memo.aviso ? { aviso: memo.aviso } : {}) },
+            { n, tipo, ruta: memo.ruta, ...(memo.creditos !== null && memo.creditos !== undefined ? { creditos: memo.creditos } : {}), ...(tipo === "clip" ? { segundos: memo.segundos } : {}), ...(memo.aviso ? { aviso: memo.aviso } : {}), ...(memo.fotogramas && memo.fotogramas.length ? { fotogramas: memo.fotogramas } : {}), ...(memo.estabilidad ? { estabilidad: memo.estabilidad } : {}) },
           ]);
           const acuse = resp && Array.isArray(resp.escenas) ? resp.escenas.find((x) => x && x.n === n && x.tipo === tipo) : null;
           if (!acuse || acuse.ok !== false) break;

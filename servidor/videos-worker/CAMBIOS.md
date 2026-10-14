@@ -1,3 +1,10 @@
+# Cambios del 20-oct: auditoría de clips, marca en Captions y murmullo
+
+- **Fotogramas por clip** (`lib/clipcontrol.js`, nuevo): 3 a 5 JPG por clip subidos con `tipo: "fotograma-clip"` y una medida de estabilidad (SSIM entre cuadros, solo ffmpeg) en `progreso.escenas[]`. `config.json` → `controlClips`.
+- **Captions y la marca** (`lib/lectura.js` y `herramientas/ocr.ps1`, nuevos): su API no acepta vocabulario ni devuelve el texto, así que se lee su video con el OCR de Windows; si escribió mal la marca, salen los subtítulos propios. La lectura va al CRM en `transcripcionCaptions`. El aviso dice cuánto tardó Captions.
+- **Murmullo**: con narración, el clip que trae voz queda en silencio (`opciones.audioClip`: `silencio` | `ambiente` | `auto`). Detector local en `lib/ffmpeg.js` → `detectarVoz`.
+- El primer armado de cada proyecto vuelve a codificar sus escenas una vez.
+
 # Cambios del 19-oct: títulos de apoyo y voz automática por país
 
 - **Títulos de apoyo** (`lib/titulos.js`, nuevo): frase corta arriba y centrada, distinta de los subtítulos. `escena.tituloApoyo`, `opciones.estiloTitulos` (`caja`, `subrayado`, `etiqueta`). No van en el cierre. Con Captions se pintan después.

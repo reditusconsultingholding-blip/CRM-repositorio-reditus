@@ -160,7 +160,42 @@ function crear(cfg) {
     return r;
   }
 
-  return { ffmpeg, informe, medirAudio, duracion, tieneAudio, dimensiones, comprobar };
+  const voces = new Map();
+  /**
+   * ¿El audio tiene VOZ hablada? Sin servicios externos: el volumen de la banda de la voz (300–3400 Hz)
+   * cada 0,1 s. El habla sube y baja con cada sílaba (variación media ≥ 3,5 dB entre décimas); un
+   * ambiente (ruido, viento, tráfico, zumbido) es parejo (< 1 dB). Calibrado con voz sintética, voz con
+   * ruido, ruidos, tonos, música con pulso y clips reales con diálogo. Una música muy marcada puede
+   * pasar por voz: en ese caso se silencia un ambiente que sobraba, que es el error barato.
+   *   { voz, variacion, activos, banda }
+   */
+  async function detectarVoz(archivo, cwd) {
+    const clave = `${cwd || ""}|${archivo}`;
+    if (voces.has(clave)) return voces.get(clave);
+    const serie = async (filtro) => {
+      const t = await informe(["-i", archivo, "-vn", "-af", `aresample=16000,aformat=channel_layouts=mono,${filtro}asetnsamples=n=1600:p=0,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level`, "-f", "null", "-"], cwd);
+      return [...t.matchAll(/RMS_level=(-?[\d.]+|-inf)/g)].map((m) => (m[1] === "-inf" ? -120 : Number(m[1])));
+    };
+    let r = { voz: false, variacion: 0, activos: 0, banda: 0 };
+    try {
+      const b = await serie("highpass=f=300,lowpass=f=3400,");
+      const t = await serie("");
+      const act = b.map((_, i) => i).filter((i) => b[i] > -50);
+      let suma = 0;
+      let n = 0;
+      for (let i = 1; i < b.length; i++) if (b[i] > -50 || b[i - 1] > -50) (suma += Math.abs(b[i] - b[i - 1])), n++;
+      const variacion = n ? suma / n : 0;
+      const activos = b.length ? act.length / b.length : 0;
+      const banda = act.length ? act.reduce((a, i) => a + (b[i] - t[i]), 0) / act.length : -99;
+      r = { voz: activos >= 0.25 && variacion >= 3.5 && banda >= -7, variacion: Math.round(variacion * 100) / 100, activos: Math.round(activos * 100) / 100, banda: Math.round(banda * 10) / 10 };
+    } catch {
+      /* sin audio legible: sin voz */
+    }
+    voces.set(clave, r);
+    return r;
+  }
+
+  return { ffmpeg, informe, medirAudio, detectarVoz, duracion, tieneAudio, dimensiones, comprobar };
 }
 
 /** Ancho y alto de salida para una relación de aspecto («9:16», «16:9», «1:1»…). */

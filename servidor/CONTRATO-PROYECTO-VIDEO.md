@@ -402,3 +402,36 @@ Implementado lo del «19-oct (lado del CRM)», con estas precisiones (lo que dib
 13. Aviso en `avisos`: una línea que empieza por `Voz: `, con esta forma: **`Voz: Lucía · español de España (ElevenLabs, elegida automáticamente)`**. El paréntesis dice el origen: `elegida automáticamente`, `fijada a mano`, `config.json`, `la que pidió el proyecto` o `ELEVENLABS_VOICE_ID`. Si la voz no tiene nombre conocido (viene por `vozId` o por el `.env`), en su lugar va el ID. Aparte sigue el aviso «Narración de ElevenLabs: N caracteres nuevos».
 14. El armado con narración va por `fallo` solo en dos casos: sin clave («No se puede armar con narración: el servidor no tiene ELEVENLABS_API_KEY…») o si no se consigue ninguna voz porque ElevenLabs rechaza la clave o no responde («No se puede armar con narración: no se pudo conseguir una voz de ElevenLabs. …»). Nunca por faltar el ID de voz.
 15. En el servidor: `.\probar.ps1 -Voces ES [-Sexo mujer]` lista las 5 mejores con el enlace a su muestra; `-Fijar <id>` fija otra para ese país y sexo.
+
+### 20-oct-2026 · hecho en el trabajador: fotogramas por clip, marca en Captions, murmullo del clip
+
+Propuesta del trabajador para lo que pide el CRM (auditoría automática). Solo se AÑADE; ningún campo publicado cambia.
+
+**A. Fotogramas de cada clip (etapa `clips`)**
+
+1. Al terminar cada clip, antes de reportarlo, el trabajador sube de 3 a 5 JPG (768 px en su lado mayor): inicio (0,1 s), medio, final (0,15 s antes del fin) y, si la escena trae `cortes`, el centro de cada tramo (los que no caen a menos de 0,4 s de otro; máximo 5).
+2. Subida: `{ toma, pedirSubida: true, tipo: "fotograma-clip", escena: n, indice: 1..5 }` → la misma respuesta de siempre (`subida.url`, `metodo`, `cabeceras`, `ruta`). **El CRM tiene que aceptar este `tipo`** (ruta sugerida: `videos/<guionId>/escena-<n>-clip-f<indice>.jpg`).
+3. Reporte: en `progreso.escenas[]` del clip, dos campos nuevos y opcionales:
+   - `fotogramas: ["<ruta>", …]` en el orden de los momentos (inicio → final).
+   - `estabilidad: { ssimMedio, ssimMinimo, saltos: [segundos], inestable, cuadros }`.
+4. Si el CRM rechaza la subida (400) o algo falla, el clip se reporta igual, **sin** `fotogramas` (con `estabilidad` si se pudo medir), y queda en el registro del servidor. No se reintenta.
+5. **Qué mide `estabilidad`** (solo ffmpeg, sin IA, ~0,15 s por clip): el SSIM (parecido estructural, 0 a 1) entre cada cuadro y el siguiente, a 10 cuadros por segundo y en pequeño. Un clip de IA es una toma continua: una caída brusca respecto a la mediana del propio clip (por debajo de mediana − 0,25 y de 0,7) es un **salto**: parpadeo, cambio repentino o deformación súbita. `inestable: true` si hay al menos un salto.
+   - **Límite**: mide el cuadro entero, no el producto (ffmpeg no sabe dónde está). Una deformación LENTA del producto («morphing» gradual) no baja el SSIM y **no se detecta**: eso lo tiene que ver la IA de visión del CRM en los fotogramas. Calibrado con 7 clips reales de Ceryon (0 saltos; un gesto rápido de la mano baja a ~0,74) y un clip con un salto de imagen fabricado (detectado, ~0,3).
+6. Las imágenes (etapa `imagenes`) no cambian: ya van enteras.
+
+**B. Marca mal escrita por Captions**
+
+7. Revisada la documentación de la API (captions.ai/help → API Reference): el pedido solo acepta `caption_template_id` y `video`/`video_id`. **No hay campo de idioma, vocabulario, nombres propios ni guion, y la API no devuelve la transcripción ni el texto de los subtítulos.** Tampoco hay campo de costo ni de consumo.
+8. Por eso el trabajador **lee** el video que devuelve Captions con el OCR que trae Windows (sin internet ni costo): cada 0,25 s en las escenas donde se dice la marca y cada 1 s en el resto. Compara las palabras de `contexto.producto` (y `contexto.marca`, si llega) que se DICEN en el guion con lo leído. Si una variante parecida («SERION» en vez de «CERYON») aparece en 2 fotogramas o más y más veces que la palabra bien escrita, el video se arma con los subtítulos PROPIOS (sin costo extra; lo de Captions ya estaba cobrado) y el aviso dice: **`Captions escribió mal la marca («SERION» en vez de «CERYON»): se usaron los subtítulos propios.`** Si la escribió bien: `Captions escribió bien la marca (CERYON, ECLIPSE).` Si el equipo no tiene OCR: `No se pudo comprobar cómo escribió Captions la marca (…)` y se queda el video de Captions.
+9. **Nuevo en el resultado del armado** (opcional): `transcripcionCaptions: [{ desde, hasta, texto }]`, segundos del video. Es la **lectura de pantalla** del video de Captions (solo el cuerpo; el cierre va aparte), no una transcripción de audio: también recoge texto que ya estuviera en el clip y puede traer errores sueltos del OCR. Va también cuando se usaron los subtítulos propios por la marca.
+10. Recomendación al CRM: mandar la marca del cliente en `contexto.marca` si no está dentro de `contexto.producto`.
+
+**C. Murmullo de la voz del clip con narración**
+
+11. Nuevo, opcional: **`opciones.audioClip`**: `"silencio"` (el audio de los clips no se oye) | `"ambiente"` (de fondo, como hasta ahora) | `"auto"` o ausente.
+12. En `auto`, con narración, si el audio de un clip trae **voz** (detector local: volumen de la banda de la voz cada 0,1 s; el habla sube y baja con las sílabas, un ambiente es parejo), ese clip queda en silencio en vez de ambiente a −38 LUFS. Aviso: `El clip de la escena 1 traía voz: se dejó en silencio para que no se oiga un murmullo debajo de la narración.` Con `"silencio"`: `Audio de los clips en silencio (opciones.audioClip): solo se oye la narración y la música.`
+13. Una música muy marcada dentro del clip puede detectarse como voz: entonces se calla un ambiente que sobraba (error barato).
+
+**D. Tiempo de Captions**
+
+14. El aviso de Captions dice cuánto tardó: `Subtítulos hechos por Captions, plantilla «Cove» (tardó 118 s).` El registro del servidor anota, además, los campos que trae la respuesta final de la API, por si algún día aparece uno de consumo.

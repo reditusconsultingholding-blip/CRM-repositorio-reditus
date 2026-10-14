@@ -98,10 +98,11 @@ async function resolverPlantilla(cfg, pedida) {
 /**
  * Manda `archivo` (MP4 9:16, ≤ 50 MB) a subtitular y deja el resultado en `destino`.
  * `memoria` / `recordar`: el id del trabajo ya creado, para retomarlo sin mandarlo (ni pagarlo) otra vez.
- * Devuelve { id, costo } (costo: lo que informe la API, o null).
+ * Devuelve { id, costo, segundos } (costo: lo que informe la API, o null; segundos: de punta a punta).
  */
 async function subtitular({ cfg, registro, archivo, plantillaId, destino, memoria = null, recordar = () => {}, latir = async () => {} }) {
   const C = cfg.config.captions || {};
+  const t0 = Date.now();
   let id = memoria && memoria.id && memoria.plantillaId === plantillaId ? memoria.id : null;
   let trabajo = null;
   if (!id) {
@@ -139,7 +140,10 @@ async function subtitular({ cfg, registro, archivo, plantillaId, destino, memori
   recordar(null);
   // El costo, si algún día la respuesta lo trae (hoy la documentación no lo menciona).
   const costo = trabajo.credits ?? trabajo.cost ?? (trabajo.usage && (trabajo.usage.credits ?? trabajo.usage.cost)) ?? null;
-  return { id, costo: typeof costo === "number" ? costo : null };
+  const segundos = Math.round((Date.now() - t0) / 100) / 10;
+  // Qué campos trae la respuesta final: si algún día aparece uno de consumo, queda a la vista en el registro.
+  registro.info(`captions: trabajo ${id} listo en ${segundos} s (${memoria && memoria.id ? "retomado" : "enviado, esperado y descargado"}); campos de la respuesta: ${Object.keys(trabajo || {}).join(", ")}`);
+  return { id, costo: typeof costo === "number" ? costo : null, segundos };
 }
 
 module.exports = { disponible, pedido, plantillas, resolverPlantilla, subtitular, BASE };

@@ -161,6 +161,12 @@ El armado con narración **solo falla** si falta la clave o ElevenLabs la rechaz
 
 **Por verificar con la primera llamada real** (las rutas y campos salen de la documentación oficial; no se ha hecho ninguna llamada): los valores exactos de los filtros de acento y sexo, que la clave tenga permiso para leer y añadir voces (al crearla, sin restricciones o con «Text to Speech» y «Voices» activados), y que la voz elegida guste: las etiquetas las pone quien publicó la voz.
 
+### Auditoría: fotogramas por clip, marca en Captions y murmullo
+
+- **Fotogramas por clip** (`lib\clipcontrol.js`; `config.json` → `controlClips`): al terminar cada clip se suben 3 a 5 fotogramas (inicio, medio, final y uno por tramo de `cortes`) y se reportan con su **estabilidad**: SSIM entre cuadros seguidos (solo ffmpeg). Marca saltos bruscos (parpadeos, cambios repentinos); una deformación lenta del producto no la ve: para eso están los fotogramas, que revisa el CRM.
+- **Marca en Captions** (`lib\lectura.js`, `herramientas\ocr.ps1`): la API de Captions no acepta vocabulario ni devuelve el texto. El trabajador lee su video con el OCR que trae Windows (sin internet ni costo) y, si escribió mal la marca o el producto, usa los subtítulos propios y lo avisa. La lectura va al CRM (`transcripcionCaptions`). Si el servidor no tiene OCR, se avisa y se queda el video de Captions. Comprobar: `powershell -NoProfile -Command "[Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime]::AvailableRecognizerLanguages"` (debe listar al menos un idioma).
+- **Murmullo** (`config.json` → `voz.narracion.silenciarClipConVoz`): con narración, si el clip trae voz se deja en silencio en vez de ambiente. Por trabajo: `opciones.audioClip` = `silencio` | `ambiente` | `auto`.
+
 ### Títulos de apoyo (`lib\titulos.js`)
 
 No son subtítulos. Los subtítulos escriben lo que se dice, abajo; el título de apoyo es una frase corta (2 a 5 palabras) con lo importante de la escena, **arriba y centrada**.

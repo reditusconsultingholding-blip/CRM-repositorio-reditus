@@ -123,6 +123,8 @@ function crearCrmDeMentira(carpetaFijos) {
             if (!archivos.has(e.ruta)) return json(400, { error: "esa ruta no se subió" });
             Object.assign(pieza, { estado: "por-aprobar", url: firmada(e.ruta), ruta: e.ruta, nota: "" });
             if (e.tipo === "imagen") p.costo.imagenes++;
+            if (e.tipo === "clip") Object.assign(pieza, { fotogramas: e.fotogramas || null, estabilidad: e.estabilidad || null });
+            if ((e.fotogramas || []).some((r) => !archivos.has(r))) return json(400, { error: "un fotograma no se subió" });
           }
           p.costo.creditos += e.creditos || 0;
           p.costo.segundosGenerados += e.segundos || 0;
@@ -144,7 +146,13 @@ function crearCrmDeMentira(carpetaFijos) {
           const ruta = c.tipo === "audio" ? `referencias/${t.guionId}/audio.${c.extension === "mp3" ? "mp3" : "m4a"}` : `referencias/${t.guionId}/f${c.indice}.jpg`;
           return json(200, { subida: { url: `http://127.0.0.1:${puerto}/subir/${ruta}`, metodo: "PUT", cabeceras: { "content-type": c.tipo === "audio" ? "audio/mpeg" : "image/jpeg" }, ruta } });
         }
-        if (t.etapa && !["imagen", "clip", "final", "fotograma-final"].includes(c.tipo)) return json(400, { error: "falta tipo" });
+        if (t.etapa && !["imagen", "clip", "final", "fotograma-final", "fotograma-clip"].includes(c.tipo)) return json(400, { error: "falta tipo" });
+        if (c.tipo === "fotograma-clip") {
+          if (reg.sinFotogramasClip) return json(400, { error: "tipo de subida desconocido" });
+          if (!(Number.isInteger(c.indice) && c.indice >= 1 && c.indice <= 5) || !p.escenas.find((x) => x.n === c.escena)) return json(400, { error: "indice de 1 a 5 y escena" });
+          const rutaF = `videos/${t.guionId}/escena-${c.escena}-clip-f${c.indice}.jpg`;
+          return json(200, { subida: { url: `http://127.0.0.1:${puerto}/subir/${rutaF}`, metodo: "PUT", cabeceras: { "content-type": "image/jpeg" }, ruta: rutaF } });
+        }
         let ruta;
         if (c.tipo === "fotograma-final") {
           if (!(Number.isInteger(c.indice) && c.indice >= 1 && c.indice <= 6)) return json(400, { error: "indice debe ir de 1 a 6" });
@@ -887,6 +895,28 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   r = await atender();
   const sc = r.armado.segmentos;
   ok(r.ok && pedidosCortes.sort().join() === "4,8" && sc[0].cortes === 4 && Math.abs(sc[0].dura - 3) < 0.07 && sc[1].cortes === 0 && Math.abs(sc[1].dura - 4) < 0.07 && r.armado.estiloSubtitulos === "karaoke" && ["corte", "fundido"].includes(sc[1].transicion), `apertura en cortes (forma del CRM): el clip se pide de 8 s (duracionClip) y en el armado la escena usa solo sus 4 tramos, pegados en seco: dura ${sc[0].dura.toFixed(2)} s; «palabra» se entiende como karaoke y «calmado» entra con ${sc[1].transicion}`);
+  // ---- fotogramas por clip para la auditoría automática del CRM (20-oct) ----
+  {
+    const clipcontrol = require("../lib/clipcontrol");
+    const c1 = pcx.escenas[0].clip;
+    const c2 = pcx.escenas[1].clip;
+    ok(Array.isArray(c1.fotogramas) && c1.fotogramas.length === 5 && c1.fotogramas.every((x, i) => x.endsWith(`escena-1-clip-f${i + 1}.jpg`)) && Array.isArray(c2.fotogramas) && c2.fotogramas.length === 3 && c1.estabilidad && typeof c1.estabilidad.ssimMedio === "number" && Array.isArray(c1.estabilidad.saltos) && typeof c1.estabilidad.inestable === "boolean", `fotogramas por clip: al terminar cada clip se suben sus fotogramas (inicio, medio, final y uno por tramo de «cortes»: 5 en el clip con 4 tramos, 3 en el normal) con { tipo: "fotograma-clip", escena, indice } y van en progreso.escenas[].fotogramas junto con la estabilidad (SSIM medio ${c1.estabilidad && c1.estabilidad.ssimMedio})`);
+    ok(clipcontrol.momentosDelClip(8, [{ desde: 0, hasta: 1 }, { desde: 2.2, hasta: 2.9 }, { desde: 4.2, hasta: 4.9 }, { desde: 6.2, hasta: 6.8 }]).join() === "0.1,0.5,2.55,4,7.85" && clipcontrol.momentosDelClip(4).join() === "0.1,2,3.85" && clipcontrol.momentosDelClip(6, [{ desde: 2.8, hasta: 3.2 }]).join() === "0.1,3,5.85", "fotogramas por clip: inicio (0,1 s), medio y final (0,15 s antes del fin); los de los tramos solo si no caen a menos de 0,4 s de otro; nunca más de 5");
+    // Estabilidad: un clip liso no tiene saltos; uno con un destello de 3 cuadros a los 2 s, sí.
+    await ff.ffmpeg(["-f", "lavfi", "-i", "testsrc2=s=360x640:r=24:d=4", "-pix_fmt", "yuv420p", "liso.mp4"], fijos);
+    await ff.ffmpeg(["-f", "lavfi", "-i", "testsrc2=s=360x640:r=24:d=4", "-vf", "drawbox=x=0:y=0:w=iw:h=ih:color=0xD02060:t=fill:enable='between(n,48,50)'", "-pix_fmt", "yuv420p", "salto.mp4"], fijos);
+    const eLiso = await clipcontrol.estabilidad(ff, "liso.mp4", fijos, "liso");
+    const eSalto = await clipcontrol.estabilidad(ff, "salto.mp4", fijos, "salto");
+    ok(eLiso && !eLiso.inestable && eLiso.saltos.length === 0 && eSalto.inestable && eSalto.saltos.some((s) => Math.abs(s - 2) <= 0.25) && eSalto.ssimMinimo < 0.7 && eLiso.ssimMinimo > eSalto.ssimMinimo, `estabilidad (SSIM entre cuadros seguidos, solo ffmpeg): un clip liso da 0 saltos (mínimo ${eLiso.ssimMinimo}); uno con un salto brusco de imagen a los 2 s lo marca en ${eSalto.saltos.join(", ")} s (mínimo ${eSalto.ssimMinimo})`);
+    // El CRM todavía no acepta ese tipo de subida: el clip se reporta igual, sin fotogramas.
+    crmFalso.aprobar("guion-cortes", "clip", 2, false);
+    pcx.escenas[1].promptVideo = "v otra vez";
+    const tSinF = crmFalso.encolar("guion-cortes", "clips", [2]);
+    crmFalso.trabajos.get(tSinF.id).sinFotogramasClip = true;
+    r = await atender();
+    ok(r.ok && pcx.escenas[1].clip.estado === "por-aprobar" && pcx.escenas[1].clip.fotogramas === null && pcx.escenas[1].clip.estabilidad && /no se subieron los fotogramas del clip 2/.test(fs.readFileSync(registro.archivo, "utf8")), "fotogramas por clip: si el CRM no acepta la subida (400), el clip se reporta igual (con su estabilidad) y queda anotado en el registro");
+    crmFalso.aprobar("guion-cortes", "clip", 2);
+  }
   pcx.escenas[0].cortes = [{ desde: 0, hasta: 1 }, { desde: 7.9, hasta: 9 }, { desde: 20, hasta: 21 }];
   crmFalso.encolar("guion-cortes", "armado", null, { musica: false });
   r = await atender();
@@ -1032,7 +1062,17 @@ async function correrPruebas({ ok, hasta = "todo" }) {
       const cuerpo = Buffer.concat(trozos);
       const json = (codigo, o) => (res.writeHead(codigo, { "content-type": "application/json" }), res.end(JSON.stringify(o)));
       const u = new URL(req.url, "http://x");
-      if (u.pathname === "/archivo.mp4") return res.writeHead(200, { "content-type": "video/mp4" }), res.end(kc.subido);
+      if (u.pathname === "/archivo.mp4") {
+        if (!kc.quemar) return res.writeHead(200, { "content-type": "video/mp4" }), res.end(kc.subido);
+        // Imita lo que hace Captions: devuelve el video con un texto escrito encima (aquí, uno fijo).
+        fs.writeFileSync(path.join(datos, "cap-entrada.mp4"), kc.subido);
+        fs.writeFileSync(path.join(datos, "cap-texto.ass"), subt.documentoAss({ ancho: 1080, alto: 1920, estilos: ["Style: T,Arial,92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,7,0,5,60,60,0,1"], eventos: [`Dialogue: 0,0:00:00.00,0:10:00.00,T,,0,0,0,,{\\pos(540,1180)}${kc.quemar}`] }));
+        ff.ffmpeg(["-i", "cap-entrada.mp4", "-vf", "ass=cap-texto.ass", "-c:v", "libx264", "-preset", "veryfast", "-c:a", "copy", "-update", "0", "cap-salida.mp4"], datos).then(
+          () => (res.writeHead(200, { "content-type": "video/mp4" }), res.end(fs.readFileSync(path.join(datos, "cap-salida.mp4")))),
+          () => (res.writeHead(500), res.end()),
+        );
+        return;
+      }
       if (req.headers["x-api-key"] !== "clave-captions-de-mentira") return json(401, { error: { code: "unauthorized", message: "Invalid API key" } });
       if (req.method === "GET" && u.pathname === "/v1/videos/captions/templates") {
         kc.plantillas++;
@@ -1214,6 +1254,35 @@ async function correrPruebas({ ok, hasta = "todo" }) {
     const capAbajo = await difCap(1, 0.5, 0.9);
     ok(r.ok && /^captions:/.test(r.armado.estiloSubtitulos) && r.armado.titulosDeApoyo === 1 && kc.envios.length === enviosSin && enviosSin <= enviosAntes + 1 && capArriba < 30 && capAbajo > 38, `con Captions: el título de apoyo se pinta después, encima del video que devuelve Captions (la franja de arriba cambia: ${capArriba.toFixed(0)} dB; el resto no: ${capAbajo.toFixed(0)} dB), y ponerlo o cambiarlo NO manda ni paga de nuevo a Captions (se reutiliza lo que ya devolvió)`);
     for (const e of ph.escenas) delete e.tituloApoyo;
+
+    // ---- Captions escribe mal la marca: se lee lo que escribió (OCR de Windows) y se compara con el guion ----
+    const lecturaLib = require("../lib/lectura");
+    let hayOcr = true;
+    try {
+      await lecturaLib.leerTextos([path.join(capturas, "titulo-apoyo-simulado.png")]);
+    } catch (e) {
+      hayOcr = !e.sinOcr;
+    }
+    const productoAntes = ph.contexto.producto;
+    ph.contexto.producto = "Gafas Ceryon Eclipse";
+    ph.escenas[1].voz = "Yo lo arreglé con Ceryon Eclipse.";
+    kc.quemar = "YO LO ARREGLÉ CON SERION ECLIPSE";
+    crmFalso.encolar(HB, "armado", null, conCap);
+    r = await atender(depsC);
+    const eMal = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+    if (hayOcr) {
+      ok(r.ok && !/^captions:/.test(r.armado.estiloSubtitulos) && r.armado.segmentos[0].subtitulo && eMal.avisos.some((a) => /^Captions escribió mal la marca \(«SERION» en vez de «CERYON»\): se usaron los subtítulos propios\.$/.test(a)) && Array.isArray(eMal.transcripcionCaptions) && eMal.transcripcionCaptions.some((x) => /SERION ECLIPSE/.test(x.texto) && x.hasta >= x.desde), `marca mal escrita por Captions: se lee su video con el OCR de Windows (sin internet ni costo), «SERION» aparece en vez de «CERYON» y el video sale con los subtítulos propios; la lectura va al CRM en transcripcionCaptions (${(eMal.transcripcionCaptions || []).length} tramos)`);
+      ph.escenas[2].duracion = 3.3; // cambia el cuerpo: se manda de nuevo a Captions
+      kc.quemar = "YO LO ARREGLÉ CON CERYON ECLIPSE";
+      crmFalso.encolar(HB, "armado", null, conCap);
+      r = await atender(depsC);
+      const eBien = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+      ok(r.ok && /^captions:/.test(r.armado.estiloSubtitulos) && eBien.avisos.some((a) => /^Captions escribió bien la marca \(CERYON, ECLIPSE\)/.test(a)) && eBien.avisos.some((a) => /plantilla «Cove» \(tardó \d+ s\)/.test(a)) && typeof r.armado.captionsSegundos === "number" && eBien.transcripcionCaptions.some((x) => /CERYON ECLIPSE/.test(x.texto)), `marca bien escrita: se queda el video de Captions; el aviso dice cuánto tardó Captions (${r.armado.captionsSegundos} s con el servidor de mentira)`);
+    } else ok(r.ok && eMal.avisos.some((a) => /No se pudo comprobar cómo escribió Captions la marca/.test(a)), "marca: este equipo no tiene OCR de Windows: se avisa que no se pudo comprobar (el video sale igual)");
+    kc.quemar = null;
+    ph.escenas[2].duracion = 4;
+    ph.contexto.producto = productoAntes;
+    ph.escenas[1].voz = "Yo lo arreglé con esto.";
     pcx.escenas[0].cortes = [{ desde: 0, hasta: 1 }, { desde: 2.2, hasta: 2.9 }, { desde: 4.2, hasta: 4.9 }, { desde: 6.2, hasta: 6.8 }];
     pcx.escenas[0].tituloApoyo = "Mira esto";
     crmFalso.encolar("guion-cortes", "armado", null, { musica: false });
@@ -1335,6 +1404,41 @@ async function correrPruebas({ ok, hasta = "todo" }) {
     const rSinClave = await atender(deps);
     ok(!r.ok && /^No se puede armar con narración: no se pudo conseguir una voz de ElevenLabs\. .*401/.test(motivoMala) && !motivoMala.includes("clave-que-no-sirve") && !rSinClave.ok && /el servidor no tiene ELEVENLABS_API_KEY/.test(crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1].motivo), "voces: el armado con narración solo falla si la clave falta o ElevenLabs la rechaza (401), con un motivo claro y sin escribir la clave");
     ok(!fs.readFileSync(registro.archivo, "utf8").includes("clave-eleven-de-mentira"), "voces: la clave de ElevenLabs no queda escrita en el registro");
+    // ---- murmullo: clips que traen diálogo en un proyecto narrado ----
+    // «Habla» de prueba: ruido en la banda de la voz que se prende y se apaga como sílabas.
+    await ff.ffmpeg(["-f", "lavfi", "-i", "anoisesrc=color=pink:duration=4:seed=7:amplitude=0.5", "-af", "highpass=f=500,lowpass=f=2500,volume='if(lt(mod(t,0.27),0.15),1,0.03)':eval=frame", "dialogo.wav"], fijos);
+    await ff.ffmpeg(["-f", "lavfi", "-i", "anoisesrc=color=brown:duration=4:seed=5:amplitude=0.4", "ambiente.wav"], fijos);
+    const dvH = await ff.detectarVoz("dialogo.wav", fijos);
+    const dvA = await ff.detectarVoz("ambiente.wav", fijos);
+    const dvT = await ff.detectarVoz("voz.mp3", fijos);
+    ok(dvH.voz && !dvA.voz && !dvT.voz, `detector de voz (sin servicios: volumen de la banda de la voz cada 0,1 s): «habla» sí (variación ${dvH.variacion} dB), ambiente parejo no (${dvA.variacion} dB), un tono fijo no (${dvT.variacion} dB)`);
+    const conDialogo = { ...hablador, async generarEscena(c) {
+      await c.ff.ffmpeg(["-f", "lavfi", "-i", "testsrc2=s=720x1280:r=24:d=4", "-i", path.join(fijos, c.escena.n === 1 ? "dialogo.wav" : "ambiente.wav"), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-t", "4", c.salida], c.carpeta);
+      return { segundos: 4, modelo: "hablador", costoUsd: null };
+    } };
+    const MU = "guion-murmullo";
+    const pm = crmFalso.crearProyecto(MU, "9:16", { ...contexto(), pais: "ES", voz: { motor: "narracion", pais: "ES", sexo: "femenina" } }, [
+      { n: 1, tipo: "generada", duracion: 4, voz: "Mira lo que pasa.", locucion: "narrador", promptImagen: "i", promptVideo: "v1" },
+      { n: 2, tipo: "generada", duracion: 4, voz: "Y ahora esto.", locucion: "narrador", promptImagen: "i", promptVideo: "v2" },
+    ]);
+    for (const e of pm.escenas) Object.assign(e.imagen, { estado: "aprobada", url: crmFalso.fijo("cuadrada.jpg"), intentos: 1 });
+    const depsMu = { ...depsV, proveedor: conDialogo };
+    crmFalso.encolar(MU, "clips");
+    await atender(depsMu);
+    for (const n of [1, 2]) crmFalso.aprobar(MU, "clip", n);
+    const armarMu = async (opc) => {
+      crmFalso.encolar(MU, "armado", null, { musica: false, ...opc });
+      const rr = await atender(depsMu);
+      const f = path.join(carpetas.entregados, `${rr.trabajo.id}.mp4`);
+      const s = rr.armado.segmentos;
+      // El hueco tras la frase (sin narración): ahí solo suena el audio del clip.
+      return { rr, avisos: crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos, cola1: await tramoVol(f, s[0].dura - 0.19, 0.07), cola2: await tramoVol(f, s[1].inicio + s[1].dura - 0.19, 0.07) };
+    };
+    const mAuto = await armarMu({});
+    const mAmb = await armarMu({ audioClip: "ambiente" });
+    const mSil = await armarMu({ audioClip: "silencio" });
+    ok(mAuto.rr.ok && mAuto.rr.armado.clipsCallados.join() === "1" && mAuto.avisos.some((a) => /^El clip de la escena 1 traía voz: se dejó en silencio para que no se oiga un murmullo debajo de la narración\.$/.test(a)) && mAuto.cola1 < -70 && mAuto.cola2 > -70, `murmullo: con narración, el clip que trae diálogo queda en SILENCIO (${mAuto.cola1} dB tras la frase) y el que solo trae ambiente sigue de fondo (${mAuto.cola2} dB); se avisa en el video`);
+    ok(mAmb.rr.ok && mAmb.rr.armado.clipsCallados.length === 0 && mAmb.cola1 > -70 && mSil.rr.ok && mSil.rr.armado.clipsCallados.join() === "1,2" && mSil.cola2 < -70 && mSil.avisos.some((a) => /^Audio de los clips en silencio \(opciones\.audioClip\)/.test(a)), `murmullo: opciones.audioClip "ambiente" deja todos los clips de fondo (${mAmb.cola1} dB) y "silencio" los calla todos (${mSil.cola2} dB)`);
     pn.contexto.pais = "ES";
     elevenV.close();
   }

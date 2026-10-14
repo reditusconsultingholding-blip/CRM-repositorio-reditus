@@ -47,7 +47,16 @@
     "_plantilla": "Plantilla por defecto: su nombre (p. ej. \"Cove\") o su id (ctpl_…). Para ver las de la cuenta:  .\\probar.ps1 -PlantillasCaptions",
     "limiteMinutos": 8,
     "consultarCadaSegundos": 5,
-    "maxMb": 50
+    "maxMb": 50,
+    "revisarMarca": true,
+    "_revisarMarca": "Su API no acepta vocabulario ni devuelve la transcripción (documentación revisada el 20-oct). Por eso el trabajador LEE el video que devuelve con el OCR que trae Windows (herramientas/ocr.ps1; sin internet ni costo) y, si escribió mal una palabra de la marca o el producto que se dice en el guion, usa los subtítulos propios (respaldoSiMarcaMal) y lo avisa. La lectura va al CRM en transcripcionCaptions. false = no leer.",
+    "respaldoSiMarcaMal": true
+  },
+  "controlClips": {
+    "_nota": "Fotogramas de cada clip para la auditoría automática del CRM (3 a 5: inicio, medio, final y uno por tramo de cortes) y una medida de estabilidad (SSIM entre cuadros seguidos, solo ffmpeg; marca saltos bruscos, no deformaciones lentas). Opcional: si falla o el CRM no acepta la subida, el clip se entrega igual.",
+    "activo": true,
+    "fotogramas": 5,
+    "estabilidad": true
   },
   "armado": {
     "_nota": "Etapa «armado» del proyecto por escenas (no cuesta: todo lo hace ffmpeg en el servidor).",
@@ -150,7 +159,9 @@
       "velocidadMax": 1.2,
       "lentoMax": 1.25,
       "ambiente": true,
-      "ambienteLufs": -38
+      "ambienteLufs": -38,
+      "silenciarClipConVoz": true,
+      "_silenciarClipConVoz": "Con narración, si el audio de un clip trae VOZ (proyectos viejos con diálogo), se deja en silencio en vez de ambiente a ambienteLufs: así no se oye un murmullo debajo del narrador. Por trabajo: opciones.audioClip = \"silencio\" | \"ambiente\" | \"auto\". false = siempre ambiente."
     },
     "porPais": {
       "_nota": "OPCIONAL, y ya no hace falta: sin nada aquí la voz se elige sola según el país y queda guardada en datos/voces.json (ver o cambiar: probar.ps1 -Voces ES). Voces por país: si el proyecto es de ese país y aquí hay una voz con «id», se usa esa en vez de ELEVENLABS_VOICE_ID. El ACENTO lo da la voz: para España hay que poner una voz española. Los «id» van VACÍOS a propósito: no se inventan. Cómo llenarlos: elevenlabs.io → Voices → Voice Library → filtra por idioma «Spanish» y acento → «Add to my voices» → en «My Voices» abre la voz y copia su Voice ID. sexo: \"mujer\" | \"hombre\".",
