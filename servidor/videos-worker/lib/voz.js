@@ -34,7 +34,13 @@ const fs = require("fs");
 const { esperar } = require("./red");
 const { codigoPais } = require("./habla");
 
+/** ¿Se puede narrar? Basta la clave: la voz se elige sola según el país (lib/voces.js) si no hay una fija. */
 function disponible(cfg) {
+  return !!cfg.elevenKey;
+}
+
+/** Para los videos completos de antes (sin etapa), que no eligen voz: clave Y una voz fija en el .env. */
+function disponibleFija(cfg) {
   return !!(cfg.elevenKey && cfg.elevenVoz);
 }
 
@@ -214,4 +220,4 @@ async function narrar(cfg, { texto, previo = "", siguiente = "", vozId, pais = "
   }
 }
 
-module.exports = { disponible, generar, narrar, paraDecir, decirPalabra, palabrasDeAlineacion, tiemposDelGuion, vozPara };
+module.exports = { disponible, disponibleFija, generar, narrar, paraDecir, decirPalabra, palabrasDeAlineacion, tiemposDelGuion, vozPara };

@@ -131,7 +131,7 @@
     "ladoFotograma": 768
   },
   "voz": {
-    "_nota": "Narración con ElevenLabs. Solo se usa si el trabajo la pide (contexto.voz.motor: \"narracion\") Y en el .env están ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID. Una sola voz para todo el video. modelo: eleven_multilingual_v2 (el de mejor pronunciación en español). velocidad: 1 = normal; 1.08 = ritmo de anuncio. estabilidad baja = más expresiva. VERIFICAR con la primera llamada real: el rango de velocidad que acepta la cuenta y que el plan tenga la ruta con marcas de tiempo.",
+    "_nota": "Narración con ElevenLabs. Solo se usa si el trabajo la pide (contexto.voz.motor: \"narracion\") Y en el .env está ELEVENLABS_API_KEY (el ID de voz ya no es obligatorio: la voz se elige sola según el país del proyecto, lib/voces.js). Una sola voz para todo el video. modelo: eleven_multilingual_v2 (el de mejor pronunciación en español). velocidad: 1 = normal; 1.08 = ritmo de anuncio. estabilidad baja = más expresiva. VERIFICAR con la primera llamada real: el rango de velocidad que acepta la cuenta y que el plan tenga la ruta con marcas de tiempo.",
     "modelo": "eleven_multilingual_v2",
     "velocidad": 1.08,
     "estabilidad": 0.45,
@@ -153,7 +153,7 @@
       "ambienteLufs": -38
     },
     "porPais": {
-      "_nota": "OPCIONAL. Voces por país: si el proyecto es de ese país y aquí hay una voz con «id», se usa esa en vez de ELEVENLABS_VOICE_ID. El ACENTO lo da la voz: para España hay que poner una voz española. Los «id» van VACÍOS a propósito: no se inventan. Cómo llenarlos: elevenlabs.io → Voices → Voice Library → filtra por idioma «Spanish» y acento → «Add to my voices» → en «My Voices» abre la voz y copia su Voice ID. sexo: \"mujer\" | \"hombre\".",
+      "_nota": "OPCIONAL, y ya no hace falta: sin nada aquí la voz se elige sola según el país y queda guardada en datos/voces.json (ver o cambiar: probar.ps1 -Voces ES). Voces por país: si el proyecto es de ese país y aquí hay una voz con «id», se usa esa en vez de ELEVENLABS_VOICE_ID. El ACENTO lo da la voz: para España hay que poner una voz española. Los «id» van VACÍOS a propósito: no se inventan. Cómo llenarlos: elevenlabs.io → Voices → Voice Library → filtra por idioma «Spanish» y acento → «Add to my voices» → en «My Voices» abre la voz y copia su Voice ID. sexo: \"mujer\" | \"hombre\".",
       "ES": [
         {
           "nombre": "(elige en Voice Library: Spanish · acento Spain · mujer · narración/anuncio)",
@@ -197,7 +197,7 @@
     "demoraSegundos": 2
   },
   "audio": {
-    "_nota": "De dónde sale el audio de cada video. \"veo\" = habla el propio clip (Veo dice la frase del guion; es lo normal para TODOS los formatos). \"elevenlabs\" = voz de ElevenLabs encima (solo funciona si el servidor tiene ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID; sin clave se usa el audio del clip y se avisa). \"ninguno\" = mudo. Un trabajo puede pedir otra cosa con opciones.voz: \"elevenlabs\" | \"veo\" | false. Los subtítulos salen siempre del texto del guion.",
+    "_nota": "De dónde sale el audio de cada video. \"veo\" = habla el propio clip (Veo dice la frase del guion; es lo normal para TODOS los formatos). \"elevenlabs\" = voz de ElevenLabs encima (solo funciona si el servidor tiene ELEVENLABS_API_KEY; sin clave se usa el audio del clip y se avisa). \"ninguno\" = mudo. Un trabajo puede pedir otra cosa con opciones.voz: \"elevenlabs\" | \"veo\" | false. Los subtítulos salen siempre del texto del guion.",
     "porDefecto": "veo",
     "porFormato": {
       "_nota": "Solo excepciones. Ejemplo: \"musica\": \"ninguno\". Los formatos narrados ya NO van aquí: usan el audio del clip con narrador fuera de cámara (ver «habla»).",

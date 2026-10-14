@@ -1,3 +1,11 @@
+# Cambios del 19-oct: títulos de apoyo y voz automática por país
+
+- **Títulos de apoyo** (`lib/titulos.js`, nuevo): frase corta arriba y centrada, distinta de los subtítulos. `escena.tituloApoyo`, `opciones.estiloTitulos` (`caja`, `subrayado`, `etiqueta`). No van en el cierre. Con Captions se pintan después.
+- **Voz de ElevenLabs automática por país** (`lib/voces.js`, nuevo): con `ELEVENLABS_API_KEY` basta; `ELEVENLABS_VOICE_ID` ya no es obligatorio. La elegida queda en `datos/voces.json` y el video la avisa («Voz: …»). `.\probar.ps1 -Voces ES` lista 5 candidatas con su muestra; `-Fijar <id>` fija otra.
+- El armado con narración solo falla si falta la clave o ElevenLabs la rechaza.
+- Lo que devuelve Captions se guarda aparte: cambiar un título no lo manda (ni lo paga) de nuevo.
+- El primer armado de cada proyecto vuelve a codificar sus escenas una vez.
+
 # Cambios del 16-oct: cierre de calidad, narración, plantillas de subtítulos y transiciones
 
 ## Pasos para actualizar el servidor
@@ -5,7 +13,7 @@
 1. Detén la tarea «Reditus - Trabajador de videos».
 2. Copia la carpeta nueva encima de la que hay **sin tocar** `.env`, `datos\` ni `musica\`. Hay una carpeta nueva, **`fuentes\`** (tipografías): cópiala entera.
 3. `config.json`: guarda el del servidor como `config.anterior.json`, pon el nuevo y vuelve a escribir a mano lo que se le hubiera cambiado (por ejemplo `kie.usdPorCredito`). Secciones nuevas: `armado.dinamismo`, `voz` (cambió entera), `subtitulos` (nota nueva). `rotulo` ya no existe.
-4. `.env`: `PROVEEDOR=kie` y `KIE_API_KEY` se quedan como están. Para la narración, llena `ELEVENLABS_API_KEY` y `ELEVENLABS_VOICE_ID` (dónde se sacan: `.env.ejemplo`).
+4. `.env`: `PROVEEDOR=kie` y `KIE_API_KEY` se quedan como están. Para la narración, llena `ELEVENLABS_API_KEY` (dónde se saca: `.env.ejemplo`). El ID de voz ya no es obligatorio.
 5. Comprueba: `powershell -ExecutionPolicy Bypass -File .\probar.ps1` (debe terminar en «TODO OK»; no gasta).
 6. Arranca la tarea.
 

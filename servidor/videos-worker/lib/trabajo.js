@@ -169,7 +169,7 @@ async function procesar(trabajo, deps) {
       if (hayTexto) avisos.push(trabajo.opciones.voz ? "Este formato está configurado sin audio." : "Se pidió sin voz.");
     } else if (!hayTexto) {
       avisos.push("El guion no trae frases habladas: el video sale sin voz.");
-    } else if (!voz.disponible(cfg)) {
+    } else if (!voz.disponibleFija(cfg)) {
       avisos.push("El servidor no tiene clave de ElevenLabs: el video sale sin voz (con subtítulos si se pidieron).");
     } else {
       try {

@@ -124,7 +124,7 @@ Sobre un fondo desenfocado y oscurecido (la foto del cierre o, si es de fondo bl
 
 ### Narración con ElevenLabs (`lib\voz.js`; `config.json` → `voz`)
 
-Cuando el proyecto pide narración (`contexto.voz.motor: "narracion"`) y el `.env` tiene `ELEVENLABS_API_KEY` y `ELEVENLABS_VOICE_ID`:
+Cuando el proyecto pide narración (`contexto.voz.motor: "narracion"`) y el `.env` tiene `ELEVENLABS_API_KEY` (el ID de voz ya no es obligatorio: ver «La voz se elige sola por país»):
 
 - **Una sola voz** para todo el video; cada escena lleva su frase completa y las frases vecinas como contexto, para que la entonación sea continua.
 - **Tiempo real de cada palabra** (la voz lo devuelve): los subtítulos van sincronizados palabra por palabra.
@@ -132,11 +132,45 @@ Cuando el proyecto pide narración (`contexto.voz.motor: "narracion"`) y el `.en
 - **Ritmo de anuncio**: velocidad 1,08 y pausas cortas (0,1 s antes y 0,22 s después de cada frase).
 - **La escena dura lo que dura su frase**: el clip se acelera (hasta 1,2×), se frena (hasta 1,25×) o se recorta; la frase nunca se corta. El sonido del clip queda de ambiente, muy bajo, y encima va la música.
 - Los clips se piden **sin diálogo** (solo ambiente).
-- **Acento**: lo da la voz elegida. Para castellano de España hay que poner una voz española (`ELEVENLABS_VOICE_ID` o `voz.porPais` en `config.json`, que trae los países con el `id` vacío para llenarlo).
+- **Acento**: lo da la voz. El trabajador la elige solo según el país del proyecto (abajo); también se puede fijar a mano.
 - Una frase ya narrada no se vuelve a pedir: cambiar una frase solo paga esa.
 - Sin clave: no falla; el video sale con la voz del clip y lo avisa.
 
 **Costo estimado (VERIFICAR en elevenlabs.io/pricing; no se ha hecho ninguna llamada real):** ElevenLabs cobra por carácter narrado. Un anuncio de 50 s tiene unas 130–150 palabras, es decir 800–1.000 caracteres. Con el modelo multilingüe (1 crédito por carácter, a confirmar) y un plan de 100.000 créditos por unos 22 USD al mes, sale a **unos 0,20 USD por video** y alcanza para unos 100 videos al mes; con el plan de 30.000 créditos (unos 5 USD), unos 30 videos. El resultado de cada armado dice cuántos caracteres nuevos narró.
+
+### La voz se elige sola por país (`lib\voces.js`)
+
+Con `ELEVENLABS_API_KEY` basta. Orden para decidir la voz de un video:
+
+1. `contexto.voz.vozId` del trabajo, si el CRM manda una concreta.
+2. La que una persona fijó para ese país y sexo (`datos\voces.json`, o `voz.porPais` en `config.json`).
+3. `ELEVENLABS_VOICE_ID` del `.env`, si alguien lo dejó puesto.
+4. **Automático**: se consultan las voces de la cuenta y la biblioteca compartida de ElevenLabs, en español, del sexo de `contexto.voz.sexo` (o lo que diga la descripción de la voz). España → acento peninsular; México, Colombia, Argentina, Chile, Perú y Ecuador → el suyo; si no hay del país, español latino neutro. Entre las que cumplen gana la de uso narración / anuncio / conversacional más usada. Si es de la biblioteca, se añade a la cuenta. Queda guardada en `datos\voces.json` por país y sexo: el mismo país usa siempre la misma voz.
+
+El video lo avisa con una línea que empieza por «Voz: » (p. ej. «Voz: Lucía · español de España (ElevenLabs, elegida automáticamente)»).
+
+Para oír las candidatas y fijar otra (no narra nada ni gasta: solo consulta la lista):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -Voces ES                 # las 5 mejores para España, con enlace a su muestra
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -Voces MX -Sexo mujer     # solo voces de mujer
+powershell -ExecutionPolicy Bypass -File .\probar.ps1 -Voces ES -Sexo mujer -Fijar <id>   # fijar esa para España (mujer)
+```
+
+El armado con narración **solo falla** si falta la clave o ElevenLabs la rechaza. Si el plan no deja añadir voces de la biblioteca, usa la mejor que ya esté en la cuenta.
+
+**Por verificar con la primera llamada real** (las rutas y campos salen de la documentación oficial; no se ha hecho ninguna llamada): los valores exactos de los filtros de acento y sexo, que la clave tenga permiso para leer y añadir voces (al crearla, sin restricciones o con «Text to Speech» y «Voices» activados), y que la voz elegida guste: las etiquetas las pone quien publicó la voz.
+
+### Títulos de apoyo (`lib\titulos.js`)
+
+No son subtítulos. Los subtítulos escriben lo que se dice, abajo; el título de apoyo es una frase corta (2 a 5 palabras) con lo importante de la escena, **arriba y centrada**.
+
+- Llega por escena en `escena.tituloApoyo` (un texto, o `{ texto, desde, hasta }` en segundos dentro de la escena). Sin `desde` / `hasta`: toda la escena menos 0,2 s a cada lado.
+- Va debajo del 12 % de arriba que tapan las redes (empieza al 13 % del alto), en 1 o 2 renglones, más grande que los subtítulos. Los subtítulos van del 64 % al 77 %: no se tocan.
+- Tres estilos (`opciones.estiloTitulos`): `caja` (mayúsculas sobre caja del color de la marca), `subrayado` (mayúsculas blancas con una raya de color que se despliega) y `etiqueta` (píldora oscura con un punto de color, la más sobria). Sin pedirlo, sale el que más se diferencia de la plantilla de subtítulos.
+- Entra con un golpe corto y sale con un fundido. No va en la tarjeta de cierre. En una apertura en cortes se mantiene sobre todos los tramos.
+- Con los subtítulos de Captions, el título se pinta después, por nuestro lado. Cambiar un título no vuelve a mandar (ni a pagar) el video a Captions.
+- `opciones.titulos: false` los apaga.
 
 ### Subtítulos: cinco plantillas (`lib\subtitulos.js`)
 
@@ -184,6 +218,8 @@ Respaldo automático a las plantillas propias, con aviso, si falta la clave, la 
 
 ### Ver muestras con clips de verdad (no gasta)
 
+Solo los títulos de apoyo: `node pruebas\muestras.js <carpeta> titulos`.
+
 ```powershell
 node pruebas\muestras.js "C:\ruta\a\una\carpeta"   # con clips .mp4 y un archivo foto.png
 ```
@@ -205,7 +241,8 @@ Deja en `..\..\qa-capturas\trabajador-etapas\` el video completo con el cierre, 
 | `KIE_API_KEY` | Clave de Kie (clips con `PROVEEDOR=kie` e imágenes base con Kie) |
 | `GEMINI_API_KEY` | Clave de la API de Gemini, para Veo directo (solo con `PROVEEDOR=veo`) |
 | `FAL_KEY` | Clave de fal.ai (solo con `PROVEEDOR=fal`) |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Opcionales. Voz de ElevenLabs: solo se usa si el trabajo la pide. Vacías = habla siempre el propio clip |
+| `ELEVENLABS_API_KEY` | Narración con ElevenLabs. Con la clave basta: la voz se elige sola por país. Sin ella, los proyectos con narración no se pueden armar |
+| `ELEVENLABS_VOICE_ID` | Opcional. Una voz fija para todo, si no se quiere la elección automática |
 | `CAPTIONS_API_KEY` | Opcional. Subtítulos hechos por la API de Captions (Mirage). Vacía = plantillas propias |
 | `TRANSCRIPCION` | Opcional. Servicio de voz a texto para la etapa `analisis`. Vacío = ninguno (hoy no hay ninguno real implementado) |
 | `NOMBRE_TRABAJADOR`, `FFMPEG`, `FFPROBE`, `CARPETA_DATOS`, `CARPETA_MUSICA` | Opcionales |

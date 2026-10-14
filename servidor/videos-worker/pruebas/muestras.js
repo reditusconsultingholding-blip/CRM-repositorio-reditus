@@ -3,7 +3,8 @@
 // para ver la tarjeta de cierre, las cinco plantillas de subtítulos y las transiciones.
 // No llama a ningún servicio ni gasta: todo es ffmpeg en este equipo.
 //
-//   node pruebas/muestras.js <carpeta>
+//   node pruebas/muestras.js <carpeta>            todas las muestras
+//   node pruebas/muestras.js <carpeta> titulos    solo las de los títulos de apoyo
 //
 // <carpeta> debe traer clips .mp4 (los primeros 7 que encuentre, por nombre) y una foto del producto
 // (foto.png o foto.jpg). Deja los videos y fotogramas en  <repo>\qa-capturas\trabajador-etapas\ .
@@ -57,6 +58,31 @@ const { ESTILOS } = require("../lib/subtitulos");
   const clip = (n, f, mas = {}) => ({ n, tipo: "generada", duracion: 8, voz: "", clip: { estado: "aprobada", url: url(f) }, ...mas });
   const cuadro = (video, segundo, nombre) => ff.ffmpeg(["-ss", String(Math.max(0, segundo)), "-i", video, "-frames:v", "1", "-update", "1", path.join(salida, nombre)]);
   const hacer = async (t) => armar({ cfg, ff, registro, trabajo: t, carpeta: carpetas.cache });
+
+  // 7. Títulos de apoyo (no son subtítulos): frases cortas arriba, con los subtítulos abajo. Los tres estilos
+  //    sobre un clip real, y un video corto de tres escenas con título + subtítulos + cierre.
+  const titulosDeApoyo = async () => {
+    const fraseT = "¿Te arden los ojos de noche? Estas gafas bloquean la luz azul.";
+    for (const [estilo, sub] of [["caja", "karaoke"], ["subrayado", "titular"], ["etiqueta", "impacto"]]) {
+      const x = await hacer(trabajo(`muestra-titulo-${estilo}`, [clip(1, clips[0], { voz: fraseT, enfasis: ["ojos", "azul"], duracion: 5, tituloApoyo: "Bloquea el 99 % de la luz azul" })], { estiloSubtitulos: sub, estiloTitulos: estilo }));
+      await cuadro(x.archivo, x.segmentos[0].subtitulo.desde + x.segmentos[0].subtitulo.dura * 0.55, `real-titulos-apoyo-${estilo}.png`);
+    }
+    const tres = clips.slice(0, 3);
+    const textos = ["Adiós a la vista cansada", { texto: "99 % menos luz azul", desde: 0.6, hasta: 3 }, "Duerme mejor"];
+    const dichas = ["¿Te arden los ojos de noche?", "Estas gafas bloquean la luz azul de las pantallas.", "Y duermes mejor desde la primera noche."];
+    const x = await hacer(trabajo("muestra-titulos-apoyo", [...tres.map((f, i) => clip(i + 1, f, { duracion: 3.6, voz: dichas[i], tituloApoyo: textos[i], ...(i ? { transicion: ["zoom", "barrido"][i - 1] } : {}) })), { n: tres.length + 1, tipo: "cierre", duracion: 4, voz: "", fotoUrl: url(foto), tituloApoyo: "No sale en el cierre" }], { estiloSubtitulos: "karaoke" }));
+    fs.copyFileSync(x.archivo, path.join(salida, "real-titulos-apoyo.mp4"));
+    await cuadro(x.archivo, x.segmentos[0].inicio + 0.26, "real-titulos-apoyo-entrando.png");
+    await cuadro(x.archivo, x.segmentos[1].inicio + 1.6, "real-titulos-apoyo-con-subtitulos.png");
+    console.log(`Títulos de apoyo: ${x.titulosDeApoyo} en un video de ${x.duracion.toFixed(1)} s (estilo «${x.estiloTitulos}» con subtítulos «${x.estiloSubtitulos}»); franja del título ${x.segmentos.filter((s) => s.titulo).map((s) => `${Math.round((s.titulo.zona.y / 1920) * 100)}–${Math.round(((s.titulo.zona.y + s.titulo.zona.h) / 1920) * 100)} %`).join(", ")}; subtítulos ${Math.round((x.segmentos[0].subtitulo.zona.y0 / 1920) * 100)}–${Math.round((x.segmentos[0].subtitulo.zona.y1 / 1920) * 100)} %`);
+  };
+  // Solo esta parte:  node pruebas/muestras.js <carpeta> titulos
+  if (process.argv[3] === "titulos") {
+    await titulosDeApoyo();
+    servidor.close();
+    console.log(`Muestras en: ${salida}`);
+    process.exit(0);
+  }
 
   // 1. El video entero con la tarjeta de cierre nueva.
   let t0 = Date.now();
@@ -162,6 +188,8 @@ const { ESTILOS } = require("../lib/subtitulos");
   await cuadro(r.archivo, r.segmentos[2].inicio + 2.3, "real-v2-golpe-visual.png");
   await cuadro(r.archivo, r.cierres[0].inicio + 0.15, "real-v2-cierre-con-fundido.png");
   console.log(`Video completo v2: ${r.duracion.toFixed(1)} s, armado en ${((Date.now() - t0) / 1000).toFixed(1)} s · transiciones: ${r.transiciones.join(", ")} · golpes visuales por escena: ${r.segmentos.map((x) => x.golpesVisuales.length).join("/")} · cortes llevados al golpe de la música: ${r.cortesAlGolpe} (de ${r.golpesDeLaMusica} golpes detectados) · música: ${r.conMusica ? r.tonoMusica : "no"}`);
+
+  await titulosDeApoyo();
 
   servidor.close();
   console.log(`Muestras en: ${salida}`);

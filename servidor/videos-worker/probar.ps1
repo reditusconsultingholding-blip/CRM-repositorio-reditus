@@ -5,6 +5,7 @@
 #                                                    -Etapa clips          imagenes | clips | armado (armado = recorrido completo)
 #                                                    -Etapa armado
 #   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -ConCrm          además atiende la cola real del CRM una vez (solo con el simulado)
+#   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -Voces ES [-Sexo mujer] [-Fijar <id>]   las 5 mejores voces de ElevenLabs para un país (con muestra), o fijar una
 #   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -PlantillasCaptions   lista las plantillas de subtítulos de la cuenta de Captions
 #   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -UnaImagen       UNA imagen base con el proveedor REAL de imagen (gasta lo mínimo)
 #   powershell -ExecutionPolicy Bypass -File .\probar.ps1 -UnClip          UN clip corto con el proveedor REAL del .env (gasta lo mínimo)
@@ -25,6 +26,9 @@ param(
   [switch]$UnClip,
   [switch]$UnaImagen,
   [switch]$PlantillasCaptions,
+  [string]$Voces = "",
+  [string]$Sexo = "",
+  [string]$Fijar = "",
   [ValidateSet("", "imagenes", "clips", "armado")][string]$Etapa = "",
   [string]$Prompt = "",
   [string]$Foto = ""
@@ -37,6 +41,20 @@ $node = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $node) {
   Write-Host "No se encontró Node.js (versión 20 o superior): https://nodejs.org" -ForegroundColor Red
   exit 1
+}
+
+if ($Voces) {
+  # Lista las 5 mejores voces de ElevenLabs para un país (ES, MX, CO, AR, CL, PE, EC) con su muestra, o fija una.
+  # No narra nada ni gasta: solo consulta la lista de voces.
+  if (-not (Test-Path ".env")) {
+    Write-Host "Falta el archivo .env con ELEVENLABS_API_KEY." -ForegroundColor Red
+    exit 1
+  }
+  $argumentos = @("trabajador.js", "--voces", $Voces)
+  if ($Sexo) { $argumentos += @("--sexo", $Sexo) }
+  if ($Fijar) { $argumentos += @("--fijar", $Fijar) }
+  & $node @argumentos
+  exit $LASTEXITCODE
 }
 
 if ($PlantillasCaptions) {

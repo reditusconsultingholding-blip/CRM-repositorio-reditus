@@ -8,6 +8,7 @@
 //   node trabajador.js --una-vez    atiende lo que haya en la cola y termina
 //   node trabajador.js --comprobar  revisa configuración, ffmpeg y conexión, y termina
 //   node trabajador.js --un-clip ["prompt"]   genera UN clip corto con el proveedor del .env (gasta lo mínimo) y termina
+//   node trabajador.js --voces ES [--sexo mujer] [--fijar <id>]  lista las 5 mejores voces de ElevenLabs para ese país (o fija una) y termina
 //   node trabajador.js --plantillas-captions  lista las plantillas de subtítulos de la cuenta de Captions (nombre e id) y termina
 //   node trabajador.js --una-imagen ["prompt"] [--foto https://…]   genera UNA imagen base con el proveedor de imagen (gasta lo mínimo) y termina
 const fs = require("fs");
@@ -24,7 +25,7 @@ const { unaImagen } = require("./lib/etapas");
 const { crearLimites } = require("./lib/limites");
 const { atenderCola } = require("./lib/cola");
 
-const modo = process.argv.includes("--plantillas-captions") ? "plantillas-captions" : process.argv.includes("--una-imagen") ? "una-imagen" : process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
+const modo = process.argv.includes("--voces") ? "voces" : process.argv.includes("--plantillas-captions") ? "plantillas-captions" : process.argv.includes("--una-imagen") ? "una-imagen" : process.argv.includes("--un-clip") ? "un-clip" : process.argv.includes("--comprobar") ? "comprobar" : process.argv.includes("--una-vez") ? "una-vez" : "residente";
 
 function vivo(pid) {
   try {
@@ -44,6 +45,43 @@ async function principal() {
     process.exit(1);
   }
   for (const c of Object.values(cfg.carpetas)) fs.mkdirSync(c, { recursive: true });
+
+  if (modo === "voces") {
+    // No toca el CRM ni narra nada: solo le pregunta a ElevenLabs qué voces hay para ese país.
+    const voces = require("./lib/voces");
+    const { codigoPais } = require("./lib/habla");
+    const arg = (n) => {
+      const i = process.argv.indexOf(n);
+      return i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : "";
+    };
+    const pais = codigoPais(arg("--voces")) || "";
+    const sexo = /^(h|masc)/i.test(arg("--sexo")) ? "hombre" : /^(m|f)/i.test(arg("--sexo")) ? "mujer" : "";
+    if (!cfg.elevenKey) {
+      console.error("Falta ELEVENLABS_API_KEY en el .env.");
+      process.exit(1);
+    }
+    try {
+      if (arg("--fijar")) {
+        const v = await voces.fijar(cfg, { pais, sexo, id: arg("--fijar") });
+        console.log(`Voz fijada para ${pais || "cualquier país"}${sexo ? ` (${sexo})` : ""}: ${v.nombre || v.id} · ${v.id}. Queda en datos\\voces.json.`);
+        process.exit(0);
+      }
+      const lista = await voces.candidatas(cfg, { pais, sexo, cuantas: 5 });
+      const actual = voces.leerElegidas(cfg)[voces.claveDe(pais, sexo)];
+      if (!lista.length) {
+        console.error("ElevenLabs no devolvió ninguna voz en español para ese país y sexo (o no respondió). Revisa la conexión y que la clave tenga permiso de «Voices».");
+        process.exit(1);
+      }
+      console.log(`Voces de ElevenLabs (${lista.length}), de mejor a peor, para ${pais || "español neutro"}${sexo ? ` (${sexo})` : ""}:\n`);
+      lista.forEach((v, i) => console.log(`  ${i + 1}. ${v.nombre}\n     id: ${v.id} · acento: ${v.acento === "pais" ? "del país" : v.acento} · ${v.genero || "?"} · uso: ${v.uso || "?"} · ${v.deLaCuenta ? "ya está en la cuenta" : "de la biblioteca (se añade al fijarla)"}\n     muestra: ${v.muestra || "(sin muestra)"}\n`));
+      console.log(actual ? `Hoy se usa: ${actual.nombre || actual.id} (${actual.id})${actual.fijadaAMano ? ", fijada a mano" : ", elegida automáticamente"}.` : "Todavía no se ha elegido ninguna para este país: en el primer video se tomará la número 1.");
+      console.log(`Para fijar otra:  .\\probar.ps1 -Voces ${pais || "ES"}${sexo ? ` -Sexo ${sexo}` : ""} -Fijar <id>`);
+      process.exit(0);
+    } catch (e) {
+      console.error(`No se pudieron leer las voces: ${String(e.message).split(cfg.elevenKey).join("[clave oculta]")}`);
+      process.exit(1);
+    }
+  }
 
   if (modo === "plantillas-captions") {
     // No toca el CRM ni genera nada: solo le pregunta a Captions qué plantillas tiene la cuenta.
@@ -101,7 +139,7 @@ async function principal() {
     registro.error(`No se puede arrancar. Falta en el .env o en el equipo: ${faltas.join(" · ")}`);
     process.exit(1);
   }
-  const voz = proveedor.daAudio ? "audio según config.json (el de Veo o ElevenLabs)" : cfg.elevenKey && cfg.elevenVoz ? "con voz (ElevenLabs)" : "SIN voz (no hay clave de ElevenLabs)";
+  const voz = proveedor.daAudio ? "audio según config.json (el de Veo o ElevenLabs)" : cfg.elevenKey ? (cfg.elevenVoz ? "narración disponible (ElevenLabs)" : "narración disponible (ElevenLabs, la voz se elige sola por país)") : "sin narración (no hay clave de ElevenLabs)";
   registro.info(`Trabajador «${cfg.nombre}» · proveedor ${proveedor.nombre} · imágenes ${proveedorImagen ? proveedorImagen.nombre : "sin proveedor"} · ${voz} · ${versionFf} · CRM ${cfg.crmUrl} · modo ${modo}`);
   if (proveedor.nombre === "simulado") registro.aviso("PROVEEDOR=simulado: los videos son de PRUEBA (clips de color con texto). Para videos reales, PROVEEDOR=kie.");
 

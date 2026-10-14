@@ -1105,9 +1105,239 @@ async function correrPruebas({ ok, hasta = "todo" }) {
   crmFalso.encolar(H, "armado", null, { subtitulos: { proveedor: "captions", plantilla: "Cove" } });
   r = await atender({ ...deps, cfg: cfgC });
   ok(r.ok && /solo subtitula videos verticales 9:16/.test(crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.join(" ")), "Captions: un video horizontal no se manda (la API solo admite 9:16): plantillas propias y aviso");
+  // ============================== títulos de apoyo (no son subtítulos) ====
+  {
+    const titulos = require("../lib/titulos");
+    const el = titulos.elegirEstiloTitulos;
+    ok(titulos.ESTILOS_TITULO.join() === "caja,subrayado,etiqueta" && el("Subrayado") === "subrayado" && el("etiqueta", "karaoke") === "etiqueta" && el("", "karaoke") === "caja" && el(undefined, "titular") === "subrayado" && el("raro", "impacto") === "etiqueta" && el("", "limpio") === "subrayado" && el("", "captions:Cove") === "caja", "títulos de apoyo: tres estilos (caja, subrayado, etiqueta); sin pedirlo sale el que más se diferencia de la plantilla de subtítulos (titular, que ya lleva caja → subrayado; impacto → etiqueta)");
+    const lt = titulos.leerTitulo;
+    const porDefecto = lt({ tituloApoyo: "  Sin luz azul " }, 4);
+    const conTiempos = lt({ tituloApoyo: { texto: "Listo en 2 minutos", desde: 1, hasta: 2.5 } }, 4);
+    const largo = lt({ tituloApoyo: { texto: "Hasta el final", desde: 1, hasta: 99 } }, 4);
+    ok(porDefecto.texto === "Sin luz azul" && porDefecto.desde === 0.2 && porDefecto.hasta === 3.8 && conTiempos.desde === 1 && conTiempos.hasta === 2.5 && largo.hasta === 3.95 && lt({ tituloApoyo: "   " }, 4) === null && lt({}, 4) === null && lt({ tituloApoyo: { texto: "x", desde: 3.8, hasta: 3.9 } }, 4) === null && lt({ tituloApoyo: "Hola {\\b1}" }, 4).texto === "Hola b1", "títulos de apoyo: `escena.tituloApoyo` es un texto o { texto, desde, hasta }; por defecto toda la escena menos 0,2 s a cada lado; un `hasta` que se pasa se recorta y uno que no deja leerlo (< 0,4 s) se descarta");
+
+    // Se dibujan de verdad (libass) y se mira dónde caen: franja de arriba, y nunca sobre los subtítulos.
+    const cache = path.join(datos, "cache");
+    const cajasDe = async (ass, tam, dura) => {
+      const texto = await ff.informe(["-f", "lavfi", "-i", `color=black:s=${tam}:r=20:d=${dura}`, "-vf", `ass=${ass}:fontsdir=fuentes,bbox=min_val=40`], cache);
+      return [...texto.matchAll(/pts_time:([\d.]+)(?: x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+))?/g)].filter((m) => m[2] !== undefined).map((m) => ({ t: Number(m[1]), x1: Number(m[2]), x2: Number(m[3]), y1: Number(m[4]), y2: Number(m[5]) }));
+    };
+    // Dónde empieza el subtítulo más alto de las cinco plantillas (ya escritas más arriba como prueba-<estilo>.ass).
+    let topeSub = 1920;
+    for (const estilo of subt.ESTILOS) topeSub = Math.min(topeSub, ...(await cajasDe(`prueba-${estilo}.ass`, "1080x1920", 6)).map((c) => c.y1));
+    let bienT = true;
+    const medidas = [];
+    for (const estilo of titulos.ESTILOS_TITULO) {
+      for (const [w, h, frase] of [[1080, 1920, "Bloquea el 99 % de la luz azul"], [1080, 1920, "2x1"], [1920, 1080, "Bloquea el 99 % de la luz azul"], [1080, 1080, "Sin dolor de cabeza"]]) {
+        const t = await titulos.tituloDeEscena({ ff, carpeta: cache, escena: { tituloApoyo: { texto: frase, desde: 0.5, hasta: 2.5 } }, dura: 4, ancho: w, alto: h, marca: "#0553C9", estilo });
+        fs.writeFileSync(path.join(cache, "prueba-titulo.ass"), subt.documentoAss({ ancho: w, alto: h, estilos: t.estilos, eventos: t.eventos }));
+        const c = await cajasDe("prueba-titulo.ass", `${w}x${h}`, 4);
+        const arriba = Math.min(...c.map((x) => x.y1));
+        const abajo = Math.max(...c.map((x) => x.y2));
+        const izq = Math.min(...c.map((x) => x.x1));
+        const der = Math.max(...c.map((x) => x.x2));
+        const centro = (izq + der) / 2;
+        const primero = Math.min(...c.map((x) => x.t));
+        const ultimo = Math.max(...c.map((x) => x.t));
+        const bien = c.length > 20 && arriba >= h * 0.115 && abajo <= h * 0.42 && izq >= w * 0.03 && der <= w * 0.97 && Math.abs(centro - w / 2) < w * 0.03 && t.renglones <= 2 && primero >= 0.44 && ultimo <= 2.56 && arriba >= t.zona.y - 12 && abajo <= t.zona.y + t.zona.h + 12 && (w !== 1080 || h !== 1920 || abajo < topeSub - 40);
+        if (w === 1080 && h === 1920 && frase.length > 5) medidas.push(`${estilo} ${Math.round((arriba / h) * 100)}–${Math.round((abajo / h) * 100)} %`);
+        if (!bien || /FFE600|00E6FF/i.test(t.eventos.join(""))) {
+          bienT = false;
+          console.log(`     título «${estilo}» ${w}x${h} mal puesto:`, { cuadros: c.length, arriba, abajo, izq, der, primero, ultimo, zona: t.zona, renglones: t.renglones, topeSub });
+        }
+      }
+    }
+    ok(bienT, `títulos de apoyo dibujados de verdad en los tres estilos (vertical, horizontal y cuadrado; frase larga y muy corta): centrados, en la franja de arriba debajo del 12 % (${medidas.join("; ")}), en 1 o 2 renglones, solo entre su «desde» y su «hasta», y siempre por encima del subtítulo más alto de las cinco plantillas (${Math.round((topeSub / 1920) * 100)} %)`);
+    const tCaja = await titulos.tituloDeEscena({ ff, carpeta: cache, escena: { tituloApoyo: "Sin luz azul" }, dura: 4, ancho: 1080, alto: 1920, marca: "#0553C9", estilo: "caja" });
+    const tRaya = await titulos.tituloDeEscena({ ff, carpeta: cache, escena: { tituloApoyo: "Sin luz azul" }, dura: 4, ancho: 1080, alto: 1920, marca: "#0553C9", estilo: "subrayado" });
+    const tamTitulo = Number(tCaja.estilos[1].split(",")[2]);
+    const tamSub = Number(subt.subtitulosDeEscena({ estilo: "karaoke", palabras: subt.palabrasConTiempo("Sin luz azul", 0.2, 2), ancho: 1080, alto: 1920, marca: "#0553C9", hasta: 4 }).estilos[0].split(",")[2]);
+    ok(tamTitulo > tamSub && new RegExp(`\\\\1c&H${subt.bgr("0553C9")}&`).test(tCaja.eventos.join("")) && /SIN LUZ AZUL/.test(tCaja.eventos.join("")) && /\\t\(/.test(tCaja.eventos.join("")) && /\\fad\(0,140\)/.test(tCaja.eventos.join("")) && /\\fscx0\\t\(90,300,\\fscx100\)/.test(tRaya.eventos.join("")) && (await titulos.tituloDeEscena({ ff, carpeta: cache, escena: {}, dura: 4, ancho: 1080, alto: 1920, estilo: "caja" })) === null, `títulos de apoyo: más grandes que los subtítulos (${tamTitulo} frente a ${tamSub}), con el color de la marca en la caja o en la raya, entran con animación (golpe; la raya se despliega) y salen con un fundido corto; una escena sin título no pinta nada`);
+
+    // ---- en el armado ----
+    crmFalso.encolar(HB, "armado", null, { musica: false, estiloSubtitulos: "karaoke" });
+    r = await atender(depsH);
+    const sinTit = path.join(datos, "sin-titulos.mp4");
+    fs.copyFileSync(path.join(carpetas.entregados, `${r.trabajo.id}.mp4`), sinTit);
+    ok(r.ok && r.armado.titulosDeApoyo === 0 && r.armado.segmentos.every((x) => x.titulo === null), "armado sin `tituloApoyo` en ninguna escena: no se pinta ningún título (los trabajos de antes salen igual)");
+    ph.escenas[0].tituloApoyo = "Adiós al dolor";
+    ph.escenas[1].tituloApoyo = { texto: "Listo en 2 minutos", desde: 0.5, hasta: 2 };
+    ph.escenas[3].tituloApoyo = "No debe salir en el cierre";
+    crmFalso.encolar(HB, "armado", null, { musica: false, estiloSubtitulos: "karaoke" });
+    r = await atender(depsH);
+    const conTit = path.join(carpetas.entregados, `${r.trabajo.id}.mp4`);
+    const sT = r.armado.segmentos;
+    // Diferencia entre el video sin títulos y el mismo con títulos, por franjas y tramos.
+    const parecido = async (desde, dura, y0, y1) => {
+      const recorte = `crop=iw:ih*${(y1 - y0).toFixed(2)}:0:ih*${y0.toFixed(2)}`;
+      const { se } = await correr(cfg.ffmpeg, ["-hide_banner", "-ss", String(desde), "-t", String(dura), "-i", sinTit, "-ss", String(desde), "-t", String(dura), "-i", conTit, "-filter_complex", `[0:v]${recorte}[a];[1:v]${recorte}[b];[a][b]psnr`, "-an", "-f", "null", "-"]);
+      const m = /average:(inf|[\d.]+)/.exec(se);
+      return m ? (m[1] === "inf" ? 99 : Number(m[1])) : NaN;
+    };
+    if (process.env.VER_TITULOS) console.log(JSON.stringify({ t: r.armado.titulosDeApoyo, e: r.armado.estiloTitulos, s: sT.map((x) => [x.titulo, x.subtitulo]) }));
+    const arribaCon = await parecido(sT[0].inicio + 1, 1, 0.12, 0.3);
+    const subsIgual = await parecido(sT[0].inicio + 1, 1, 0.5, 0.9);
+    const antesDeDesde = await parecido(sT[1].inicio + 0.05, 0.3, 0.12, 0.3);
+    const enSuTramo = await parecido(sT[1].inicio + 1, 0.6, 0.12, 0.3);
+    const despuesDeHasta = await parecido(sT[1].inicio + 2.3, 0.4, 0.12, 0.3);
+    const cierreIgual = await parecido(sT[3].inicio + 1.5, 1, 0, 1);
+    ok(r.ok && r.armado.titulosDeApoyo === 2 && r.armado.estiloTitulos === "caja" && sT[0].titulo.texto === "Adiós al dolor" && sT[0].titulo.desde === 0.2 && sT[1].titulo.desde === 0.5 && sT[1].titulo.hasta === 2 && sT[2].titulo === null && sT[3].titulo === null && sT[0].titulo.zona.y + sT[0].titulo.zona.h < sT[0].subtitulo.zona.y0, `armado con títulos de apoyo: 2 escenas con título (estilo «caja», el que acompaña a «karaoke»), cada uno en su franja de arriba y por encima de la zona de sus subtítulos; la tarjeta de cierre no lleva título aunque lo traiga`);
+    ok(arribaCon < 30 && subsIgual > 38 && antesDeDesde > 45 && enSuTramo < 30 && despuesDeHasta > 45 && cierreIgual > 45, `títulos en el video final (comparado cuadro a cuadro con el mismo video sin títulos): cambia la franja de arriba mientras dura el título (parecido ${arribaCon.toFixed(0)} dB) y nada más: los subtítulos quedan idénticos (${subsIgual.toFixed(0)} dB), antes del «desde» y después del «hasta» no hay nada (${antesDeDesde.toFixed(0)} y ${despuesDeHasta.toFixed(0)} dB) y el cierre no cambia (${cierreIgual.toFixed(0)} dB)`);
+    await fotograma(conTit, sT[0].inicio + 1.2, path.join(capturas, "titulo-apoyo-simulado.png"));
+    crmFalso.encolar(HB, "armado", null, { musica: false, estiloSubtitulos: "karaoke", estiloTitulos: "subrayado" });
+    r = await atender(depsH);
+    const hechosEstilo = r.armado.stats.segmentosHechos;
+    crmFalso.encolar(HB, "armado", null, { musica: false, estiloSubtitulos: "karaoke", titulos: false });
+    r = await atender(depsH);
+    ok(r.ok && hechosEstilo === 2 && r.armado.titulosDeApoyo === 0, "títulos de apoyo: `opciones.estiloTitulos` cambia el estilo recodificando solo las escenas que llevan título; con `opciones.titulos: false` no se pinta ninguno");
+
+    // ---- con Captions: los subtítulos los pone Captions y los títulos se pintan DESPUÉS, por nuestro lado ----
+    const enviosAntes = kc.envios.length;
+    ph.escenas[0].tituloApoyo = undefined;
+    ph.escenas[1].tituloApoyo = undefined;
+    crmFalso.encolar(HB, "armado", null, conCap);
+    r = await atender(depsC);
+    const enviosSin = kc.envios.length;
+    const capSinTit = path.join(datos, "captions-sin-titulos.mp4");
+    fs.copyFileSync(path.join(carpetas.entregados, `${r.trabajo.id}.mp4`), capSinTit);
+    ph.escenas[0].tituloApoyo = "Adiós al dolor";
+    crmFalso.encolar(HB, "armado", null, conCap);
+    r = await atender(depsC);
+    const capConTit = path.join(carpetas.entregados, `${r.trabajo.id}.mp4`);
+    const difCap = async (desde, y0, y1) => {
+      const recorte = `crop=iw:ih*${(y1 - y0).toFixed(2)}:0:ih*${y0.toFixed(2)}`;
+      const { se } = await correr(cfg.ffmpeg, ["-hide_banner", "-ss", String(desde), "-t", "1", "-i", capSinTit, "-ss", String(desde), "-t", "1", "-i", capConTit, "-filter_complex", `[0:v]${recorte}[a];[1:v]${recorte}[b];[a][b]psnr`, "-an", "-f", "null", "-"]);
+      const m = /average:(inf|[\d.]+)/.exec(se);
+      return m ? (m[1] === "inf" ? 99 : Number(m[1])) : NaN;
+    };
+    const capArriba = await difCap(1, 0.12, 0.3);
+    const capAbajo = await difCap(1, 0.5, 0.9);
+    ok(r.ok && /^captions:/.test(r.armado.estiloSubtitulos) && r.armado.titulosDeApoyo === 1 && kc.envios.length === enviosSin && enviosSin <= enviosAntes + 1 && capArriba < 30 && capAbajo > 38, `con Captions: el título de apoyo se pinta después, encima del video que devuelve Captions (la franja de arriba cambia: ${capArriba.toFixed(0)} dB; el resto no: ${capAbajo.toFixed(0)} dB), y ponerlo o cambiarlo NO manda ni paga de nuevo a Captions (se reutiliza lo que ya devolvió)`);
+    for (const e of ph.escenas) delete e.tituloApoyo;
+    pcx.escenas[0].cortes = [{ desde: 0, hasta: 1 }, { desde: 2.2, hasta: 2.9 }, { desde: 4.2, hasta: 4.9 }, { desde: 6.2, hasta: 6.8 }];
+    pcx.escenas[0].tituloApoyo = "Mira esto";
+    crmFalso.encolar("guion-cortes", "armado", null, { musica: false });
+    r = await atender();
+    const tc0 = r.armado.segmentos[0];
+    ok(r.ok && tc0.cortes === 4 && tc0.titulo && tc0.titulo.desde === 0.2 && Math.abs(tc0.titulo.hasta - (tc0.dura - 0.2)) < 0.06, `apertura en cortes con título de apoyo: el título se mantiene sobre los 4 tramos (de 0,2 s a ${tc0.titulo ? tc0.titulo.hasta : "?"} s de una escena de ${tc0.dura.toFixed(2)} s)`);
+    delete pcx.escenas[0].tituloApoyo;
+  }
+
   const logC = fs.readFileSync(registro.archivo, "utf8");
   ok(!logC.includes("clave-captions-de-mentira"), "Captions: la clave no queda escrita en el registro");
   capFalso.close();
+
+  // ============================ la voz de ElevenLabs se elige sola por país ====
+  {
+    const voces = require("../lib/voces");
+    const ev = { listas: 0, compartidas: [], anadidas: [], narradas: [], sinCupo: false };
+    const deLaCuenta = [
+      { voice_id: "cuentaRachel00000001", name: "Rachel", category: "premade", labels: { accent: "american", gender: "female", language: "en", use_case: "narration" }, preview_url: "https://muestras.example/rachel.mp3" },
+      { voice_id: "cuentaMateo000000001", name: "Mateo", category: "professional", labels: { accent: "latin american", gender: "male", language: "es", use_case: "conversational" }, preview_url: "https://muestras.example/mateo.mp3" },
+    ];
+    const comp = (id, name, accent, locale, gender, use_case, uso, extra = {}) => ({ public_owner_id: `dueno${id}`, voice_id: `bib${id}`.padEnd(20, "0"), name, accent, gender, age: "young", descriptive: "confident", use_case, category: "professional", language: "es", locale, preview_url: `https://muestras.example/${id}.mp3`, usage_character_count_1y: uso, cloned_by_count: 1000, free_users_allowed: true, ...extra });
+    const biblioteca = [
+      comp("Lucia", "Lucía", "peninsular", "es-ES", "female", "narrative_story", 9e8),
+      comp("Carmen", "Carmen", "peninsular", "es-ES", "female", "characters_animation", 1e5),
+      comp("Pablo", "Pablo", "peninsular", "es-ES", "male", "advertisement", 5e8),
+      comp("Valentina", "Valentina", "mexican", "es-MX", "female", "social_media", 8e8),
+      comp("Sofia", "Sofía", "colombian", "es-CO", "female", "conversational", 3e8),
+      comp("Camila", "Camila", "latin american", "es-419", "female", "narrative_story", 2e8),
+      comp("Diego", "Diego", "latin american", "es-419", "male", "narrative_story", 4e8),
+      comp("Hans", "Hans", "standard", "de-DE", "male", "narrative_story", 9e9, { language: "de" }),
+    ];
+    const elevenV = http.createServer((req, res) => {
+      let c = "";
+      req.on("data", (x) => (c += x));
+      req.on("end", () => {
+        const json = (codigo, o) => (res.writeHead(codigo, { "content-type": "application/json" }), res.end(JSON.stringify(o)));
+        const u = new URL(req.url, "http://x");
+        if (req.headers["xi-api-key"] !== "clave-eleven-de-mentira") return json(401, { detail: { status: "invalid_api_key" } });
+        if (req.method === "GET" && u.pathname === "/v2/voices") return ev.listas++, json(200, { voices: deLaCuenta, has_more: false, total_count: deLaCuenta.length });
+        if (req.method === "GET" && u.pathname === "/v1/shared-voices") {
+          ev.compartidas.push(u.search);
+          const q = u.searchParams;
+          return json(200, { voices: biblioteca.filter((v) => (!q.get("locale") || v.locale === q.get("locale")) && (!q.get("gender") || v.gender === q.get("gender")) && (!q.get("language") || v.language === q.get("language") || v.language === "de")), has_more: false });
+        }
+        const a = /^\/v1\/voices\/add\/([^/]+)\/([^/]+)$/.exec(u.pathname);
+        if (req.method === "POST" && a) {
+          if (ev.sinCupo) return json(400, { detail: { status: "voice_limit_reached", message: "You have reached your maximum amount of custom voices" } });
+          ev.anadidas.push({ dueno: a[1], id: a[2], nombre: JSON.parse(c).new_name });
+          return json(200, { voice_id: a[2] });
+        }
+        const t = /^\/v1\/text-to-speech\/([^/]+)\/with-timestamps$/.exec(u.pathname);
+        if (req.method === "POST" && t) {
+          const cuerpo = JSON.parse(c);
+          ev.narradas.push(t[1]);
+          const audio = fs.readFileSync(path.join(fijos, "voz.mp3"));
+          const letras = [...cuerpo.text];
+          return json(200, { audio_base64: audio.toString("base64"), alignment: { characters: letras, character_start_times_seconds: letras.map((_, i) => 0.1 + (i * 1.6) / letras.length), character_end_times_seconds: letras.map((_, i) => 0.1 + ((i + 1) * 1.6) / letras.length) } });
+        }
+        json(404, { detail: "not found" });
+      });
+    });
+    await new Promise((res) => elevenV.listen(0, "127.0.0.1", res));
+    // Un servidor con SOLO la clave: sin ELEVENLABS_VOICE_ID y sin voces en config.json.
+    const cfgV = { ...base, elevenKey: "clave-eleven-de-mentira", elevenVoz: "", elevenBase: `http://127.0.0.1:${elevenV.address().port}` };
+    const depsV = { ...depsN, cfg: cfgV };
+    const idDe = (n) => biblioteca.find((v) => v.name === n).voice_id;
+
+    const es = await voces.candidatas(cfgV, { pais: "ES", sexo: "mujer", cuantas: 5 });
+    const mx = await voces.candidatas(cfgV, { pais: "MX", sexo: "mujer", cuantas: 5 });
+    const cl = await voces.candidatas(cfgV, { pais: "CL", sexo: "mujer", cuantas: 5 });
+    const pe = await voces.candidatas(cfgV, { pais: "PE", sexo: "hombre", cuantas: 5 });
+    const todas = await voces.candidatas(cfgV, { pais: "ES", cuantas: 20 });
+    ok(es[0].nombre === "Lucía" && es[0].acento === "pais" && es[1].nombre === "Carmen" && /^https:\/\/muestras\.example\//.test(es[0].muestra) && es.every((v) => v.genero === "female") && mx[0].nombre === "Valentina" && mx[0].acento === "pais" && cl[0].nombre === "Camila" && cl[0].acento === "neutro" && pe[0].acento === "neutro" && ["Diego", "Mateo"].includes(pe[0].nombre) && !todas.some((v) => v.nombre === "Hans" || v.nombre === "Rachel") && todas[0].nombre === "Lucía" && todas[1].nombre === "Pablo", `voces por país: para España la primera es de acento peninsular y la más usada (${es[0].nombre}, después ${es[1].nombre}); para México, la mexicana (${mx[0].nombre}); para Chile y Perú, que no tienen voz propia en la lista, español latino neutro (${cl[0].nombre}, ${pe[0].nombre}); se respeta el sexo y se descartan las que no hablan español`);
+    ok(ev.listas === 5 && ev.compartidas.some((q) => /language=es&locale=es-ES&gender=female&page_size=100&sort=usage_character_count_1y/.test(q)) && ev.compartidas.some((q) => /^\?language=es&gender=male/.test(q)), "voces: se consultan las de la cuenta (GET /v2/voices) y la biblioteca compartida (GET /v1/shared-voices con language, locale, gender y orden por uso), como dice la documentación");
+    ok(voces.sexoDelTrabajo({ contexto: { voz: { sexo: "Hombre" } } }) === "hombre" && voces.sexoDelTrabajo({ contexto: { voz: { sexo: "femenina" } } }) === "mujer" && voces.sexoDelTrabajo({ contexto: { voz: { sexo: "masculina" } } }) === "hombre" && voces.sexoDelTrabajo({ contexto: { voz: { descripcion: "Mujer joven, cercana, tono de amiga" } } }) === "mujer" && voces.sexoDelTrabajo({ contexto: { voz: { descripcion: "locutor grave de anuncio" } } }) === "hombre" && voces.sexoDelTrabajo({ contexto: {} }) === "" && voces.paisDelTrabajo({ contexto: { pais: "España" } }) === "ES" && voces.paisDelTrabajo({ contexto: { pais: "CO", voz: { idioma: "es-MX" } } }) === "MX", "voces: el sexo sale de `contexto.voz.sexo` («femenina» / «masculina» como lo manda el CRM; también mujer / hombre) o, si no viene, de la descripción de la voz; el país, de `contexto.voz` (pais o idioma) o del proyecto");
+
+    // ---- armado con narración y SOLO la clave: no falla por no tener ID de voz ----
+    pn.escenas[0].voz = "¿Te duelen los ojos?";
+    pn.contexto.voz = { motor: "narracion", idioma: "es-ES", sexo: "mujer" };
+    const listasAntes = ev.listas;
+    crmFalso.encolar(NR, "armado", null, { musica: false, estiloSubtitulos: "karaoke" });
+    r = await atender(depsV);
+    const eV = crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1];
+    const guardadas = voces.leerElegidas(cfgV);
+    ok(r.ok && r.armado.modo === "elevenlabs" && r.armado.voz.id === idDe("Lucía") && r.armado.voz.automatica === true && ev.anadidas.length === 1 && ev.anadidas[0].dueno === "duenoLucia" && ev.anadidas[0].id === idDe("Lucía") && ev.narradas.length === 4 && ev.narradas.every((id) => id === idDe("Lucía")) && eV.sinVoz === false, "narración con SOLO la clave (sin ELEVENLABS_VOICE_ID): el armado no falla; elige la mejor voz del país del proyecto, la añade a la cuenta (POST /v1/voices/add/…) y narra todo el video con ella");
+    ok(eV.avisos.some((a) => /^Voz: Lucía · español de España \(ElevenLabs, elegida automáticamente\)$/.test(a)) && eV.avisos.some((a) => /^Narración de ElevenLabs: \d+ caracteres nuevos/.test(a)) && guardadas["ES|mujer"] && guardadas["ES|mujer"].id === idDe("Lucía") && guardadas["ES|mujer"].nombre === "Lucía" && fs.existsSync(path.join(datos, "voces.json")), "voces: la elegida se avisa en el video con una línea que empieza por «Voz: » («Voz: Lucía · español de España (ElevenLabs, elegida automáticamente)», como pide el contrato del 19-oct) y queda guardada en datos\\voces.json por país y sexo");
+    crmFalso.encolar(NR, "armado", null, { musica: false, estiloSubtitulos: "limpio" });
+    r = await atender(depsV);
+    ok(r.ok && ev.listas === listasAntes + 1 && ev.anadidas.length === 1 && ev.narradas.length === 4 && r.armado.voz.id === idDe("Lucía") && r.armado.voz.origen === "elegida automáticamente", "voces: el siguiente video del mismo país usa la MISMA voz sin volver a consultar ni añadir nada (y sin pagar otra vez la narración)");
+    pn.contexto.pais = "MX";
+    pn.contexto.voz = { motor: "narracion", pais: "MX", idioma: "es-MX", sexo: "femenina", descripcion: "voz femenina adulta" }; // como lo manda el CRM desde el 19-oct
+    crmFalso.encolar(NR, "armado", null, { musica: false, estiloSubtitulos: "limpio" });
+    r = await atender(depsV);
+    ok(r.ok && r.armado.voz.id === idDe("Valentina") && crmFalso.visto.cierres[crmFalso.visto.cierres.length - 1].avisos.some((a) => /^Voz: Valentina · español de México/.test(a)) && Object.keys(voces.leerElegidas(cfgV)).sort().join() === "ES|mujer,MX|mujer", "voces: un proyecto de México recibe una voz mexicana; cada país y sexo guarda la suya");
+
+    // ---- una persona fija otra; el proyecto puede pedir una concreta; la del .env sigue valiendo ----
+    const fijada = await voces.fijar(cfgV, { pais: "ES", sexo: "mujer", id: idDe("Carmen") });
+    const trasFijar = await voces.vozDelProyecto(cfgV, { contexto: { pais: "ES", voz: { sexo: "mujer" } } }, registro);
+    const pedida = await voces.vozDelProyecto(cfgV, { contexto: { pais: "ES", voz: { sexo: "mujer", vozId: "vozDelTrabajo00000001" } } }, registro);
+    const delEnv = await voces.vozDelProyecto({ ...cfgV, elevenVoz: "vozDelEnv0000000001" }, { contexto: { pais: "AR" } }, registro);
+    const delEnvConGuardada = await voces.vozDelProyecto({ ...cfgV, elevenVoz: "vozDelEnv0000000001" }, { contexto: { pais: "ES", voz: { sexo: "mujer" } } }, registro);
+    ok(fijada.fijadaAMano && trasFijar.id === idDe("Carmen") && trasFijar.nombre === "Carmen" && trasFijar.origen === "fijada a mano" && ev.anadidas.some((x) => x.id === idDe("Carmen")) && pedida.id === "vozDelTrabajo00000001" && delEnv.id === "vozDelEnv0000000001" && delEnv.origen === "ELEVENLABS_VOICE_ID" && delEnvConGuardada.id === idDe("Carmen"), "voces: una persona puede fijar otra (probar.ps1 -Voces ES -Fijar <id>) y desde ahí se usa esa; `contexto.voz.vozId` manda sobre todo; el ELEVENLABS_VOICE_ID del .env, si alguien lo dejó puesto, sigue valiendo donde nadie fijó otra");
+
+    // ---- la cuenta no deja añadir voces de la biblioteca: se usa una que ya esté en la cuenta ----
+    ev.sinCupo = true;
+    const sinCupo = await voces.vozDelProyecto(cfgV, { contexto: { pais: "CO", voz: { sexo: "hombre" } } }, registro);
+    ev.sinCupo = false;
+    ok(sinCupo.id === "cuentaMateo000000001" && sinCupo.automatica && /neutro/.test(sinCupo.acento), "voces: si el plan no deja añadir voces de la biblioteca, no falla: se queda con la mejor que ya está en la cuenta");
+
+    // ---- solo falla si la clave no sirve o no hay clave ----
+    const cfgMala = { ...cfgV, elevenKey: "clave-que-no-sirve-000" };
+    pn.contexto.pais = "AR";
+    pn.contexto.voz = { motor: "narracion" };
+    crmFalso.encolar(NR, "armado", null, { musica: false });
+    r = await atender({ ...depsN, cfg: cfgMala });
+    const motivoMala = crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1].motivo;
+    crmFalso.encolar(NR, "armado", null, { musica: false });
+    const rSinClave = await atender(deps);
+    ok(!r.ok && /^No se puede armar con narración: no se pudo conseguir una voz de ElevenLabs\. .*401/.test(motivoMala) && !motivoMala.includes("clave-que-no-sirve") && !rSinClave.ok && /el servidor no tiene ELEVENLABS_API_KEY/.test(crmFalso.visto.fallos[crmFalso.visto.fallos.length - 1].motivo), "voces: el armado con narración solo falla si la clave falta o ElevenLabs la rechaza (401), con un motivo claro y sin escribir la clave");
+    ok(!fs.readFileSync(registro.archivo, "utf8").includes("clave-eleven-de-mentira"), "voces: la clave de ElevenLabs no queda escrita en el registro");
+    pn.contexto.pais = "ES";
+    elevenV.close();
+  }
 
   // =========================================== varios trabajos a la vez ====
   // Piezas sueltas de lib/limites.js
