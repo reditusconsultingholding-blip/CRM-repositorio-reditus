@@ -11,6 +11,8 @@ import {
   MAX_SEGUNDOS_CLIP,
   cortesDeApertura,
   golpesPara,
+  fallaDelTitulo,
+  MAX_TITULO_APOYO,
   type Transicion,
   contarPalabras,
   palabrasQueCaben,
@@ -437,6 +439,7 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
       promptVideo: s("promptVideo", 4000),
       fotoUrl: d.fotos.includes(pedida) ? pedida : (d.fotos[indice] ?? null),
       movimiento: (MOVIMIENTOS as readonly string[]).includes(o.movimiento as string) ? (o.movimiento as Movimiento) : "acercar",
+      ...(s("tituloApoyo", MAX_TITULO_APOYO) && tipo !== "cierre" ? { tituloApoyo: s("tituloApoyo", MAX_TITULO_APOYO) } : {}),
       ...(Array.isArray(o.cortes) && o.cortes.length >= 2 ? { cortes: o.cortes as EscenaProyecto["cortes"], duracionClip: n("duracionClip", MAX_CLIP) } : {}),
       ...(o.imagen && typeof o.imagen === "object" ? { imagen: o.imagen as EscenaProyecto["imagen"] } : {}),
       ...(o.clip && typeof o.clip === "object" ? { clip: o.clip as EscenaProyecto["clip"] } : {}),
@@ -483,6 +486,17 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
     }
     return x;
   });
+
+  const titulosMalos: string[] = [];
+  escenas = escenas.map((e) => {
+    const falla = fallaDelTitulo(e);
+    if (!falla) return e;
+    titulosMalos.push(`«${e.tituloApoyo}» (${falla})`);
+    const x = { ...e };
+    delete x.tituloApoyo;
+    return x;
+  });
+  if (titulosMalos.length) avisos.push(`Se quitaron títulos de apoyo que no servían: ${titulosMalos.slice(0, 3).join("; ")}. Escríbelos de nuevo en el plan.`);
 
   if (opciones.verificarVoz && pasos.length) {
     let corregidos = 0;

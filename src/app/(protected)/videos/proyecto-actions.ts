@@ -833,7 +833,7 @@ export async function guardarCierre(id: string, cierre: { titular?: unknown; det
 }
 
 /** Estilo de edición del video: plantilla de subtítulos y ritmo del montaje. No genera nada: si ya había video, queda por armar de nuevo (no cuesta). */
-export async function guardarEdicion(id: string, edicion: { subtitulos?: unknown; ritmo?: unknown }): Promise<EstadoProyecto | { error: string }> {
+export async function guardarEdicion(id: string, edicion: { subtitulos?: unknown; ritmo?: unknown; titulos?: unknown }): Promise<EstadoProyecto | { error: string }> {
   return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;

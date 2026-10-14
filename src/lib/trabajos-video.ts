@@ -81,6 +81,8 @@ export type OpcionesVideo = {
   /** Plantilla de subtítulos (palabra, caja, limpio, impacto) y ritmo del montaje (rapido, medio, calmado). */
   estiloSubtitulos?: string;
   ritmo?: string;
+  /** Plantilla de los títulos de apoyo (caja, subrayado, etiqueta). */
+  estiloTitulos?: string;
 };
 
 export const OPCIONES_VIDEO_BASE: OpcionesVideo = { subtitulos: true, voz: true, musica: null, modelo: null };
@@ -246,6 +248,7 @@ const escenaFuera = (e: EscenaProyecto) => ({
   fotoUrl: e.fotoUrl,
   movimiento: e.movimiento,
   ...(e.cortes?.length ? { cortes: e.cortes, duracionClip: e.duracionClip ?? 8 } : {}),
+  ...(e.tituloApoyo?.trim() && e.tipo !== "cierre" ? { tituloApoyo: e.tituloApoyo.trim() } : {}),
   ...(e.transicion ? { transicion: e.transicion } : {}),
   ...(e.golpesVisuales?.length ? { golpesVisuales: e.golpesVisuales } : {}),
   imagen: piezaFuera(e.imagen),
@@ -335,6 +338,7 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
       ...(txt(op.tonoMusica, 20) ? { tonoMusica: txt(op.tonoMusica, 20) } : {}),
       ...(txt(op.estiloSubtitulos, 20) ? { estiloSubtitulos: txt(op.estiloSubtitulos, 20) } : {}),
       ...(txt(op.ritmo, 20) ? { ritmo: txt(op.ritmo, 20) } : {}),
+      ...(txt(op.estiloTitulos, 20) ? { estiloTitulos: txt(op.estiloTitulos, 20) } : {}),
     },
     etapa: (ETAPAS_TRABAJO as readonly string[]).includes(txt(o.etapa, 12)) ? (txt(o.etapa, 12) as EtapaTrabajo) : null,
     contexto: o.contexto ? leerContexto(o.contexto) : null,

@@ -16,6 +16,8 @@ import {
   MOVIMIENTOS,
   MOVIMIENTO_LABELS,
   NOMBRE_PASO,
+  MAX_TITULO_APOYO,
+  fallaDelTitulo,
   TIPOS_ESCENA,
   TIPO_ESCENA_LABELS,
   estimado,
@@ -27,6 +29,7 @@ import {
   type TipoEscena,
 } from "@/lib/proyecto-video";
 import { cn } from "@/lib/utils";
+import { nombrePais } from "@/lib/videos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,7 +45,7 @@ const TIPO_CORTO: Record<TipoEscena, string> = { generada: "IA", "foto-real": "F
 type Borrador = EscenaProyecto & { clave: string };
 
 const aBorrador = (e: EscenaProyecto[]): Borrador[] => e.map((x) => ({ ...x, clave: `g${x.n}` }));
-const editable = (l: EscenaProyecto[]) => JSON.stringify(l.map((e) => [e.n, e.paso, e.tipo, e.titulo, e.duracion, e.voz, e.locucion, e.promptImagen, e.promptVideo, e.fotoUrl, e.movimiento]));
+const editable = (l: EscenaProyecto[]) => JSON.stringify(l.map((e) => [e.n, e.paso, e.tipo, e.titulo, e.duracion, e.tituloApoyo ?? "", e.voz, e.locucion, e.promptImagen, e.promptVideo, e.fotoUrl, e.movimiento]));
 
 type Props = {
   proyecto: ProyectoVideo;
@@ -237,6 +240,22 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                       />
                     </Label>
                   </div>
+                  {e.tipo !== "cierre" && (
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_9rem]">
+                      <Label className="flex flex-col items-stretch gap-1.5">
+                        <span>Título de apoyo (arriba)</span>
+                        <Input value={e.tituloApoyo ?? ""} maxLength={MAX_TITULO_APOYO} disabled={quieto} placeholder="2 a 5 palabras: el beneficio, un dato real o el paso" onChange={(ev) => cambiar(e.clave, { tituloApoyo: ev.target.value })} />
+                        <span className={cn("text-sm font-normal", fallaDelTitulo(e) ? "text-destructive" : "text-muted-foreground")} data-falla-titulo={fallaDelTitulo(e) ? "si" : "no"}>
+                          {fallaDelTitulo(e) ? `Así no sirve: ${fallaDelTitulo(e)}.` : "Va arriba y centrado mientras dura la escena. No repite lo que se dice: eso ya lo muestran los subtítulos."}
+                        </span>
+                      </Label>
+                      {/* Las dos capas, como se verán: el título arriba y el subtítulo abajo. */}
+                      <div className="flex aspect-[9/14] flex-col items-center justify-between rounded-lg bg-neutral-900 p-2 text-center" data-ejemplo-capas aria-label="Ejemplo de las dos capas de texto">
+                        <span className={cn("rounded px-1.5 py-0.5 text-[11px] leading-tight font-bold text-white", e.tituloApoyo?.trim() ? "bg-primary" : "border border-dashed border-white/30 font-normal text-white/50")}>{e.tituloApoyo?.trim() || "sin título"}</span>
+                        <span className="line-clamp-2 text-[10px] leading-tight text-white/85">{e.voz.trim().split(/\s+/).slice(0, 6).join(" ") || "subtítulo"}</span>
+                      </div>
+                    </div>
+                  )}
                   <Label className="flex flex-col items-stretch gap-1.5">
                     <span>Lo que se dice en esta escena</span>
                     <Textarea value={e.voz} maxLength={1200} rows={2} disabled={quieto} onChange={(ev) => cambiar(e.clave, { voz: ev.target.value })} />
@@ -396,8 +415,24 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
             Va idéntica en todos los clips: es lo que sostiene que la voz no cambie de un clip a otro. Aun así puede variar un poco; si un clip suena distinto, se regenera solo ese.
           </span>
         </Label>
+        <p className="text-sm" data-voz-automatica>
+          <strong className="font-medium">Voz:</strong> {vozP.vozId ? `fijada a mano (${vozP.vozId})` : `la elige el sistema según el país (${nombrePais(proyecto.contexto.pais)}), ${vozP.sexo === "masculina" ? "masculina" : "femenina"}`}.
+        </p>
         <details data-avanzado-voz>
-        <summary className="cursor-pointer text-sm font-medium">Avanzado: narración aparte</summary>
+        <summary className="cursor-pointer text-sm font-medium">Avanzado: narración aparte y voz fija</summary>
+        <div className="mt-2 grid gap-3 md:grid-cols-2">
+          <Label className="flex flex-col items-stretch gap-1.5">
+            <span>Voz</span>
+            <select className="h-9 rounded-lg border border-input bg-card px-2 text-sm" value={vozP.sexo ?? "femenina"} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, sexo: e.target.value === "masculina" ? "masculina" : "femenina" }))}>
+              <option value="femenina">Femenina</option>
+              <option value="masculina">Masculina</option>
+            </select>
+          </Label>
+          <Label className="flex flex-col items-stretch gap-1.5">
+            <span>ID de voz fijo (opcional)</span>
+            <Input value={vozP.vozId ?? ""} maxLength={64} disabled={quieto} placeholder="Vacío = la elige el sistema" onChange={(e) => setVozP((v) => ({ ...v, vozId: e.target.value.trim() || undefined }))} />
+          </Label>
+        </div>
         <label className="mt-2 flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={vozP.motor === "narracion"} disabled={quieto} onChange={(e) => setVozP((v) => ({ ...v, motor: e.target.checked ? "narracion" : "clip" }))} />
           <span>

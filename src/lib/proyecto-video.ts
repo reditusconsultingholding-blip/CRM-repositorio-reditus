@@ -83,6 +83,11 @@ export type VozProyecto = {
   acento: string;
   /** Descripción fija de la voz/personaje. Va IDÉNTICA en todos los clips: es lo único que sostiene la continuidad de voz. */
   descripcion: string;
+  /** País del anuncio (código de dos letras): con él el servidor de videos elige la voz con ese acento. */
+  pais?: string;
+  sexo?: "femenina" | "masculina";
+  /** Opcional (avanzado): un ID de voz fijo del proveedor. Vacío = la elige el sistema según el país. */
+  vozId?: string;
 };
 
 const ACENTOS: Record<string, { idioma: string; acento: string }> = {
@@ -108,7 +113,7 @@ export function acentoDePais(pais: string): { idioma: string; acento: string } {
 export const VOZ_DESCRIPCION_BASE = "voz adulta joven, cálida y cercana, ritmo natural de conversación, sin tono de locutor";
 
 export function vozDePais(pais: string, motor: VozProyecto["motor"] = "clip"): VozProyecto {
-  return { motor, ...acentoDePais(pais), descripcion: VOZ_DESCRIPCION_BASE };
+  return { motor, ...acentoDePais(pais), descripcion: VOZ_DESCRIPCION_BASE, pais: pais.toUpperCase().slice(0, 2), sexo: "femenina" };
 }
 
 /** Duración máxima de un clip generado (el modelo no da más en una toma). */
@@ -208,11 +213,36 @@ export type EscenaProyecto = {
   cortes?: Corte[];
   /** Segundos que se le piden al generador para el clip cuando no coincide con `duracion` (apertura en cortes). */
   duracionClip?: number;
+  /**
+   * TÍTULO DE APOYO: texto corto (2 a 5 palabras) que va ARRIBA y centrado mientras dura la escena. No es el
+   * subtítulo: no repite lo que se dice, lo refuerza (el beneficio, un dato real, el nombre del producto o el paso).
+   */
+  tituloApoyo?: string;
   /** Cómo ENTRA esta escena (la dibuja el servidor de videos). Sin valor, la elige él según el ritmo. */
   transicion?: Transicion;
   /** Segundos de la escena en los que debe haber un cambio visual (acercamiento brusco o reencuadre) para que ninguna toma pase de ~3 s igual. */
   golpesVisuales?: number[];
 };
+
+export const MAX_TITULO_APOYO = 42;
+const sinTildes = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9% ]+/g, " ").replace(/\s+/g, " ").trim();
+
+/** Por qué un título de apoyo no sirve («» si está bien). */
+export function fallaDelTitulo(e: Pick<EscenaProyecto, "tituloApoyo" | "voz" | "tipo">): string {
+  const t = (e.tituloApoyo ?? "").trim();
+  if (!t) return "";
+  if (e.tipo === "cierre") return "el cierre ya tiene su tarjeta: no lleva título de apoyo";
+  const palabras = t.split(/\s+/).length;
+  if (palabras > 6 || t.length > MAX_TITULO_APOYO) return "es largo: un título de apoyo tiene de 2 a 5 palabras";
+  const a = sinTildes(t);
+  const b = sinTildes(e.voz);
+  if (a.length >= 6 && b && (b === a || b.includes(a))) return "repite lo que se dice: el subtítulo ya lo muestra; el título debe sumar otra cosa";
+  return "";
+}
+
+export const ESTILOS_TITULOS = ["caja", "subrayado", "etiqueta"] as const;
+export type EstiloTitulos = (typeof ESTILOS_TITULOS)[number];
+export const ESTILO_TITULOS_LABELS: Record<EstiloTitulos, string> = { caja: "Caja del color de la marca (se lee siempre)", subrayado: "Letras blancas con una raya de color", etiqueta: "Etiqueta oscura redondeada (la más sobria)" };
 
 /** Las transiciones que sabe dibujar el servidor de videos (`lib/efectos.js`). */
 export const TRANSICIONES = ["corte", "zoom", "barrido", "flash", "glitch", "deslizar", "fundido"] as const;
@@ -263,7 +293,7 @@ export const RITMO_LABELS: Record<Ritmo, string> = {
   medio: "Medio",
   calmado: "Calmado (marca sobria: cortes secos y fundidos)",
 };
-export type EdicionProyecto = { subtitulos: EstiloSubtitulos; ritmo: Ritmo };
+export type EdicionProyecto = { subtitulos: EstiloSubtitulos; ritmo: Ritmo; titulos?: EstiloTitulos };
 
 /** El estilo que le va a cada formato cuando nadie lo ha elegido: dinámico por defecto. */
 export function edicionDeFormato(formato: string): EdicionProyecto {
@@ -278,6 +308,7 @@ export function leerEdicion(raw: unknown, formato = ""): EdicionProyecto {
   return {
     subtitulos: (ESTILOS_SUBTITULOS as readonly string[]).includes(o.subtitulos as string) ? (o.subtitulos as EstiloSubtitulos) : b.subtitulos,
     ritmo: (RITMOS as readonly string[]).includes(o.ritmo as string) ? (o.ritmo as Ritmo) : b.ritmo,
+    titulos: (ESTILOS_TITULOS as readonly string[]).includes(o.titulos as string) ? (o.titulos as EstiloTitulos) : "caja",
   };
 }
 
@@ -500,6 +531,7 @@ export const PUNTOS_CONTROL = {
   gancho: "Gancho en los primeros 2 segundos",
   apertura: "Apertura de 3 s con al menos 3 cortes",
   urgencia: "Cierre con urgencia real",
+  titulos: "Títulos de apoyo presentes",
   producto: "El producto real se ve",
   cierre: "Oferta y llamado a la acción al final",
   subtitulos: "Subtítulos presentes",
@@ -522,7 +554,7 @@ export type ProyectoVideo = {
   contexto: ContextoProyecto;
   escenas: EscenaProyecto[];
   costo: { creditos: number; segundosGenerados: number; imagenes: number };
-  final: { estado: EstadoFinal; url: string | null; armados: number; trabajoId: string | null; nota: string; control?: ControlFinal | null };
+  final: { estado: EstadoFinal; url: string | null; armados: number; trabajoId: string | null; nota: string; control?: ControlFinal | null; /** Lo que avisó el servidor al armar (p. ej. qué voz usó). */ avisos?: string[] };
   /** Tono de la música de fondo (lo mezcla el trabajador al armar). */
   tonoMusica: TonoMusica;
   // ---- uso interno del CRM ----
@@ -600,6 +632,7 @@ export function leerEscenas(raw: unknown): EscenaProyecto[] {
         movimiento: uno(o.movimiento, MOVIMIENTOS, "acercar"),
         imagen: leerPieza(o.imagen),
         clip: leerPieza(o.clip),
+        ...(tipo !== "cierre" && txt(o.tituloApoyo, MAX_TITULO_APOYO).trim() ? { tituloApoyo: txt(o.tituloApoyo, MAX_TITULO_APOYO).trim() } : {}),
         ...((TRANSICIONES as readonly string[]).includes(o.transicion as string) ? { transicion: o.transicion as Transicion } : {}),
         ...(Array.isArray(o.golpesVisuales) && o.golpesVisuales.length ? { golpesVisuales: (o.golpesVisuales as unknown[]).filter((x): x is number => typeof x === "number" && x > 0.3 && x < 15).slice(0, 4) } : {}),
         ...(tipo === "generada" && leerCortes(o.cortes).length >= 2 ? { cortes: leerCortes(o.cortes), duracionClip: Math.min(MAX_SEGUNDOS_CLIP, Math.max(4, Math.round(num(o.duracionClip, MAX_SEGUNDOS_CLIP)))) } : {}),
@@ -643,6 +676,9 @@ export function leerVoz(raw: unknown, pais: string): VozProyecto {
     idioma: /^[a-z]{2}(-[A-Z]{2})?$/.test(txt(v.idioma, 8)) ? txt(v.idioma, 8) : base.idioma,
     acento: txt(v.acento, 200).trim() || base.acento,
     descripcion: txt(v.descripcion, 400).trim() || base.descripcion,
+    pais: /^[A-Za-z]{2}$/.test(txt(v.pais, 2)) ? txt(v.pais, 2).toUpperCase() : base.pais,
+    sexo: v.sexo === "masculina" ? "masculina" : v.sexo === "femenina" ? "femenina" : /masculin|hombre/i.test(txt(v.descripcion, 400)) ? "masculina" : "femenina",
+    ...(/^[\w-]{6,64}$/.test(txt(v.vozId, 64)) ? { vozId: txt(v.vozId, 64) } : {}),
   };
 }
 
@@ -685,6 +721,13 @@ export function controlPorDatos(p: ProyectoVideo, url: string, datos: { duracion
       urgencia: cierreCompleto(p.contexto.cierre).urgencia
         ? { nota: "ok", detalle: `El cierre lleva la urgencia: «${cierreCompleto(p.contexto.cierre).urgencia}».` }
         : { nota: "duda", detalle: "El cierre no tiene línea de urgencia (no hay promoción ni plazo publicado). Si existe uno real, escríbelo en «Cierre del video»." },
+      titulos: (() => {
+        const con = p.escenas.filter((e) => e.tituloApoyo?.trim() && !fallaDelTitulo(e)).length;
+        const malos = p.escenas.filter((e) => fallaDelTitulo(e)).map((e) => e.n);
+        if (malos.length) return { nota: "duda" as const, detalle: `El título de apoyo de la escena ${malos.join(", ")} repite el subtítulo o es largo.` };
+        if (!primera?.tituloApoyo?.trim()) return { nota: "duda" as const, detalle: "La apertura no tiene título de apoyo (arriba y centrado)." };
+        return con >= 2 ? { nota: "ok" as const, detalle: `${con} escenas llevan título de apoyo, distinto de lo que se dice.` } : { nota: "duda" as const, detalle: "Solo la apertura tiene título de apoyo: falta al menos el de la prueba o el dato." };
+      })(),
       producto: p.escenas.some((e) => e.tipo !== "generada" && e.fotoUrl) ? { nota: "ok", detalle: "Hay escenas con la foto real del producto." } : { nota: "duda", detalle: "Ninguna escena usa la foto real del producto." },
       cierre:
         ultima?.tipo === "cierre" && p.contexto.cierre.oferta.trim() && p.contexto.cierre.llamadoALaAccion.trim()
@@ -738,6 +781,7 @@ export function leerProyecto(raw: unknown): ProyectoVideo | null {
       trabajoId: txt(f.trabajoId, 40) || null,
       nota: txt(f.nota, 600),
       control: leerControl(f.control),
+      ...(lista(f.avisos).length ? { avisos: lista(f.avisos).map((a) => txt(a, 300)).filter(Boolean).slice(0, 8) } : {}),
     },
     tonoMusica: uno(o.tonoMusica, TONOS_MUSICA, "neutro"),
     opciones: {
@@ -962,6 +1006,8 @@ export function plegarTrabajos(original: ProyectoVideo, trabajos: TrabajoVideo[]
           p.final.url = t.resultado.videoUrl;
           p.final.nota = "";
           finalNuevo = t.resultado.videoUrl;
+          if (t.resultado.avisos.length) p.final.avisos = t.resultado.avisos.slice(0, 8);
+          else delete p.final.avisos;
           anotar(p, "Video armado: queda por aprobar.", t.terminadoAt ?? undefined);
           guardar = true;
         } else if (TERMINADO(t)) {

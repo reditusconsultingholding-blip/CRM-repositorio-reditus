@@ -192,6 +192,27 @@ Decisión del dueño: **la voz es la que genera el modelo de video dentro de cad
 3. **Fotogramas del final (opcional, recomendado)**: antes de cerrar el armado, subir de 3 a 6 fotogramas JPG del video ya armado con `{ toma, pedirSubida: true, tipo: "fotograma-final", indice: 1..6 }` y mandar sus rutas en el cierre: `fotogramas: ["<ruta>", …]`, en orden. El primero debe ser de los 2 primeros segundos; el último, del cierre con el rótulo; los demás, repartidos. Con ellos el CRM hace el control de calidad automático (gancho, producto visible, oferta y llamado al final, subtítulos) y lo deja anotado junto al video «por aprobar». Sin fotogramas, el control se hace solo con los datos (duración, plan), y lo dice.
 4. `duracion` en el resultado del armado ya existía: ahora se usa para comparar con el objetivo. Conviene mandarla siempre.
 
+### 19-oct-2026 · títulos de apoyo (≠ subtítulos) y voz por país automática (lado del CRM hecho; solo se AÑADE)
+
+**A. Títulos de apoyo.** Son otra capa, distinta de los subtítulos: los subtítulos van sincronizados con lo que se dice (abajo); el título de apoyo va **arriba y centrado** y dice algo importante que la voz no dice.
+
+- **`escena.tituloApoyo`: string** (opcional; 2 a 5 palabras, ≤ 42 caracteres). El CRM ya lo valida: no repite la frase hablada, nunca viene en la escena `cierre` (que tiene su tarjeta) y, en el video automático, viene al menos en la apertura y en la escena de la prueba. Ausente o vacío → esa escena no lleva título.
+- **`escena.tituloApoyoDesde` / `escena.tituloApoyoHasta`** (opcionales, segundos dentro de la escena; también vale `tituloApoyo: { texto, desde, hasta }`, que es como ya lo lee `lib/titulos.js`): el CRM hoy manda `tituloApoyo` como TEXTO y no manda desde/hasta; sin ellos el título dura toda la escena menos 0,2 s a cada lado. Se reservan para afinar a mano más adelante.
+- **`opciones.estiloTitulos`**: los que ya dibuja `lib/titulos.js`: `"caja"` (mayúsculas sobre caja del color de la marca; es el que manda el CRM por defecto) · `"subrayado"` (mayúsculas blancas con una raya de color) · `"etiqueta"` (píldora oscura, la más sobria). El color de marca es `contexto.cierre.color`. Ausente o desconocido → lo elige el trabajador.
+- Posición: centrado, dentro del margen seguro superior (entre el 12 % y el 22 % del alto). Máximo 2 líneas al 84 % del ancho; tamaño ≈ 62 px a 1080 de ancho, bajando hasta 46 px si no cabe. Entrada con un golpe corto (escala 92 → 100 % en 0,12 s); sin animación continua.
+- Nunca se pisa con el subtítulo (que va abajo) ni con el texto de la tarjeta de cierre. En la apertura en `cortes` el título se mantiene sobre todos los tramos.
+- No se traduce, no se corrige y no se le añade nada: es texto ya aprobado.
+
+**B. Voz por país automática.** `contexto.voz` trae siempre:
+
+```json
+"voz": { "motor": "narracion", "pais": "ES", "idioma": "es-ES", "acento": "castellano peninsular (España)…", "sexo": "femenina", "descripcion": "voz femenina adulta…" }
+```
+
+- **`pais`** (dos letras) y **`sexo`** (`"femenina"` | `"masculina"`) son nuevos y vienen siempre. **`vozId`** es opcional: solo si alguien fijó una voz a mano.
+- Sin `vozId`, el trabajador elige en ElevenLabs una voz de ese `sexo` con el acento de `pais`/`idioma` y la usa en TODO el video. Con `vozId`, usa esa.
+- En el resultado del armado, añadir a `avisos` una línea que empiece por `Voz: ` con el nombre de la voz usada (p. ej. `Voz: Lucía · español de España (ElevenLabs)`). El CRM muestra los `avisos` del armado junto al video.
+
 ### 18-oct-2026 · ritmo: transición por escena, cambios visuales dentro de la toma y «muy rápido» (lado del CRM hecho; solo se AÑADE, ningún campo publicado cambia de nombre)
 
 - **`escena.transicion`** (ya lo lee `efectos.js`): el CRM ahora lo manda en casi todas las escenas del video automático, variando entre `zoom`, `barrido`, `deslizar`, `flash` y `glitch`; el cierre entra con `fundido`. La escena 1 no trae (abre el video). Valores: los de `TRANSICIONES`. Ausente → como hoy.

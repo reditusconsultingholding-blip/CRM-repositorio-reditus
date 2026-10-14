@@ -39,6 +39,9 @@ import {
   ESTILO_SUBTITULOS_LABELS,
   RITMOS,
   RITMO_LABELS,
+  ESTILOS_TITULOS,
+  ESTILO_TITULOS_LABELS,
+  type EstiloTitulos,
   leerEdicion,
   type EstiloSubtitulos,
   type Ritmo,
@@ -478,6 +481,13 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
                   ? "Nada generado sale sin un sí: míralo completo. Si algo está mal, márcalo en «Corregir»: se rehace solo eso."
                   : "Este es el armado anterior. Cuando esté lo nuevo, vuelve a armar (no cuesta)."}
             </p>
+            {final.avisos && final.avisos.length > 0 && (
+              <ul className="flex flex-col gap-0.5 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-sm" data-avisos-armado aria-label="Lo que informó el servidor al armar">
+                {final.avisos.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            )}
             {final.control && final.control.url === final.url && (
               <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs" data-control>
                 <span className={ETIQUETA}>Control automático {final.control.conFotogramas ? "(mirando fotogramas del video)" : "(solo con datos: el servidor no mandó fotogramas)"}</span>
@@ -773,7 +783,7 @@ const EJEMPLO_SUBTITULO: Record<EstiloSubtitulos, React.ReactNode> = {
 };
 
 /** Estilo de edición: cómo se ven los subtítulos y qué tan rápido va el montaje. Con ejemplo a la vista. */
-function EdicionVideo({ edicion, ocupado, onCambiar }: { edicion: { subtitulos: EstiloSubtitulos; ritmo: Ritmo }; ocupado: boolean; onCambiar: (e: { subtitulos?: EstiloSubtitulos; ritmo?: Ritmo }) => void }) {
+function EdicionVideo({ edicion, ocupado, onCambiar }: { edicion: { subtitulos: EstiloSubtitulos; ritmo: Ritmo; titulos?: EstiloTitulos }; ocupado: boolean; onCambiar: (e: { subtitulos?: EstiloSubtitulos; ritmo?: Ritmo; titulos?: EstiloTitulos }) => void }) {
   const SELECT = "h-9 w-full rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3" id="estilo-de-edicion" aria-label="Estilo de edición">
@@ -802,7 +812,18 @@ function EdicionVideo({ edicion, ocupado, onCambiar }: { edicion: { subtitulos: 
             ))}
           </select>
         </label>
-        <div className="flex min-h-20 items-center justify-center rounded-lg bg-neutral-900 p-3 text-center" data-ejemplo-subtitulo={edicion.subtitulos} aria-label="Ejemplo de subtítulo">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Títulos de apoyo (arriba)
+          <select className={SELECT} value={edicion.titulos ?? "caja"} disabled={ocupado} onChange={(e) => onCambiar({ titulos: e.target.value as EstiloTitulos })}>
+            {ESTILOS_TITULOS.map((k) => (
+              <option key={k} value={k}>
+                {ESTILO_TITULOS_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex min-h-28 flex-col items-center justify-between gap-3 rounded-lg bg-neutral-900 p-3 text-center md:col-span-3" data-ejemplo-subtitulo={edicion.subtitulos} aria-label="Ejemplo: título de apoyo arriba y subtítulo abajo">
+          <span className={cn("text-sm font-bold text-white", (edicion.titulos ?? "caja") === "caja" && "rounded bg-primary px-3 py-1", edicion.titulos === "etiqueta" && "rounded-full border border-white/20 bg-neutral-800 px-3 py-1", edicion.titulos === "subrayado" && "border-b-4 border-primary pb-0.5")}>BLOQUEA LA LUZ AZUL</span>
           {EJEMPLO_SUBTITULO[edicion.subtitulos]}
         </div>
       </div>
