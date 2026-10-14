@@ -470,7 +470,7 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     duracionObjetivo: etapa === "armado" ? duracionTotal(proyecto) : escenas.reduce((x, e) => x + e.duracion, 0),
     escenas: [],
     imagenesProducto: proyecto.contexto.fotos.slice(0, MAX_IMAGENES_PRODUCTO),
-    opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica, estiloSubtitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).subtitulos, ritmo: leerEdicion(proyecto.contexto.edicion, p.formato.slug).ritmo, estiloTitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).titulos ?? "caja", ...(cfg.captions ? { proveedorSubtitulos: "captions", plantillaCaptions: cfg.plantillaCaptions } : {}) },
+    opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica, estiloSubtitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).subtitulos, ritmo: leerEdicion(proyecto.contexto.edicion, p.formato.slug).ritmo, estiloTitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).titulos ?? "caja", ...(cfg.captions && !proyecto.opciones.subtitulosPropios ? { proveedorSubtitulos: "captions", plantillaCaptions: cfg.plantillaCaptions } : {}) },
     pedidoPor: p.quien,
     origen: "manual",
     // El cierre viaja completo: titular + detalle (la oferta en dos líneas) y el color de marca del botón.
@@ -839,7 +839,12 @@ async function anotarEscenas(admin: Admin, t: TrabajoVideo, crudas: unknown[], i
         mal("El archivo subido está vacío. Súbelo de nuevo.");
         continue;
       }
-      t.reportes.push({ ...base, url: almacen.getPublicUrl(x.ruta).data.publicUrl, ruta: x.ruta, error: "" });
+      // Fotogramas del clip (opcionales): solo los de la carpeta de este trabajo y de esta escena.
+      const fotogramas = (Array.isArray(x.fotogramas) ? x.fotogramas : [])
+        .filter((f): f is string => typeof f === "string" && f.startsWith(`${carpetaProyecto(t)}/e${n}-clip-f`))
+        .slice(0, 5)
+        .map((f) => almacen.getPublicUrl(f).data.publicUrl);
+      t.reportes.push({ ...base, url: almacen.getPublicUrl(x.ruta).data.publicUrl, ruta: x.ruta, error: "", ...(fotogramas.length ? { fotogramas } : {}) });
       salida.push({ n, tipo, ok: true });
       continue;
     }
@@ -1004,6 +1009,18 @@ async function resultadoConCandado(
       },
     };
   }
+  // Fotogramas de UN clip (3 a 5: inicio, medio, final y los cortes), para la revisión automática del clip.
+  if (cuerpo.pedirSubida === true && cuerpo.tipo === "fotograma-clip") {
+    if (t.etapa !== "clips") return no(400, "Los fotogramas de un clip solo se suben en un trabajo de clips.");
+    const n = typeof cuerpo.escena === "number" ? Math.floor(cuerpo.escena) : NaN;
+    const i = typeof cuerpo.indice === "number" ? Math.floor(cuerpo.indice) : NaN;
+    if (!t.escenasEtapa.some((e) => e.n === n)) return no(400, "`escena` debe ser el número de una escena de este trabajo.");
+    if (!(i >= 1 && i <= 5)) return no(400, "`indice` debe ir de 1 a 5.");
+    const destino = `${carpetaProyecto(t)}/e${n}-clip-f${i}.jpg`;
+    const { data, error } = await almacen.createSignedUploadUrl(destino, { upsert: true });
+    if (error || !data) return no(500, `No se pudo preparar la subida: ${error?.message ?? "sin respuesta"}`);
+    return { ok: true, dato: { subida: { url: data.signedUrl, metodo: "PUT", cabeceras: { "content-type": "image/jpeg", "x-upsert": "true" }, bucket: BUCKET_VIDEOS_GENERADOS, ruta: destino } } };
+  }
   // Fotogramas del video armado, para el control de calidad automático (opcional).
   if (cuerpo.pedirSubida === true && cuerpo.tipo === "fotograma-final") {
     if (t.etapa !== "armado") return no(400, "Los fotogramas del final solo se suben en un trabajo de armado.");
@@ -1119,6 +1136,9 @@ async function resultadoConCandado(
       .filter((ruta) => ruta.startsWith(`${carpetaProyecto(t)}/final-f`))
       .map((ruta) => almacen.getPublicUrl(ruta).data.publicUrl),
     subtitulos: typeof cuerpo.subtitulos === "boolean" ? cuerpo.subtitulos : null,
+    ...(typeof (cuerpo.transcripcion ?? cuerpo.transcripcionSubtitulos) === "string" && String(cuerpo.transcripcion ?? cuerpo.transcripcionSubtitulos).trim()
+      ? { transcripcion: String(cuerpo.transcripcion ?? cuerpo.transcripcionSubtitulos).slice(0, 6000) }
+      : {}),
   };
   t.terminadoAt = iso;
   t.latidoAt = iso;

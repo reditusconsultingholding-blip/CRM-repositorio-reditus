@@ -38,7 +38,7 @@ import {
   type TipoPieza,
 } from "@/lib/proyecto-video";
 import { enriquecerPlan, heredarProyecto, normalizarPlan, planDeCorreccion, proyectoDeVariacion, type CorreccionProyecto, type PedidoVariacion } from "@/lib/proyecto-video-plan";
-import { alDiaYAvanzar, analizarFotosProducto, armarProyecto, avanzar, conCandado, encolarEtapa, marcarEnMarcha, ponerAlDiaProyecto, type AnalisisFotos } from "@/lib/proyecto-video-server";
+import { revisarCoherencia, alDiaYAvanzar, analizarFotosProducto, armarProyecto, avanzar, conCandado, encolarEtapa, marcarEnMarcha, ponerAlDiaProyecto, type AnalisisFotos } from "@/lib/proyecto-video-server";
 import { ID_TRABAJO, type EtapaTrabajo, type TrabajoVista } from "@/lib/trabajos-video";
 import { cancelarTrabajo, creditosDeHoy, listarTrabajos, servidorVideoActivo, topeDeHoy, type TopeDiario } from "@/lib/trabajos-video-server";
 import { leerConfigVideos, type ConfigVideos } from "@/lib/videos-config";
@@ -870,5 +870,24 @@ export async function cambiarGancho(id: string, ganchoId: string): Promise<Estad
     // Cambiar el gancho no lanza nada, aunque el modo automático esté encendido.
     p.auto = { ...p.auto, activo: false };
     return guardar(x, p, `Gancho cambiado a «${receta.nombre}». La escena 1 necesita una imagen y un clip nuevos (no se generó nada todavía).`);
+  });
+}
+
+/** «Revisar coherencia»: la IA compara cada frase con lo que se pide ver y corrige los prompts que no casan. No genera nada. */
+export async function revisarCoherenciaPlan(id: string): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    if (hayTrabajoEnCurso(p)) return { error: "Hay algo generándose: espera a que termine para revisar el plan." };
+    const r = await revisarCoherencia(p.escenas, x.g.formato);
+    if (r.error) return { error: `No se pudo revisar la coherencia: ${r.error}` };
+    if (!r.cambios.length) return { ...estado(x), aviso: "Coherencia: cada escena ya muestra lo que dice. No se cambió nada." };
+    p.escenas = r.escenas;
+    finalPorRehacer(p);
+    const resumen = r.cambios.map((c) => `${c.n}: ${c.motivo}`).join("; ");
+    anotar(p, `Coherencia revisada por ${x.profile.name}: ${r.cambios.length} escenas corregidas (${resumen}).`);
+    p.auto = { ...p.auto, activo: false };
+    return guardar(x, p, `Coherencia: se corrigió lo que se ve en ${r.cambios.length} ${r.cambios.length === 1 ? "escena" : "escenas"} (${resumen}). Sus imágenes o clips quedan por generar.`);
   });
 }

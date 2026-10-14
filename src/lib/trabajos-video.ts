@@ -116,6 +116,8 @@ export type ReporteEscena = {
   segundos: number;
   error: string;
   fecha: string;
+  /** Clips: fotogramas del clip (enlaces públicos), para la revisión automática. */
+  fotogramas?: string[];
 };
 export const MAX_REPORTES = 120;
 /** Extensiones de imagen base que puede subir el trabajador. */
@@ -142,6 +144,8 @@ export type ResultadoTrabajo = {
   fotogramas: string[];
   /** El trabajador confirma si quemó subtítulos (null = no lo dijo). */
   subtitulos: boolean | null;
+  /** El texto de los subtítulos tal como quedaron (Captions o plantillas): para comprobar la marca. */
+  transcripcion?: string;
 };
 
 export type TrabajoVideo = {
@@ -362,6 +366,7 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
           segundos: Math.max(0, num(x.segundos)),
           error: txt(x.error, 600),
           fecha: txt(x.fecha, 40),
+          ...(lista(x.fotogramas).length ? { fotogramas: lista(x.fotogramas).map((u) => txt(u, 600)).filter((u) => u.startsWith("https://")).slice(0, 6) } : {}),
         };
       }),
     creditos: Math.max(0, num(o.creditos)),
@@ -424,6 +429,7 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
             .filter((u) => u.startsWith("https://"))
             .slice(0, 6),
           subtitulos: typeof re.subtitulos === "boolean" ? re.subtitulos : null,
+          ...(txt(re.transcripcion, 6000).trim() ? { transcripcion: txt(re.transcripcion, 6000) } : {}),
           avisos: lista(re.avisos)
             .map((a) => txt(a, 400))
             .filter(Boolean)

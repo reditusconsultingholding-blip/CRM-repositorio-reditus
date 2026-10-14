@@ -192,6 +192,23 @@ Decisión del dueño: **la voz es la que genera el modelo de video dentro de cad
 3. **Fotogramas del final (opcional, recomendado)**: antes de cerrar el armado, subir de 3 a 6 fotogramas JPG del video ya armado con `{ toma, pedirSubida: true, tipo: "fotograma-final", indice: 1..6 }` y mandar sus rutas en el cierre: `fotogramas: ["<ruta>", …]`, en orden. El primero debe ser de los 2 primeros segundos; el último, del cierre con el rótulo; los demás, repartidos. Con ellos el CRM hace el control de calidad automático (gancho, producto visible, oferta y llamado al final, subtítulos) y lo deja anotado junto al video «por aprobar». Sin fotogramas, el control se hace solo con los datos (duración, plan), y lo dice.
 4. `duracion` en el resultado del armado ya existía: ahora se usa para comparar con el objetivo. Conviene mandarla siempre.
 
+### 20-oct-2026 · auditoría: fotogramas de cada clip y transcripción de los subtítulos (lado del CRM hecho; **pendiente en el trabajador**; solo se AÑADE)
+
+**A. Fotogramas de cada clip** (para la checklist automática del clip: deformación del producto, manos/rostros, cambio de persona, objetos que aparecen, movimiento, texto falso, sentido, golpe de apertura).
+
+1. En la etapa `clips`, después de subir `e{n}-clip.mp4`, extraer **3 a 5 fotogramas** JPG (lado mayor 720 px, calidad ~80): inicio (0,2 s), medio, final (último segundo) y, si la escena trae `cortes`, uno dentro de cada tramo (hasta completar 5).
+2. Pedir la subida de cada uno: `POST /api/servidor/trabajos/{id}/resultado` con `{ toma, pedirSubida: true, tipo: "fotograma-clip", escena: n, indice: 1..5 }` → URL firmada; ruta `…/e{n}-clip-f{indice}.jpg`.
+3. Mandarlos en el MISMO reporte de la escena, junto al clip: `progreso` → `escenas: [{ n, tipo: "clip", ruta, creditos, segundos, fotogramas: ["…/e3-clip-f1.jpg", "…/e3-clip-f2.jpg", …] }]` (las rutas que devolvió la subida). Sin `fotogramas`, el clip simplemente no se revisa solo (como hoy).
+4. Si el CRM rechaza un clip por la checklist, lo vuelve a encolar UNA vez con la corrección en `clip.nota` (ya llega al prompt como «CORRECCIÓN PEDIDA…»). Nada más cambia.
+
+**B. Transcripción de los subtítulos** (para comprobar que la marca y el producto quedaron bien escritos; Captions escribió «Serion Eclipse» por «Ceryon Eclipse»).
+
+- En el `resultado` del armado, añadir **`transcripcion`** (string, ≤ 6.000 caracteres): el texto EXACTO de los subtítulos quemados, tal como quedaron (los de Captions o los de las plantillas propias), en orden, separado por espacios o saltos de línea. Se acepta también con el nombre `transcripcionSubtitulos`.
+- Si la marca sale mal escrita, el CRM marca el control «Marca y producto bien escritos» en rojo, pone `opciones.subtitulosPropios` en el proyecto y el SIGUIENTE armado llega **sin** `proveedorSubtitulos`/`plantillaCaptions` (es decir, con las plantillas propias). En modo automático el CRM lo rearma solo, una vez. El trabajador no tiene que hacer nada más que respetar la ausencia de esos campos.
+- Recomendado, si Captions admite un vocabulario o glosario: pasarle los nombres propios de `contexto.producto` y del cliente para que no los cambie.
+
+**C. Para la checklist del video final**: seguir mandando 3 a 6 `fotogramas` del armado (conviene 2 de los primeros 3 s y 1 del cierre).
+
 ### 19-oct-2026 · títulos de apoyo (≠ subtítulos) y voz por país automática (lado del CRM hecho; solo se AÑADE)
 
 **A. Títulos de apoyo.** Son otra capa, distinta de los subtítulos: los subtítulos van sincronizados con lo que se dice (abajo); el título de apoyo va **arriba y centrado** y dice algo importante que la voz no dice.

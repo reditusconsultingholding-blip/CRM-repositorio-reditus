@@ -256,3 +256,50 @@ export async function elegirPista(admin: Admin, tono: TonoMusica): Promise<{ url
     return null;
   }
 }
+
+// ---------------------------------------------------------------- auditoría ----
+
+/**
+ * Cada revisión automática (imagen, clip, video final) queda como dato en `config/auditoria.json`
+ * para medir con el tiempo cuántas piezas fallan y por qué. Cuando un mismo criterio falla seguido
+ * en un formato (5 «mal» en sus últimas 40 revisiones), se guarda como aprendizaje de ese formato.
+ * Nunca lanza: medir no puede tumbar la producción.
+ */
+export type RegistroAuditoria = { fecha: string; tipo: "imagen" | "clip" | "final"; formato: string; guionId: string; n: number; veredicto: string; criterios: Record<string, string>; motivo: string };
+const RUTA_AUDITORIA = `${CARPETA}/auditoria.json`;
+const MAX_AUDITORIA = 3000;
+const ETAPA_DE_TIPO = { imagen: "imagen", clip: "clip", final: "edicion" } as const;
+
+export async function registrarAuditoria(admin: Admin, nuevos: RegistroAuditoria[]): Promise<void> {
+  if (!nuevos.length) return;
+  try {
+    const crudo = (await leerJson(RUTA_AUDITORIA)) as { registros?: RegistroAuditoria[]; aprendidos?: string[] } | null;
+    const registros = [...(crudo?.registros ?? []), ...nuevos].slice(-MAX_AUDITORIA);
+    const aprendidos = new Set(crudo?.aprendidos ?? []);
+    for (const r of nuevos) {
+      for (const [criterio, nota] of Object.entries(r.criterios)) {
+        if (nota !== "mal" || !r.formato) continue;
+        const clave = `${r.formato}:${r.tipo}:${criterio}`;
+        if (aprendidos.has(clave)) continue;
+        const recientes = registros.filter((x) => x.formato === r.formato && x.tipo === r.tipo).slice(-40);
+        const fallos = recientes.filter((x) => x.criterios[criterio] === "mal");
+        if (fallos.length < 5) continue;
+        aprendidos.add(clave);
+        const motivos = [...new Set(fallos.map((x) => x.motivo).filter(Boolean))].slice(0, 3).join(" / ");
+        await registrarAprendizaje(admin, {
+          nota: `La revisión automática rechaza seguido ${r.tipo === "final" ? "videos" : r.tipo === "clip" ? "clips" : "imágenes"} de este formato por «${criterio}» (${fallos.length} de las últimas ${recientes.length}). Ejemplos: ${motivos}`,
+          quien: { id: "", nombre: "Auditoría automática" },
+          guionId: r.guionId,
+          producto: "",
+          formato: r.formato,
+          etapa: ETAPA_DE_TIPO[r.tipo],
+          general: false,
+          origen: "correccion",
+        });
+      }
+    }
+    await escribirJson(admin, RUTA_AUDITORIA, { version: 1, registros, aprendidos: [...aprendidos] });
+  } catch {
+    /* medir no puede tumbar nada */
+  }
+}

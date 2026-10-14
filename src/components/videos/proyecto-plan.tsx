@@ -18,6 +18,10 @@ import {
   NOMBRE_PASO,
   MAX_TITULO_APOYO,
   fallaDelTitulo,
+  fallaDeValencia,
+  VALENCIAS,
+  VALENCIA_LABELS,
+  type Valencia,
   TIPOS_ESCENA,
   TIPO_ESCENA_LABELS,
   estimado,
@@ -45,7 +49,7 @@ const TIPO_CORTO: Record<TipoEscena, string> = { generada: "IA", "foto-real": "F
 type Borrador = EscenaProyecto & { clave: string };
 
 const aBorrador = (e: EscenaProyecto[]): Borrador[] => e.map((x) => ({ ...x, clave: `g${x.n}` }));
-const editable = (l: EscenaProyecto[]) => JSON.stringify(l.map((e) => [e.n, e.paso, e.tipo, e.titulo, e.duracion, e.tituloApoyo ?? "", e.voz, e.locucion, e.promptImagen, e.promptVideo, e.fotoUrl, e.movimiento]));
+const editable = (l: EscenaProyecto[]) => JSON.stringify(l.map((e) => [e.n, e.paso, e.tipo, e.titulo, e.duracion, e.tituloApoyo ?? "", e.valencia ?? "", e.voz, e.locucion, e.promptImagen, e.promptVideo, e.fotoUrl, e.movimiento]));
 
 type Props = {
   proyecto: ProyectoVideo;
@@ -240,6 +244,20 @@ export function PlanEscenas({ proyecto, bloqueado, ocupado, onGuardar, onRehacer
                       />
                     </Label>
                   </div>
+                  {e.tipo === "generada" && (
+                    <Label className="flex flex-col items-stretch gap-1.5">
+                      <span>Sentido de la escena (manda lo que se ve)</span>
+                      <select className="h-9 rounded-lg border border-input bg-card px-2 text-sm" value={e.valencia ?? ""} disabled={quieto} onChange={(ev) => cambiar(e.clave, { valencia: (ev.target.value || undefined) as Valencia | undefined })}>
+                        <option value="">Sin marcar</option>
+                        {VALENCIAS.map((v) => (
+                          <option key={v} value={v}>
+                            {VALENCIA_LABELS[v]}
+                          </option>
+                        ))}
+                      </select>
+                      {fallaDeValencia(e) && <span className="text-sm font-normal text-destructive">No casa: {fallaDeValencia(e)}.</span>}
+                    </Label>
+                  )}
                   {e.tipo !== "cierre" && (
                     <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_9rem]">
                       <Label className="flex flex-col items-stretch gap-1.5">

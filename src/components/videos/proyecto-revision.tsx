@@ -7,6 +7,7 @@ import {
   NOMBRE_PASO,
   TONO_PIEZA,
   CRITERIOS_IMAGEN,
+  CRITERIOS_CLIP,
   VEREDICTO_LABELS,
   type Criterio,
   piezaEnCurso,
@@ -182,7 +183,7 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
               </Chip>
               {pieza.revisadaPor && pieza.estado !== "por-aprobar" && <span className="text-sm text-muted-foreground">por {pieza.revisadaPor}</span>}
             </div>
-            {tipo === "imagen" && pieza.revision && (
+            {pieza.revision && (
               <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs" data-revision={pieza.revision.veredicto}>
                 <span className="flex flex-wrap items-center gap-1.5">
                   <Chip tono={pieza.revision.veredicto === "aprobada-auto" ? "verde" : pieza.revision.veredicto === "rechazada-auto" ? "rojo" : "ambar"}>{VEREDICTO_LABELS[pieza.revision.veredicto]}</Chip>
@@ -191,11 +192,11 @@ export function RevisionPiezas({ tipo, escenas, inicial, puedeAprobar, tope, act
                 {pieza.revision.motivo && <span className="leading-relaxed break-words">{pieza.revision.motivo}</span>}
                 {Object.keys(pieza.revision.criterios).length > 0 && (
                   <ul className="flex flex-col gap-0.5 text-muted-foreground">
-                    {(Object.keys(CRITERIOS_IMAGEN) as Criterio[]).map((k) => {
-                      const v = pieza.revision?.criterios[k];
+                    {Object.entries(tipo === "clip" ? CRITERIOS_CLIP : CRITERIOS_IMAGEN).map(([k, etiqueta]) => {
+                      const v = pieza.revision?.criterios[k as Criterio];
                       return v ? (
                         <li key={k}>
-                          {v === "ok" ? "✓" : v === "mal" ? "✗" : v === "duda" ? "?" : "–"} {CRITERIOS_IMAGEN[k]}
+                          {v === "ok" ? "✔" : v === "mal" ? "✖" : v === "duda" ? "?" : "–"} {etiqueta}
                         </li>
                       ) : null;
                     })}

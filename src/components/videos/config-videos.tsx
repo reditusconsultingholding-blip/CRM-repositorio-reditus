@@ -128,6 +128,22 @@ export function ConfigVideosTarjeta({ esCeo, inicial }: { esCeo: boolean; inicia
               <span className="block text-xs text-muted-foreground">Enciéndelo cuando el servidor de videos tenga esa clave: los videos nuevos salen narrados y los clips sin diálogo. Apagado, la voz sale de cada clip.</span>
             </span>
           </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={c.captions} disabled={quieto} onChange={(e) => set("captions", e.target.checked)} />
+            <span>
+              Subtítulos con Captions
+              <span className="block text-xs text-muted-foreground">Apagado, los subtítulos salen de las plantillas propias. Si Captions escribe mal la marca, ese video se rehace solo con las propias.</span>
+              <input
+                className="mt-1.5 h-8 w-full rounded-lg border border-input bg-card px-2 text-sm"
+                value={c.plantillaCaptions}
+                maxLength={80}
+                disabled={quieto || !c.captions}
+                placeholder="Plantilla (p. ej. Cove); vacío = la del servidor"
+                aria-label="Plantilla de Captions"
+                onChange={(e) => set("plantillaCaptions", e.target.value)}
+              />
+            </span>
+          </label>
           <div className="flex flex-col gap-1.5">
             <span className="text-sm leading-none font-medium">Exigencia de la revisión</span>
             <Segmento value={c.exigencia} onChange={(v) => set("exigencia", v)} opciones={EXIGENCIAS} etiquetas={ETIQ_EXIGENCIA} disabled={quieto} />

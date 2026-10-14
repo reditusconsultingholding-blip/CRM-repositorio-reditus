@@ -145,6 +145,8 @@ export type Pieza = {
   revision: RevisionIA | null;
   /** Ya se regeneró sola una vez por un rechazo automático: la siguiente decisión es de una persona. */
   autoRegenerada: boolean;
+  /** Clips: fotogramas que subió el servidor de videos (inicio, medio, final y cortes) para la revisión automática. */
+  fotogramas?: string[];
 };
 
 export const VEREDICTOS = ["aprobada-auto", "dudosa", "rechazada-auto", "sin-ia"] as const;
@@ -156,16 +158,56 @@ export const VEREDICTO_LABELS: Record<Veredicto, string> = {
   "sin-ia": "Sin revisión automática",
 };
 /** La lista corta y fija con la que la IA califica una imagen base. */
+/** Checklist de la imagen base (la revisión automática califica cada punto: ok / duda / mal / no aplica). */
 export const CRITERIOS_IMAGEN = {
-  producto: "Producto reconocible y sin deformar (forma, color, etiqueta)",
-  texto: "Sin texto inventado o ilegible sobre el producto",
-  personas: "Manos y rostros sin defectos evidentes",
-  encuadre: "Encuadre correcto para el formato",
-  escena: "Coincide con lo pedido en la escena",
+  producto: "Producto idéntico a la foto real (forma, color, logo)",
+  manos: "Manos: cinco dedos, sin dedos fundidos ni de más, agarre natural",
+  rostros: "Rostros: ojos, dientes y simetría bien, sin rasgos derretidos",
+  anatomia: "Anatomía y proporciones creíbles",
+  objetos: "Sin objetos imposibles ni duplicados",
+  texto: "Sin texto o garabatos inventados",
+  fisica: "Física y luz coherentes",
+  encuadre: "Encuadre vertical correcto y zona segura libre",
+  escena: "Coherente con la frase y su sentido (problema / solución / producto)",
+  natural: "Aspecto natural, no «plástico» de IA",
 } as const;
 export type Criterio = keyof typeof CRITERIOS_IMAGEN;
+
+/** Checklist del clip, mirando 3 a 5 fotogramas suyos (inicio, medio, final y los cortes). */
+export const CRITERIOS_CLIP = {
+  producto: "El producto no se deforma entre fotogramas",
+  personas: "Manos y rostros bien, y la misma persona en todo el clip",
+  objetos: "Nada aparece ni desaparece sin razón",
+  movimiento: "Movimiento natural",
+  texto: "Sin texto falso",
+  escena: "Coherente con la frase y su sentido",
+  golpe: "La apertura arranca con un golpe visual (0–1 s)",
+} as const;
+export type CriterioClip = keyof typeof CRITERIOS_CLIP;
+
+// ---- el sentido de cada escena: lo que se dice manda lo que se ve ----
+export const VALENCIAS = ["gancho", "problema", "solucion", "producto", "oferta"] as const;
+export type Valencia = (typeof VALENCIAS)[number];
+export const VALENCIA_LABELS: Record<Valencia, string> = {
+  gancho: "Gancho (frena el scroll)",
+  problema: "Problema (se muestra el dolor, sin el producto)",
+  solucion: "Solución (el producto en uso y su efecto)",
+  producto: "Producto (detalle, característica, prueba)",
+  oferta: "Oferta (producto y pack)",
+};
+const FELIZ = /sonr[ií]e|sonriente|feliz|alegr|relajad|aliviad|descans|plácid|placid|luz c[aá]lida/i;
+const DOLOR = /frustrad|cansad|agotad|estresad|desesper|irritad|despiert[ao] (?:de golpe|sin poder)|luz (?:azul )?fr[ií]a|ojeras/i;
+
+/** Qué no casa entre lo que se dice (su sentido) y lo que se pide ver. «» si casa. Regla del dueño: el dolor se muestra con inconformismo; lo bueno, con el producto y su efecto. */
+export function fallaDeValencia(e: Pick<EscenaProyecto, "valencia" | "tipo" | "promptImagen" | "promptVideo">): string {
+  if (e.tipo !== "generada" || !e.valencia) return "";
+  const ver = `${e.promptImagen} ${e.promptVideo}`;
+  if (e.valencia === "problema" && FELIZ.test(ver) && !DOLOR.test(ver)) return "la frase habla del problema pero la imagen pide a alguien contento o aliviado";
+  if (e.valencia === "solucion" && DOLOR.test(ver) && !FELIZ.test(ver)) return "la frase habla de la solución pero la imagen muestra frustración";
+  return "";
+}
 export type NotaCriterio = "ok" | "duda" | "mal" | "no-aplica";
-export type RevisionIA = { veredicto: Veredicto; motivo: string; criterios: Partial<Record<Criterio, NotaCriterio>>; fecha: string };
+export type RevisionIA = { veredicto: Veredicto; motivo: string; criterios: Partial<Record<Criterio | CriterioClip, NotaCriterio>>; fecha: string };
 
 /** Por qué se detuvo el modo directo. Cada una dice qué falta y se resuelve con un botón. */
 export const CODIGOS_PARADA = ["imagen-dudosa", "revisar-clips", "tope-intentos", "tope-diario", "tope-gasto", "servidor", "fallo", "datos"] as const;
@@ -218,6 +260,8 @@ export type EscenaProyecto = {
    * subtítulo: no repite lo que se dice, lo refuerza (el beneficio, un dato real, el nombre del producto o el paso).
    */
   tituloApoyo?: string;
+  /** El sentido de la escena según lo que se dice: manda qué se ve (ver `fallaDeValencia`). */
+  valencia?: Valencia;
   /** Cómo ENTRA esta escena (la dibuja el servidor de videos). Sin valor, la elige él según el ritmo. */
   transicion?: Transicion;
   /** Segundos de la escena en los que debe haber un cambio visual (acercamiento brusco o reencuadre) para que ninguna toma pase de ~3 s igual. */
@@ -532,6 +576,9 @@ export const PUNTOS_CONTROL = {
   apertura: "Apertura de 3 s con al menos 3 cortes",
   urgencia: "Cierre con urgencia real",
   titulos: "Títulos de apoyo presentes",
+  coherencia: "Lo que se ve casa con lo que se dice",
+  marca: "Marca y producto bien escritos en los subtítulos",
+  repetidas: "Sin tomas repetidas",
   producto: "El producto real se ve",
   cierre: "Oferta y llamado a la acción al final",
   subtitulos: "Subtítulos presentes",
@@ -547,7 +594,9 @@ export type ControlFinal = {
   fecha: string;
 };
 
-export type OpcionesProyecto = { subtitulos: boolean; voz: boolean; musica: string | null; modelo: string | null };
+export type OpcionesProyecto = {
+  /** Los subtítulos de Captions escribieron mal la marca: este video se arma con las plantillas propias. */
+  subtitulosPropios?: boolean; subtitulos: boolean; voz: boolean; musica: string | null; modelo: string | null };
 export type GastoTrabajo = { creditos: number; segundos: number; imagenes: number };
 
 export type ProyectoVideo = {
@@ -591,7 +640,7 @@ function leerRevision(raw: unknown): RevisionIA | null {
   const o = obj(raw);
   if (!(VEREDICTOS as readonly string[]).includes(o.veredicto as string)) return null;
   const criterios: RevisionIA["criterios"] = {};
-  for (const k of Object.keys(CRITERIOS_IMAGEN) as Criterio[]) {
+  for (const k of [...new Set([...Object.keys(CRITERIOS_IMAGEN), ...Object.keys(CRITERIOS_CLIP), "personas"])] as (Criterio | CriterioClip)[]) {
     const v = obj(o.criterios)[k];
     if (v === "ok" || v === "duda" || v === "mal" || v === "no-aplica") criterios[k] = v;
   }
@@ -609,6 +658,7 @@ function leerPieza(raw: unknown): Pieza {
     revisadaPor: txt(o.revisadaPor, 160),
     revision: leerRevision(o.revision),
     autoRegenerada: o.autoRegenerada === true,
+    ...(lista(o.fotogramas).length ? { fotogramas: lista(o.fotogramas).map((u) => txt(u, 600)).filter((u) => u.startsWith("https://")).slice(0, 6) } : {}),
   };
 }
 
@@ -632,6 +682,7 @@ export function leerEscenas(raw: unknown): EscenaProyecto[] {
         movimiento: uno(o.movimiento, MOVIMIENTOS, "acercar"),
         imagen: leerPieza(o.imagen),
         clip: leerPieza(o.clip),
+        ...((VALENCIAS as readonly string[]).includes(o.valencia as string) ? { valencia: o.valencia as Valencia } : {}),
         ...(tipo !== "cierre" && txt(o.tituloApoyo, MAX_TITULO_APOYO).trim() ? { tituloApoyo: txt(o.tituloApoyo, MAX_TITULO_APOYO).trim() } : {}),
         ...((TRANSICIONES as readonly string[]).includes(o.transicion as string) ? { transicion: o.transicion as Transicion } : {}),
         ...(Array.isArray(o.golpesVisuales) && o.golpesVisuales.length ? { golpesVisuales: (o.golpesVisuales as unknown[]).filter((x): x is number => typeof x === "number" && x > 0.3 && x < 15).slice(0, 4) } : {}),
@@ -699,7 +750,36 @@ function leerControl(raw: unknown): ControlFinal | null {
  * inicio, producto real, cierre, subtítulos y duración. Lo que solo se sabe mirando el
  * video queda en «duda» hasta que haya fotogramas.
  */
-export function controlPorDatos(p: ProyectoVideo, url: string, datos: { duracion: number | null; subtitulos: boolean | null }): ControlFinal {
+/** El semáforo de un control: rojo si algo está mal, ámbar si hay dudas, verde si todo está bien. */
+export function semaforoDe(c: Pick<ControlFinal, "puntos">): "verde" | "ambar" | "rojo" {
+  const notas = Object.values(c.puntos).map((x) => x?.nota);
+  return notas.includes("mal") ? "rojo" : notas.includes("duda") ? "ambar" : "verde";
+}
+
+const plano = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+function distancia(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+/**
+ * Nombres propios (marca, producto) mal escritos en la transcripción de los subtítulos:
+ * si el nombre no aparece tal cual pero sí una palabra parecida («Serion» por «Ceryon»), se señala.
+ */
+export function marcasMalEscritas(transcripcion: string, nombres: string[]): string[] {
+  const palabras = [...new Set(plano(transcripcion).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 3))];
+  const malas: string[] = [];
+  for (const nombre of [...new Set(nombres.flatMap((n) => n.split(/[\s–—|·:,-]+/)).filter((w) => w.length >= 4 && /^[A-ZÁÉÍÓÚÑ]/.test(w)))]) {
+    const objetivo = plano(nombre);
+    if (palabras.includes(objetivo)) continue;
+    const parecida = palabras.find((w) => Math.abs(w.length - objetivo.length) <= 2 && distancia(w, objetivo) <= Math.max(1, Math.floor(objetivo.length / 3)));
+    if (parecida) malas.push(`«${nombre}» salió como «${parecida}»`);
+  }
+  return malas;
+}
+
+export function controlPorDatos(p: ProyectoVideo, url: string, datos: { duracion: number | null; subtitulos: boolean | null; transcripcion?: string | null; nombres?: string[] }): ControlFinal {
   const primera = p.escenas[0];
   const ultima = p.escenas[p.escenas.length - 1];
   const objetivo = duracionTotal(p);
@@ -721,6 +801,22 @@ export function controlPorDatos(p: ProyectoVideo, url: string, datos: { duracion
       urgencia: cierreCompleto(p.contexto.cierre).urgencia
         ? { nota: "ok", detalle: `El cierre lleva la urgencia: «${cierreCompleto(p.contexto.cierre).urgencia}».` }
         : { nota: "duda", detalle: "El cierre no tiene línea de urgencia (no hay promoción ni plazo publicado). Si existe uno real, escríbelo en «Cierre del video»." },
+      coherencia: (() => {
+        const malas = p.escenas.filter((e) => fallaDeValencia(e)).map((e) => `escena ${e.n}: ${fallaDeValencia(e)}`);
+        const sin = p.escenas.filter((e) => e.tipo === "generada" && !e.valencia).length;
+        if (malas.length) return { nota: "mal" as const, detalle: malas.slice(0, 3).join("; ") };
+        return sin ? { nota: "duda" as const, detalle: `${sin} escenas sin su sentido marcado (problema, solución, producto…): no se pudo comprobar.` } : { nota: "ok" as const, detalle: "Cada escena muestra lo que dice: el problema sin producto, la solución con el producto y su efecto." };
+      })(),
+      marca: (() => {
+        if (!datos.transcripcion) return { nota: "duda" as const, detalle: "El servidor no mandó la transcripción de los subtítulos: no se pudo comprobar cómo quedó escrita la marca." };
+        const malas = marcasMalEscritas(datos.transcripcion, datos.nombres ?? [p.contexto.producto]);
+        return malas.length ? { nota: "mal" as const, detalle: `Subtítulos con la marca mal escrita: ${malas.join("; ")}.` } : { nota: "ok" as const, detalle: "La marca y el producto están bien escritos en los subtítulos." };
+      })(),
+      repetidas: (() => {
+        const urls = p.escenas.filter((e) => e.tipo === "generada").map((e) => e.clip.url || e.imagen.url).filter(Boolean);
+        const seguidas = p.escenas.filter((e, i) => i > 0 && e.tipo !== "generada" && e.fotoUrl && p.escenas[i - 1].tipo !== "generada" && p.escenas[i - 1].fotoUrl === e.fotoUrl).length;
+        return new Set(urls).size < urls.length || seguidas ? { nota: "duda" as const, detalle: "Hay una toma que se repite." } : { nota: "ok" as const, detalle: "Ninguna toma se repite." };
+      })(),
       titulos: (() => {
         const con = p.escenas.filter((e) => e.tituloApoyo?.trim() && !fallaDelTitulo(e)).length;
         const malos = p.escenas.filter((e) => fallaDelTitulo(e)).map((e) => e.n);
@@ -1030,6 +1126,8 @@ export function plegarTrabajos(original: ProyectoVideo, trabajos: TrabajoVideo[]
         if (rep && entregada) {
           pieza.estado = "por-aprobar";
           pieza.url = rep.url;
+          if (rep.fotogramas?.length) pieza.fotogramas = rep.fotogramas;
+          else delete pieza.fotogramas;
           pieza.nota = "";
           pieza.revisadaPor = "";
           pieza.revision = null;

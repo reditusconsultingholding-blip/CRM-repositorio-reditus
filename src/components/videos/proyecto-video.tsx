@@ -17,6 +17,7 @@ import {
   guardarCierre,
   guardarEdicion,
   cambiarGancho,
+  revisarCoherenciaPlan,
   crearVariaciones,
   seguirProyecto,
   consultarProyecto,
@@ -46,6 +47,7 @@ import {
   type EstiloSubtitulos,
   type Ritmo,
   PUNTOS_CONTROL,
+  semaforoDe,
   VEREDICTO_LABELS,
   type PuntoControl,
   costoProyectoTexto,
@@ -490,13 +492,17 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
             )}
             {final.control && final.control.url === final.url && (
               <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs" data-control>
-                <span className={ETIQUETA}>Control automático {final.control.conFotogramas ? "(mirando fotogramas del video)" : "(solo con datos: el servidor no mandó fotogramas)"}</span>
+                <span className="flex flex-wrap items-center gap-2" data-semaforo={semaforoDe(final.control)}>
+                  <span className={cn("inline-flex size-3 rounded-full", semaforoDe(final.control) === "verde" ? "bg-emerald-500" : semaforoDe(final.control) === "ambar" ? "bg-amber-500" : "bg-red-500")} aria-hidden="true" />
+                  <strong className="text-sm font-semibold">{semaforoDe(final.control) === "verde" ? "Todo en orden" : semaforoDe(final.control) === "ambar" ? "Hay cosas que mirar" : "Hay algo mal"}</strong>
+                  <span className={ETIQUETA}>Checklist automática {final.control.conFotogramas ? "(mirando fotogramas del video)" : "(solo con datos: el servidor no mandó fotogramas)"}</span>
+                </span>
                 <ul className="flex flex-col gap-0.5">
                   {(Object.keys(PUNTOS_CONTROL) as PuntoControl[]).map((k) => {
                     const x = final.control?.puntos[k];
                     return x ? (
                       <li key={k} className={x.nota === "mal" ? "text-destructive" : x.nota === "duda" ? "text-amber-700 dark:text-amber-300" : undefined}>
-                        {x.nota === "ok" ? "✓" : x.nota === "mal" ? "✗" : "?"} <strong className="font-medium">{PUNTOS_CONTROL[k]}.</strong> {x.detalle}
+                        {x.nota === "ok" ? "✔" : x.nota === "mal" ? "✖" : "?"} <strong className="font-medium">{PUNTOS_CONTROL[k]}.</strong> {x.detalle}
                       </li>
                     ) : null;
                   })}
@@ -707,6 +713,12 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
         <details className="rounded-xl border border-border bg-card">
           <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Avanzado</summary>
           <div className="flex flex-col gap-2 border-t border-border p-3">
+            <div className="flex flex-wrap items-center gap-2" id="revisar-coherencia">
+              <Button variant="outline" disabled={ocupado || enCurso} onClick={() => void correr("coherencia", () => revisarCoherenciaPlan(id)).then((ok) => ok && setSerie((s) => s + 1))}>
+                {accion === "coherencia" ? "Revisando…" : "Revisar que lo que se ve case con lo que se dice"}
+              </Button>
+              <span className="min-w-0 flex-1 basis-56 text-sm text-muted-foreground">La IA compara cada frase con su imagen y su clip y corrige lo que se pide ver (nunca la frase). Lo corregido queda por generar.</span>
+            </div>
             <div className="flex flex-wrap items-center gap-2" id="ajustar-plan">
               <Button variant="outline" disabled={ocupado || enCurso} onClick={() => void correr("ajustar", () => ajustarPlan(id)).then((ok) => ok && setSerie((s) => s + 1))}>
                 {accion === "ajustar" ? "Ajustando…" : "Ajustar el plan a las reglas del video automático"}
