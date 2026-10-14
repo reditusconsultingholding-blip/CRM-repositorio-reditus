@@ -107,8 +107,8 @@ export function acentoDePais(pais: string): { idioma: string; acento: string } {
 
 export const VOZ_DESCRIPCION_BASE = "voz adulta joven, cálida y cercana, ritmo natural de conversación, sin tono de locutor";
 
-export function vozDePais(pais: string): VozProyecto {
-  return { motor: "clip", ...acentoDePais(pais), descripcion: VOZ_DESCRIPCION_BASE };
+export function vozDePais(pais: string, motor: VozProyecto["motor"] = "clip"): VozProyecto {
+  return { motor, ...acentoDePais(pais), descripcion: VOZ_DESCRIPCION_BASE };
 }
 
 /** Duración máxima de un clip generado (el modelo no da más en una toma). */
@@ -200,7 +200,66 @@ export type EscenaProyecto = {
   movimiento: Movimiento;
   imagen: Pieza;
   clip: Pieza;
+  /**
+   * APERTURA en cortes: el clip se genera de `duracionClip` segundos (uno solo, se paga una vez) y el
+   * servidor de videos usa SOLO estos tramos, pegados en orden: varias tomas muy cortas de un solo clip.
+   * La escena dura en el video la suma de los tramos (`duracion`).
+   */
+  cortes?: Corte[];
+  /** Segundos que se le piden al generador para el clip cuando no coincide con `duracion` (apertura en cortes). */
+  duracionClip?: number;
 };
+
+export type Corte = { desde: number; hasta: number };
+
+/** Los tramos de la apertura según lo que debe durar (3 o 4 s): un golpe de 1 s y tres tomas muy cortas, de un clip de 8 s. */
+export function cortesDeApertura(segundos: number): Corte[] {
+  return segundos >= 4
+    ? [{ desde: 0, hasta: 1 }, { desde: 2, hasta: 3 }, { desde: 4.2, hasta: 5.2 }, { desde: 6.2, hasta: 7.2 }]
+    : [{ desde: 0, hasta: 1 }, { desde: 2.2, hasta: 2.9 }, { desde: 4.2, hasta: 4.9 }, { desde: 6.2, hasta: 6.8 }];
+}
+
+function leerCortes(raw: unknown): Corte[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((r) => {
+      const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+      const desde = typeof o.desde === "number" && Number.isFinite(o.desde) ? Math.max(0, Math.round(o.desde * 10) / 10) : NaN;
+      const hasta = typeof o.hasta === "number" && Number.isFinite(o.hasta) ? Math.min(MAX_SEGUNDOS_CLIP, Math.round(o.hasta * 10) / 10) : NaN;
+      return { desde, hasta };
+    })
+    .filter((c) => c.hasta - c.desde >= 0.3)
+    .slice(0, 6);
+}
+
+// ---- estilo de edición del proyecto (lo aplica el servidor de videos al armar) ----
+export const ESTILOS_SUBTITULOS = ["palabra", "caja", "limpio", "impacto"] as const;
+export type EstiloSubtitulos = (typeof ESTILOS_SUBTITULOS)[number];
+export const ESTILO_SUBTITULOS_LABELS: Record<EstiloSubtitulos, string> = {
+  palabra: "Palabra por palabra (resalta la que suena)",
+  caja: "En caja de color (frases cortas)",
+  limpio: "Limpio (una línea blanca, sobrio)",
+  impacto: "De impacto (mayúsculas grandes, una o dos palabras)",
+};
+export const RITMOS = ["rapido", "medio", "calmado"] as const;
+export type Ritmo = (typeof RITMOS)[number];
+export const RITMO_LABELS: Record<Ritmo, string> = { rapido: "Rápido (cortes y transiciones marcadas)", medio: "Medio", calmado: "Calmado (marca sobria)" };
+export type EdicionProyecto = { subtitulos: EstiloSubtitulos; ritmo: Ritmo };
+
+/** El estilo que le va a cada formato cuando nadie lo ha elegido: dinámico por defecto. */
+export function edicionDeFormato(formato: string): EdicionProyecto {
+  if (formato === "ugc" || formato === "testimonio" || formato === "entrevista") return { subtitulos: "palabra", ritmo: "rapido" };
+  if (formato === "historia" || formato === "historias-musicales") return { subtitulos: "limpio", ritmo: "medio" };
+  if (formato === "usos-del-producto") return { subtitulos: "caja", ritmo: "rapido" };
+  return { subtitulos: "impacto", ritmo: "rapido" };
+}
+export function leerEdicion(raw: unknown, formato = ""): EdicionProyecto {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const b = edicionDeFormato(formato);
+  return {
+    subtitulos: (ESTILOS_SUBTITULOS as readonly string[]).includes(o.subtitulos as string) ? (o.subtitulos as EstiloSubtitulos) : b.subtitulos,
+    ritmo: (RITMOS as readonly string[]).includes(o.ritmo as string) ? (o.ritmo as Ritmo) : b.ritmo,
+  };
+}
 
 // ------------------------------------------------ ficha del producto ----
 
@@ -321,6 +380,8 @@ export type ContextoProyecto = {
   /** Ficha del producto en texto, confirmada por una persona. */
   analisisProducto: string;
   cierre: CierreProyecto;
+  /** Estilo de subtítulos y ritmo del montaje. Sin elegir, sale del formato (`edicionDeFormato`). */
+  edicion?: EdicionProyecto;
   voz: VozProyecto;
 };
 
@@ -343,7 +404,25 @@ export const ESTADO_FINAL_LABELS: Record<EstadoFinal, string> = {
  * Si nadie los escribe, salen solos de la oferta (`partirOferta`). `color` es el color de marca
  * del botón del llamado (hex).
  */
-export type CierreProyecto = { oferta: string; llamadoALaAccion: string; titular?: string; detalle?: string; color?: string };
+export type CierreProyecto = {
+  oferta: string;
+  llamadoALaAccion: string;
+  titular?: string;
+  detalle?: string;
+  color?: string;
+  /**
+   * Línea de urgencia del cierre. SOLO urgencia cierta: la promoción vigente de la página, un plazo o
+   * cupo que el cliente publique, o la temporada. Nunca escasez ni plazos inventados.
+   */
+  urgencia?: string;
+};
+
+/** La urgencia que se puede afirmar con solo leer la oferta: la promoción misma, sin plazos ni cupos inventados. «» si no hay promoción. */
+export function urgenciaDeOferta(oferta: string): string {
+  const o = oferta.toLowerCase();
+  const promo = /\b(\d\s?x\s?\d)\b/.exec(o)?.[1]?.replace(/\s/g, "") ?? (/(\d{1,2})\s?%/.exec(o) ? `-${/(\d{1,2})\s?%/.exec(o)?.[1]} %` : /env[ií]o gratis/.test(o) ? "envío gratis" : /regalo|gratis/.test(o) ? "regalo incluido" : /antes .*ahora|descuento|oferta|promo/.test(o) ? "precio de promoción" : "");
+  return promo ? `${promo.charAt(0).toUpperCase() + promo.slice(1)} mientras dure la promoción` : "";
+}
 
 export const COLOR_HEX = /^#[0-9a-fA-F]{6}$/;
 /** Color del botón del cierre cuando el proyecto no trae el de la marca: el azul de Reditus. */
@@ -386,6 +465,7 @@ export function cierreCompleto(c: CierreProyecto): Required<CierreProyecto> {
     titular: c.titular?.trim() || partes.titular,
     detalle: c.titular?.trim() ? (c.detalle?.trim() ?? "") : c.detalle?.trim() || partes.detalle,
     color: c.color && COLOR_HEX.test(c.color) ? c.color.toUpperCase() : COLOR_MARCA_BASE,
+    urgencia: c.urgencia?.trim() ?? urgenciaDeOferta(c.oferta),
   };
 }
 
@@ -396,6 +476,8 @@ export const TONO_MUSICA_LABELS: Record<TonoMusica, string> = { neutro: "Neutro"
 /** Control de calidad del video armado: una lista fija, anotada junto al video «por aprobar». No aprueba nada. */
 export const PUNTOS_CONTROL = {
   gancho: "Gancho en los primeros 2 segundos",
+  apertura: "Apertura de 3 s con al menos 3 cortes",
+  urgencia: "Cierre con urgencia real",
   producto: "El producto real se ve",
   cierre: "Oferta y llamado a la acción al final",
   subtitulos: "Subtítulos presentes",
@@ -496,6 +578,7 @@ export function leerEscenas(raw: unknown): EscenaProyecto[] {
         movimiento: uno(o.movimiento, MOVIMIENTOS, "acercar"),
         imagen: leerPieza(o.imagen),
         clip: leerPieza(o.clip),
+        ...(tipo === "generada" && leerCortes(o.cortes).length >= 2 ? { cortes: leerCortes(o.cortes), duracionClip: Math.min(MAX_SEGUNDOS_CLIP, Math.max(4, Math.round(num(o.duracionClip, MAX_SEGUNDOS_CLIP)))) } : {}),
       };
     });
 }
@@ -517,7 +600,9 @@ export function leerContexto(raw: unknown): ContextoProyecto {
       ...(txt(c.titular, 28) ? { titular: txt(c.titular, 28) } : {}),
       ...(txt(c.detalle, 70) ? { detalle: txt(c.detalle, 70) } : {}),
       ...(COLOR_HEX.test(txt(c.color, 9)) ? { color: txt(c.color, 9).toUpperCase() } : {}),
+      ...(typeof c.urgencia === "string" ? { urgencia: txt(c.urgencia, 80) } : {}),
     },
+    ...(o.edicion && typeof o.edicion === "object" ? { edicion: leerEdicion(o.edicion) } : {}),
     voz: leerVoz(o.voz, txt(o.pais, 4)),
   };
 }
@@ -566,6 +651,13 @@ export function controlPorDatos(p: ProyectoVideo, url: string, datos: { duracion
         primera?.paso === 1 && primera.duracion <= 4
           ? { nota: "ok", detalle: `El plan abre con el gancho en una toma de ${primera.duracion} s.` }
           : { nota: "duda", detalle: primera?.paso === 1 ? `La primera toma dura ${primera.duracion} s: el arranque puede sentirse lento.` : "La primera escena del plan no es el gancho." },
+      apertura:
+        (primera?.cortes?.length ?? 0) >= 3 && primera.duracion <= 4
+          ? { nota: "ok", detalle: `La apertura dura ${primera.duracion} s y lleva ${primera.cortes?.length} tomas cortas (${(primera.cortes?.length ?? 1) - 1} cortes).` }
+          : { nota: "duda", detalle: "La primera escena es una sola toma: sin cortes en los primeros 3 segundos el arranque no frena el scroll." },
+      urgencia: cierreCompleto(p.contexto.cierre).urgencia
+        ? { nota: "ok", detalle: `El cierre lleva la urgencia: «${cierreCompleto(p.contexto.cierre).urgencia}».` }
+        : { nota: "duda", detalle: "El cierre no tiene línea de urgencia (no hay promoción ni plazo publicado). Si existe uno real, escríbelo en «Cierre del video»." },
       producto: p.escenas.some((e) => e.tipo !== "generada" && e.fotoUrl) ? { nota: "ok", detalle: "Hay escenas con la foto real del producto." } : { nota: "duda", detalle: "Ninguna escena usa la foto real del producto." },
       cierre:
         ultima?.tipo === "cierre" && p.contexto.cierre.oferta.trim() && p.contexto.cierre.llamadoALaAccion.trim()

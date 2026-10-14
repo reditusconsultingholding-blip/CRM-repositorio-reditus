@@ -192,6 +192,34 @@ Decisión del dueño: **la voz es la que genera el modelo de video dentro de cad
 3. **Fotogramas del final (opcional, recomendado)**: antes de cerrar el armado, subir de 3 a 6 fotogramas JPG del video ya armado con `{ toma, pedirSubida: true, tipo: "fotograma-final", indice: 1..6 }` y mandar sus rutas en el cierre: `fotogramas: ["<ruta>", …]`, en orden. El primero debe ser de los 2 primeros segundos; el último, del cierre con el rótulo; los demás, repartidos. Con ellos el CRM hace el control de calidad automático (gancho, producto visible, oferta y llamado al final, subtítulos) y lo deja anotado junto al video «por aprobar». Sin fotogramas, el control se hace solo con los datos (duración, plan), y lo dice.
 4. `duracion` en el resultado del armado ya existía: ahora se usa para comparar con el objetivo. Conviene mandarla siempre.
 
+### 17-oct-2026 · apertura en cortes, narración por defecto, estilo de edición y urgencia (lado del CRM hecho; **pendiente en el trabajador**)
+
+Sale de la primera retroalimentación del dueño. Todo es compatible hacia atrás: un campo ausente significa «como antes».
+
+**A. Apertura en cortes (varias tomas cortas de UN solo clip).** La primera escena generada puede traer:
+
+```json
+{ "n": 1, "tipo": "generada", "duracion": 3, "duracionClip": 8,
+  "cortes": [ { "desde": 0, "hasta": 1 }, { "desde": 2.2, "hasta": 2.9 }, { "desde": 4.2, "hasta": 4.9 }, { "desde": 6.2, "hasta": 6.8 } ] }
+```
+
+- En la etapa `clips`: generar el clip con **`duracionClip`** segundos (no `duracion`). Se sube ENTERO como siempre (`e{n}-clip.mp4`) y se reporta igual; `segundos` del reporte = lo generado (8). Se paga un solo clip.
+- En la etapa `armado`: de ese clip usar SOLO los tramos de `cortes` (segundos dentro del clip, `desde` incluido, `hasta` excluido), pegados en ese orden con corte seco, sin fundidos. La escena dura en el video la suma de los tramos (= `duracion`, con tolerancia de ±0,2 s). Si el clip resultó más corto que un `hasta`, recortar ese tramo al final del clip; si un tramo queda en menos de 0,3 s, saltarlo.
+- La imagen base y el prompt no cambian: el `promptVideo` ya describe los cuatro momentos (0–1 s golpe visual, 2–3 s, 4–5 s, 6–7 s).
+- Una escena sin `cortes` se usa entera, como hasta hoy. Los `cortes` pueden venir en cualquier escena generada, no solo en la primera.
+- La voz/narración y el subtítulo de la escena van sobre el resultado ya recortado.
+
+**B. Narración por defecto.** Cuando `contexto.voz.motor === "narracion"`: el `promptVideo` de cada clip llega con «AUDIO: sin diálogo… solo sonido ambiente» (los clips no hablan) y todas las escenas con frase traen `locucion: "narrador"`. El trabajador narra con ElevenLabs con UNA sola voz para todo el video (misma voz en todas las escenas; `contexto.voz.idioma`, `.acento` y `.descripcion` para elegirla) y deja el audio ambiente del clip muy por debajo. Si no hay clave de ElevenLabs: fallar el armado con un motivo claro (no entregar un video mudo). `motor: "clip"` sigue funcionando igual que hoy.
+
+**C. Estilo de edición**, en `opciones` del trabajo de armado:
+
+- `opciones.estiloSubtitulos`: `"palabra"` (palabra por palabra, resalta la que suena) · `"caja"` (frases cortas en caja de color) · `"limpio"` (una línea blanca sobria) · `"impacto"` (mayúsculas grandes, una o dos palabras). El color de acento de las plantillas es `contexto.cierre.color`. Valor desconocido o ausente → el estilo actual.
+- `opciones.ritmo`: `"rapido"` (transiciones marcadas entre escenas —barrido, zoom de entrada— y subtítulos que entran con golpe; ninguna toma quieta: a las fotos reales se les da movimiento visible) · `"medio"` (como hoy) · `"calmado"` (solo cortes secos y fundidos suaves, para marcas sobrias).
+
+**D. Urgencia en el cierre**: `contexto.cierre.urgencia` (≤ 80 caracteres; puede venir vacío). Si viene con texto, se dibuja como una línea corta en mayúsculas pequeñas, del color `cierre.color` aclarado o blanca al 92 %, entre el detalle y el botón. Vacío o ausente → no se dibuja nada. El texto llega ya verificado como cierto por el CRM: no añadir ni cambiar palabras.
+
+**E. Para el control del final**: seguir mandando `fotogramas` del video armado; conviene que 2 de los 6 sean de los primeros 3 s y 1 del cierre.
+
 ### 16-oct-2026 · tarjeta de cierre de calidad (lado del CRM hecho; **pendiente en el trabajador**, `lib/rotulo.js`)
 
 El cierre del primer video real (fondo gris, foto pequeña, rótulo oscuro arriba y botón amarillo) se ve de plantilla barata frente al resto. Nuevo diseño. No cambia ninguna ruta ni el orden del armado: solo cómo se dibuja la escena `tipo: "cierre"`.

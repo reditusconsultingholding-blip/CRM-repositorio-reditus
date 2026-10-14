@@ -16,6 +16,7 @@ import {
   MAX_FOTOS_PROYECTO,
   TONOS_MUSICA,
   COLOR_HEX,
+  leerEdicion,
   anotar,
   leerVoz,
   type TonoMusica,
@@ -803,7 +804,7 @@ export async function tiemposVideo(): Promise<TiemposVideo> {
  * La tarjeta final: titular y detalle de la oferta (dos líneas) y el color de marca del botón.
  * Vacíos = salen solos de la oferta. No genera nada: si ya había video, queda «por armar de nuevo» (no cuesta).
  */
-export async function guardarCierre(id: string, cierre: { titular?: unknown; detalle?: unknown; color?: unknown }): Promise<EstadoProyecto | { error: string }> {
+export async function guardarCierre(id: string, cierre: { titular?: unknown; detalle?: unknown; color?: unknown; urgencia?: unknown }): Promise<EstadoProyecto | { error: string }> {
   return bajoCandado(id, async () => {
     const x = await abrirProyecto(id);
     if ("error" in x) return x;
@@ -820,10 +821,28 @@ export async function guardarCierre(id: string, cierre: { titular?: unknown; det
       ...(s(cierre?.titular, 28) ? { titular: s(cierre?.titular, 28) } : {}),
       ...(s(cierre?.detalle, 70) ? { detalle: s(cierre?.detalle, 70) } : {}),
       ...(color ? { color: color.toUpperCase() } : {}),
+      // La urgencia escrita por una persona manda (vacía = sin línea de urgencia); sin tocar, sale de la promoción de la oferta.
+      ...(typeof cierre?.urgencia === "string" ? { urgencia: s(cierre.urgencia, 80) } : p.contexto.cierre.urgencia !== undefined ? { urgencia: p.contexto.cierre.urgencia } : {}),
     };
     if (JSON.stringify(p.contexto.cierre) === antes) return estado(x);
     finalPorRehacer(p);
     anotar(p, `Cierre del video cambiado por ${x.profile.name}.`);
     return guardar(x, p, "Cierre guardado. Si ya había video, ármalo de nuevo para verlo (no cuesta).");
+  });
+}
+
+/** Estilo de edición del video: plantilla de subtítulos y ritmo del montaje. No genera nada: si ya había video, queda por armar de nuevo (no cuesta). */
+export async function guardarEdicion(id: string, edicion: { subtitulos?: unknown; ritmo?: unknown }): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    const { p } = x;
+    if (p.final.estado === "en-cola" || p.final.estado === "generando") return { error: "El video se está armando: espera a que termine para cambiar el estilo." };
+    const nueva = leerEdicion({ ...leerEdicion(p.contexto.edicion, x.g.formato), ...(edicion && typeof edicion === "object" ? edicion : {}) }, x.g.formato);
+    if (JSON.stringify(nueva) === JSON.stringify(p.contexto.edicion)) return estado(x);
+    p.contexto.edicion = nueva;
+    finalPorRehacer(p);
+    anotar(p, `Estilo de edición cambiado por ${x.profile.name}: subtítulos «${nueva.subtitulos}», ritmo «${nueva.ritmo}».`);
+    return guardar(x, p, "Estilo guardado. Si ya había video, ármalo de nuevo para verlo (no cuesta).");
   });
 }

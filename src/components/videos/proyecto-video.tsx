@@ -15,6 +15,7 @@ import {
   aprobarPiezas,
   cancelarTrabajoProyecto,
   guardarCierre,
+  guardarEdicion,
   crearVariaciones,
   seguirProyecto,
   consultarProyecto,
@@ -33,6 +34,13 @@ import {
   NOMBRE_PASO,
   TONO_PIEZA,
   cierreCompleto,
+  ESTILOS_SUBTITULOS,
+  ESTILO_SUBTITULOS_LABELS,
+  RITMOS,
+  RITMO_LABELS,
+  leerEdicion,
+  type EstiloSubtitulos,
+  type Ritmo,
   PUNTOS_CONTROL,
   VEREDICTO_LABELS,
   type PuntoControl,
@@ -638,6 +646,9 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
         />
       )}
       {paso === 1 && (
+        <EdicionVideo edicion={leerEdicion(proyecto.contexto.edicion, guardado.formato)} ocupado={ocupado || armando} onCambiar={(e) => void correr("edicion", () => guardarEdicion(id, e), "Estilo guardado")} />
+      )}
+      {paso === 1 && (
         <details className="rounded-xl border border-border bg-card">
           <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Avanzado</summary>
           <div className="flex flex-col gap-2 border-t border-border p-3">
@@ -705,13 +716,63 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
   );
 }
 
+const EJEMPLO_SUBTITULO: Record<EstiloSubtitulos, React.ReactNode> = {
+  palabra: (
+    <span className="text-lg font-extrabold text-white">
+      Esa pantalla te <span className="rounded bg-primary px-1">roba</span> el sueño
+    </span>
+  ),
+  caja: <span className="rounded-lg bg-primary px-3 py-1 text-lg font-bold text-primary-foreground">te roba el sueño</span>,
+  limpio: <span className="text-base font-medium text-white">Esa pantalla te roba el sueño</span>,
+  impacto: <span className="text-2xl font-black tracking-tight text-white uppercase">TE ROBA EL SUEÑO</span>,
+};
+
+/** Estilo de edición: cómo se ven los subtítulos y qué tan rápido va el montaje. Con ejemplo a la vista. */
+function EdicionVideo({ edicion, ocupado, onCambiar }: { edicion: { subtitulos: EstiloSubtitulos; ritmo: Ritmo }; ocupado: boolean; onCambiar: (e: { subtitulos?: EstiloSubtitulos; ritmo?: Ritmo }) => void }) {
+  const SELECT = "h-9 w-full rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3" id="estilo-de-edicion" aria-label="Estilo de edición">
+      <div>
+        <span className="text-sm font-semibold">Estilo de edición</span>
+        <p className="text-sm text-muted-foreground">Cómo se ven los subtítulos y qué tan rápido va el montaje. Sale elegido según el formato; cámbialo si la marca pide otra cosa. No cuesta: solo se vuelve a armar.</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Subtítulos
+          <select className={SELECT} value={edicion.subtitulos} disabled={ocupado} onChange={(e) => onCambiar({ subtitulos: e.target.value as EstiloSubtitulos })}>
+            {ESTILOS_SUBTITULOS.map((k) => (
+              <option key={k} value={k}>
+                {ESTILO_SUBTITULOS_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Ritmo
+          <select className={SELECT} value={edicion.ritmo} disabled={ocupado} onChange={(e) => onCambiar({ ritmo: e.target.value as Ritmo })}>
+            {RITMOS.map((k) => (
+              <option key={k} value={k}>
+                {RITMO_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex min-h-20 items-center justify-center rounded-lg bg-neutral-900 p-3 text-center" data-ejemplo-subtitulo={edicion.subtitulos} aria-label="Ejemplo de subtítulo">
+          {EJEMPLO_SUBTITULO[edicion.subtitulos]}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** La tarjeta final del video: la oferta en dos líneas y el color de marca del botón. */
-function CierreVideo({ proyecto, ocupado, guardando, onGuardar }: { proyecto: ProyectoVideo; ocupado: boolean; guardando: boolean; onGuardar: (c: { titular: string; detalle: string; color: string }) => void }) {
+function CierreVideo({ proyecto, ocupado, guardando, onGuardar }: { proyecto: ProyectoVideo; ocupado: boolean; guardando: boolean; onGuardar: (c: { titular: string; detalle: string; color: string; urgencia: string }) => void }) {
   const actual = cierreCompleto(proyecto.contexto.cierre);
   const [titular, setTitular] = useState(actual.titular);
   const [detalle, setDetalle] = useState(actual.detalle);
   const [color, setColor] = useState(actual.color);
-  const sucio = titular !== actual.titular || detalle !== actual.detalle || color.toUpperCase() !== actual.color;
+  const [urgencia, setUrgencia] = useState(actual.urgencia);
+  const sucio = titular !== actual.titular || detalle !== actual.detalle || color.toUpperCase() !== actual.color || urgencia !== actual.urgencia;
   const CAMPO = "h-9 w-full rounded-lg border border-input bg-card px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3" id="cierre-del-video" aria-label="Cierre del video">
@@ -736,18 +797,24 @@ function CierreVideo({ proyecto, ocupado, guardando, onGuardar }: { proyecto: Pr
           </span>
         </label>
       </div>
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        Urgencia (solo si es cierta)
+        <input className={CAMPO} value={urgencia} maxLength={80} disabled={ocupado} placeholder="2x1 mientras dure la promoción" onChange={(e) => setUrgencia(e.target.value)} />
+        <span className="text-sm font-normal text-muted-foreground">La promoción vigente, un plazo o cupo que el cliente haya publicado, o la temporada. Nunca escasez ni fechas inventadas; si no hay nada cierto, déjala vacía.</span>
+      </label>
       {/* Así se leerá (el dibujo final lo hace el servidor de videos con la foto real). */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3" data-vista-cierre>
         <div className="min-w-0 flex-1 basis-48">
           <span className="block font-heading text-2xl leading-tight font-bold">{titular || detalle || "Sin oferta"}</span>
           {titular && detalle && <span className="block text-sm">{detalle}</span>}
+          {urgencia && <span className="mt-1 block text-xs font-semibold tracking-wide uppercase" style={{ color }}>{urgencia}</span>}
         </div>
         <span className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: color }}>
           {proyecto.contexto.cierre.llamadoALaAccion || "Llamado a la acción"}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={ocupado || !sucio} onClick={() => onGuardar({ titular: titular.trim(), detalle: detalle.trim(), color })}>
+        <Button disabled={ocupado || !sucio} onClick={() => onGuardar({ titular: titular.trim(), detalle: detalle.trim(), color, urgencia: urgencia.trim() })}>
           {guardando ? "Guardando…" : sucio ? "Guardar el cierre" : "Cierre guardado"}
         </Button>
         <span className="text-sm text-muted-foreground">La oferta completa («{proyecto.contexto.cierre.oferta || "sin oferta"}») y el llamado se cambian en «Corregir».</span>

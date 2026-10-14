@@ -121,6 +121,13 @@ export function ConfigVideosTarjeta({ esCeo, inicial }: { esCeo: boolean; inicia
               <span className="block text-xs text-muted-foreground">Apagado, cada prospecto nuevo se agenda solo hasta el tope diario. El video final lo sigue aprobando una persona.</span>
             </span>
           </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={c.narracion} disabled={quieto} onChange={(e) => set("narracion", e.target.checked)} />
+            <span>
+              Narración con una sola voz (ElevenLabs)
+              <span className="block text-xs text-muted-foreground">Enciéndelo cuando el servidor de videos tenga esa clave: los videos nuevos salen narrados y los clips sin diálogo. Apagado, la voz sale de cada clip.</span>
+            </span>
+          </label>
           <div className="flex flex-col gap-1.5">
             <span className="text-sm leading-none font-medium">Exigencia de la revisión</span>
             <Segmento value={c.exigencia} onChange={(v) => set("exigencia", v)} opciones={EXIGENCIAS} etiquetas={ETIQ_EXIGENCIA} disabled={quieto} />

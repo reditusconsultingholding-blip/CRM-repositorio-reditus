@@ -6,7 +6,7 @@ import { RAIZ_COLA } from "@/lib/cola-raiz";
 import { leerConfig } from "@/lib/videos-config-server";
 import { buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
 import { bloqueDeAudio } from "@/lib/proyecto-video-plan";
-import { cierreCompleto, duracionTotal, gastoDeTrabajo, type CodigoParada, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
+import { cierreCompleto, leerEdicion, duracionTotal, gastoDeTrabajo, type CodigoParada, type EscenaProyecto, type ProyectoVideo, type TipoPieza } from "@/lib/proyecto-video";
 import { corchetes, escenasParaVideo, pasosDelGuion } from "@/lib/trabajos-video";
 import {
   BUCKET_TRABAJOS,
@@ -452,7 +452,7 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
       : {
           ...e,
           // Con la voz dentro del clip, el prompt dice quién habla, la frase exacta, el acento y la voz fija del proyecto.
-          promptVideo: [conNota(e.promptVideo, e.clip.nota), proyecto.contexto.voz.motor === "clip" && proyecto.opciones.voz ? bloqueDeAudio(e, proyecto.contexto.voz) : ""].filter(Boolean).join("\n\n"),
+          promptVideo: [conNota(e.promptVideo, e.clip.nota), proyecto.contexto.voz.motor === "clip" && proyecto.opciones.voz ? bloqueDeAudio(e, proyecto.contexto.voz) : "AUDIO: sin diálogo. Nadie habla ni mueve los labios como si hablara; solo sonido ambiente suave. Sin música y sin voces (la narración se añade después)."].filter(Boolean).join("\n\n"),
           clip: { ...e.clip, intentos: e.clip.intentos + 1 },
         },
   );
@@ -470,7 +470,7 @@ export async function crearTrabajoEtapa(admin: Admin, p: PedidoEtapa): Promise<{
     duracionObjetivo: etapa === "armado" ? duracionTotal(proyecto) : escenas.reduce((x, e) => x + e.duracion, 0),
     escenas: [],
     imagenesProducto: proyecto.contexto.fotos.slice(0, MAX_IMAGENES_PRODUCTO),
-    opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica },
+    opciones: { ...proyecto.opciones, tonoMusica: proyecto.tonoMusica, estiloSubtitulos: leerEdicion(proyecto.contexto.edicion, p.formato.slug).subtitulos, ritmo: leerEdicion(proyecto.contexto.edicion, p.formato.slug).ritmo },
     pedidoPor: p.quien,
     origen: "manual",
     // El cierre viaja completo: titular + detalle (la oferta en dos líneas) y el color de marca del botón.

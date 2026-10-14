@@ -78,6 +78,9 @@ export type OpcionesVideo = {
   tonoMusica?: string;
   /** Identificador del modelo en el proveedor; null = el que diga la configuración del servidor. */
   modelo: string | null;
+  /** Plantilla de subtítulos (palabra, caja, limpio, impacto) y ritmo del montaje (rapido, medio, calmado). */
+  estiloSubtitulos?: string;
+  ritmo?: string;
 };
 
 export const OPCIONES_VIDEO_BASE: OpcionesVideo = { subtitulos: true, voz: true, musica: null, modelo: null };
@@ -242,6 +245,7 @@ const escenaFuera = (e: EscenaProyecto) => ({
   promptVideo: e.promptVideo,
   fotoUrl: e.fotoUrl,
   movimiento: e.movimiento,
+  ...(e.cortes?.length ? { cortes: e.cortes, duracionClip: e.duracionClip ?? 8 } : {}),
   imagen: piezaFuera(e.imagen),
   clip: piezaFuera(e.clip),
 });
@@ -321,7 +325,15 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
       .map((u) => txt(u, 600))
       .filter(Boolean)
       .slice(0, MAX_IMAGENES_PRODUCTO),
-    opciones: { subtitulos: op.subtitulos !== false, voz: op.voz !== false, musica: txt(op.musica, 600) || null, modelo: txt(op.modelo, 160) || null },
+    opciones: {
+      subtitulos: op.subtitulos !== false,
+      voz: op.voz !== false,
+      musica: txt(op.musica, 600) || null,
+      modelo: txt(op.modelo, 160) || null,
+      ...(txt(op.tonoMusica, 20) ? { tonoMusica: txt(op.tonoMusica, 20) } : {}),
+      ...(txt(op.estiloSubtitulos, 20) ? { estiloSubtitulos: txt(op.estiloSubtitulos, 20) } : {}),
+      ...(txt(op.ritmo, 20) ? { ritmo: txt(op.ritmo, 20) } : {}),
+    },
     etapa: (ETAPAS_TRABAJO as readonly string[]).includes(txt(o.etapa, 12)) ? (txt(o.etapa, 12) as EtapaTrabajo) : null,
     contexto: o.contexto ? leerContexto(o.contexto) : null,
     escenasEtapa: leerEscenas(o.escenasEtapa),
@@ -364,6 +376,7 @@ export function leerTrabajo(raw: unknown): TrabajoVideo | null {
       llamadoALaAccion: txt((o.cierre as Record<string, unknown> | undefined)?.llamadoALaAccion, 200),
       ...(txt((o.cierre as Record<string, unknown> | undefined)?.titular, 28) ? { titular: txt((o.cierre as Record<string, unknown> | undefined)?.titular, 28) } : {}),
       ...(typeof (o.cierre as Record<string, unknown> | undefined)?.detalle === "string" ? { detalle: txt((o.cierre as Record<string, unknown> | undefined)?.detalle, 70) } : {}),
+      ...(typeof (o.cierre as Record<string, unknown> | undefined)?.urgencia === "string" ? { urgencia: txt((o.cierre as Record<string, unknown> | undefined)?.urgencia, 80) } : {}),
       ...(COLOR_HEX.test(txt((o.cierre as Record<string, unknown> | undefined)?.color, 9)) ? { color: txt((o.cierre as Record<string, unknown> | undefined)?.color, 9) } : {}),
     },
     avisos: lista(o.avisos)

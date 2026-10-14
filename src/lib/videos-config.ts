@@ -17,6 +17,8 @@ export type ConfigVideos = {
   armarAlTerminarClips: boolean;
   /** Pedir el Sí del CEO antes de cada video automático de un prospecto. Apagado, se agendan solos (hasta el tope diario). */
   aprobarProspectos: boolean;
+  /** El servidor de videos tiene narración (ElevenLabs): los videos nuevos salen con una sola voz narrada, no con la voz de cada clip. */
+  narracion: boolean;
   /** Videos nuevos (proyectos que piden clips) por día. */
   videosPorDia: number;
   /** Variaciones (proyectos hijos) por día. */
@@ -36,6 +38,7 @@ export const CONFIG_VIDEOS_BASE: ConfigVideos = {
   exigencia: "estricto",
   armarAlTerminarClips: true,
   aprobarProspectos: true,
+  narracion: false,
   videosPorDia: 6,
   variacionesPorDia: 12,
   intentosPorEscena: 3,
@@ -57,6 +60,7 @@ export function leerConfigVideos(raw: unknown): ConfigVideos {
     exigencia: o.exigencia === "normal" ? "normal" : "estricto",
     armarAlTerminarClips: typeof o.armarAlTerminarClips === "boolean" ? o.armarAlTerminarClips : b.armarAlTerminarClips,
     aprobarProspectos: typeof o.aprobarProspectos === "boolean" ? o.aprobarProspectos : b.aprobarProspectos,
+    narracion: o.narracion === true,
     videosPorDia: entero(o.videosPorDia, b.videosPorDia, 1, 200),
     variacionesPorDia: entero(o.variacionesPorDia, b.variacionesPorDia, 0, 500),
     intentosPorEscena: entero(o.intentosPorEscena, b.intentosPorEscena, 1, 6),

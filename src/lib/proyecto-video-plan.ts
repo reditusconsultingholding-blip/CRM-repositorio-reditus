@@ -9,6 +9,7 @@ import { corchetes, pasosDelGuion, segundosDeTramo } from "@/lib/trabajos-video"
 import {
   LOCUCIONES,
   MAX_SEGUNDOS_CLIP,
+  cortesDeApertura,
   contarPalabras,
   palabrasQueCaben,
   type Locucion,
@@ -106,6 +107,25 @@ const parteGenerada = (l: EscenaProyecto[]) => {
 };
 
 /** Qué le falta a un plan para ser un buen video automático (vacío = cumple). Sirve para pedirle a la IA que lo corrija. */
+/** Lo que se le agrega al prompt del clip de la apertura cuando la IA no lo escribió en momentos. */
+export const APERTURA_EN_MOMENTOS =
+  "APERTURA EN CUATRO MOMENTOS dentro del mismo clip de 8 s (luego se usan solo esos tramos, pegados; cada momento empieza con un cambio claro de encuadre o de acción y NO hay tiempos muertos): " +
+  "0–1 s GOLPE VISUAL que frena el scroll: el producto real entra en plano de forma inesperada (cae sobre la superficie, se destapa, zoom brusco hasta él o una mano lo atrapa al vuelo); " +
+  "2–3 s primerísimo plano del detalle más reconocible del producto, con movimiento; 4–5 s el producto en uso, desde otro ángulo; 6–7 s el resultado o la reacción, en un plano distinto. " +
+  "Es una recreación propia del TIPO de toma: sin copiar material, marcas ni personas de terceros.";
+
+/** La primera escena es la apertura: un clip de 8 s del que se usan 4 tramos cortos (3 o 4 s en total). Modifica la escena. Devuelve si cambió algo. */
+export function ponerApertura(escenas: EscenaProyecto[]): boolean {
+  const e = escenas[0];
+  if (!e || e.tipo !== "generada" || (e.cortes?.length ?? 0) >= 3) return false;
+  const segundos = contarPalabras(e.voz) > palabrasQueCaben(3) ? 4 : 3;
+  e.duracion = segundos;
+  e.duracionClip = MAX_CLIP;
+  e.cortes = cortesDeApertura(segundos);
+  if (!/APERTURA EN CUATRO MOMENTOS|0\s?[–-]\s?1 s/i.test(e.promptVideo)) e.promptVideo = `${e.promptVideo.trim()}\n\n${APERTURA_EN_MOMENTOS}`.trim();
+  return true;
+}
+
 export function faltasDeRiqueza(escenas: EscenaProyecto[], vozEnElClip: boolean): string[] {
   const faltas: string[] = [];
   const parte = parteGenerada(escenas);
@@ -243,6 +263,8 @@ export function enriquecerPlan(entrada: EscenaProyecto[], d: DatosPlan): { escen
     // El cierre y la inserción anterior tampoco comparten foto si hay otra.
     if (alternadas) cambios.push("se alternaron las fotos para no repetir la misma en escenas seguidas");
   }
+  // La apertura: un solo clip de 8 s del que se usan cuatro tramos cortos (golpe + tres tomas).
+  if (ponerApertura(escenas)) cambios.push("la primera escena pasó a ser la apertura de 3 s en cuatro tomas cortas (sale de un solo clip)");
   return { escenas: numerar(escenas.slice(0, MAX_ESCENAS_PROYECTO)), cambios };
 }
 
@@ -400,6 +422,7 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
       promptVideo: s("promptVideo", 4000),
       fotoUrl: d.fotos.includes(pedida) ? pedida : (d.fotos[indice] ?? null),
       movimiento: (MOVIMIENTOS as readonly string[]).includes(o.movimiento as string) ? (o.movimiento as Movimiento) : "acercar",
+      ...(Array.isArray(o.cortes) && o.cortes.length >= 2 ? { cortes: o.cortes as EscenaProyecto["cortes"], duracionClip: n("duracionClip", MAX_CLIP) } : {}),
       ...(o.imagen && typeof o.imagen === "object" ? { imagen: o.imagen as EscenaProyecto["imagen"] } : {}),
       ...(o.clip && typeof o.clip === "object" ? { clip: o.clip as EscenaProyecto["clip"] } : {}),
     });
@@ -428,6 +451,8 @@ export function normalizarPlan(crudas: unknown, d: DatosPlan, opciones: { verifi
     if (x.tipo === "generada") {
       x.duracion = entre(x.duracion, 3, MAX_CLIP);
       if (x.locucion === "texto") x.locucion = "sin-voz";
+      // Con narración aparte nadie habla a cámara: la frase la dice el narrador (una sola voz en todo el video).
+      if (d.voz?.motor === "narracion" && x.locucion === "camara") x.locucion = "narrador";
       if (!x.promptImagen.trim() || !x.promptVideo.trim()) {
         const est = d.formato.estructura.find((s) => s.paso === x.paso);
         const p = promptsDePlantilla(d, x.paso, est?.que_pasa ?? NOMBRE_PASO[x.paso], pasos.find((s) => s.paso === x.paso)?.texto ?? "", x.duracion, x.paso >= 4);

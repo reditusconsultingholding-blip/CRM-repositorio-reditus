@@ -3,6 +3,7 @@ import { planDeReferencia, textoDeCambios, textoDeReferencia, type CambiosClon, 
 import { ES_COLA_DE_PRUEBA, RAIZ_COLA } from "@/lib/cola-raiz";
 import { llamarClaude, llamarClaudeConImagenes } from "@/lib/ia-claude";
 import { elegirPista, preferenciasDelEquipo } from "@/lib/aprendizajes-video-server";
+import { edicionDeFormato } from "@/lib/proyecto-video";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { REGLAS_COMUNES, buscarFormato, type FormatoVideo } from "@/lib/video-formatos";
 import {
@@ -170,6 +171,9 @@ Este video se produce solo y nadie lo va a retocar: tiene que quedar bien, no se
 - La frase de cada escena CABE en su duración (mira «Palabras que caben por clip»). Si no cabe, alarga la escena hasta 8 s o reparte las oraciones en dos escenas generadas. Ninguna escena se queda con una frase que no cabe.
 - EL CIERRE SE DICE: la penúltima escena es "generada", del paso 5, con voz, y dice la oferta y el llamado a la acción (18 palabras o menos; si no caben, dos escenas). La última es el "cierre" con la foto real y el rótulo, sin frase.
 - No uses la misma foto en dos escenas seguidas.
+- APERTURA (los primeros 3 segundos frenan el scroll, en cualquier formato): la PRIMERA escena es "generada", dura 3 s (4 s si su frase no cabe en 3) y su "promptVideo" describe UN clip de 8 s en CUATRO MOMENTOS, cada uno con un cambio claro de encuadre o de acción: «0–1 s» un GOLPE visual con el producto real (elige el tipo que mejor le vaya al producto y a lo que abre en los anuncios más longevos de la investigación: caída sobre la superficie, destape, antes/después relámpago, zoom brusco, una mano que lo atrapa, reacción); «2–3 s», «4–5 s» y «6–7 s» tres tomas muy cortas y llamativas (detalle, uso, resultado). De ese clip se usan solo esos tramos, pegados. Es una recreación propia del TIPO de toma: nunca copies material, marcas ni personas de terceros. Su frase tiene 5 palabras o menos y nombra el dolor.
+- RITMO: nada estático. Cada escena generada describe movimiento desde el primer fotograma (persona o producto en acción, cámara que se mueve con intención) y un encuadre distinto al de la escena anterior.
+- CIERRE CON URGENCIA REAL: la escena hablada del paso 5 sorprende (un giro, un contraste o un beneficio inesperado) y dice la oferta y el llamado. La urgencia sale SOLO de lo que es cierto: la promoción vigente que figure en la oferta, un plazo o cupo que el cliente haya publicado, o la temporada. Prohibido inventar escasez, plazos, cupos o «últimas unidades». Si no hay dato, la urgencia se construye con la oportunidad real («mientras dure la promoción») y con el costo de no actuar (el dolor), nunca con cifras falsas.
 - En las escenas generadas donde aparece el producto, describe a la persona usándolo de verdad (puesto, en la mano, aplicándolo), con el producto idéntico al de las fotos de referencia.`;
 
 /** Lee la respuesta de la IA como plan ya normalizado, o null si no es un plan. Solo para decidir si hay que reintentar. */
@@ -279,7 +283,8 @@ export async function armarProyecto(d: PedidoArmar): Promise<ProyectoVideo> {
   const ahora = new Date().toISOString();
   const clonando = g.referenciaTomas.length > 0;
   const cambios = clonando ? g.clonCambios : null;
-  const voz: VozProyecto = vozDePais(g.pais);
+  // Una sola voz narrada (ElevenLabs) cuando el servidor la tiene; si no, la voz sale de cada clip.
+  const voz: VozProyecto = vozDePais(g.pais, (await leerConfig(d.admin)).narracion ? "narracion" : "clip");
   if (cambios?.cambiarIdioma && cambios.idioma) {
     voz.acento = cambios.idioma;
     // El código de idioma acompaña al acento pedido (para el trabajador); si no se reconoce, queda el genérico.
@@ -314,7 +319,7 @@ export async function armarProyecto(d: PedidoArmar): Promise<ProyectoVideo> {
           : null,
     },
     variacionDe: null,
-    contexto: { producto: g.producto, pais: g.pais, fotos, analisisProducto: textoFicha(ficha), cierre: { oferta: g.oferta, llamadoALaAccion: g.llamado }, voz },
+    contexto: { producto: g.producto, pais: g.pais, fotos, analisisProducto: textoFicha(ficha), cierre: { oferta: g.oferta, llamadoALaAccion: g.llamado }, voz, edicion: previo?.contexto.edicion ?? edicionDeFormato(g.formato) },
     escenas: plan.escenas,
     costo: { creditos: 0, segundosGenerados: 0, imagenes: 0 },
     final: { estado: "pendiente", url: null, armados: 0, trabajoId: null, nota: "" },
