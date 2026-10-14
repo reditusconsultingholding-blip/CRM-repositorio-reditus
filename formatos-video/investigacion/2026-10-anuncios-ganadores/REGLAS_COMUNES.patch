@@ -1,0 +1,81 @@
+diff --git a/formatos-video/REGLAS_COMUNES.md b/formatos-video/REGLAS_COMUNES.md
+index b67cb0f..55ef54a 100644
+--- a/formatos-video/REGLAS_COMUNES.md
++++ b/formatos-video/REGLAS_COMUNES.md
+@@ -7,6 +7,7 @@ Cómo leer las citas:
+ - `[método §N]` = `supernova/conocimiento/videos-ia/antonio/METODO_ANTONIO.md`, sección N (ahí está el minuto exacto de cada clase).
+ - `[clase N hh:mm:ss]` = cita directa de una clase de Antonio.
+ - `[propuesta]` = aporte de este repositorio, sin fuente. Se valida probando.
++- `[ganadores oct-2026 · n de 36]` = contado en 36 anuncios de video que llevaban de 48 a 615 días activos en la Biblioteca de anuncios de Meta (España, 13-oct-2026). Es longevidad, no ventas. Detalle en `supernova/conocimiento/videos-ia/anuncios-ganadores/2026-10/PATRONES.md`. Estos puntos AFINAN la estructura; no la cambian.
+ 
+ ## 1. Estructura del guion: la montaña rusa
+ 
+@@ -24,6 +25,14 @@ El producto real se ve en pantalla en el paso 4, en mano o en demostración de u
+ 
+ Equivale al HOOK → DESARROLLO → CTA de los briefs reales [base §1, §4]. El único tiempo con fuente es «gancho 0–3 s, desarrollo 3–25 s, CTA al final» [base §3]; los demás segundos de cada formato son [propuesta].
+ 
++### 1a. Detalles de la apertura (afinan el paso 1)
++
++- El producto real se ve desde el primer cuadro del golpe, haciendo algo; no entra después [ganadores oct-2026 · 30 de 36].
++- La primera palabra de la voz y el primer texto entran con el primer cuadro: sin silencio ni entrada [ganadores oct-2026 · voz antes de 0,5 s en 32 de 33; texto en los 3 primeros segundos en 30 de 36].
++- Las tomas cortas de 1–3 s muestran la MISMA acción desde otro ángulo o más cerca, no imágenes sin relación [lectura de ganadores oct-2026: donde no hay corte, la acción avanza sin romperse].
++- La frase del gancho puede terminar de decirse hasta el segundo 5, ya sobre la primera toma del cuerpo; la apertura visual sigue siendo de 3 s [ganadores oct-2026 · la primera frase termina entre 3,5 y 6,5 s en 21 de 36].
++- No hace falta una cara para abrir: manos, producto o cuerpo sirven igual [ganadores oct-2026 · sin cara en el primer segundo en 19 de 36].
++
+ ## 1b. El cierre (paso 5) es obligatorio
+ 
+ Regla de Reditus, por indicación del dueño: **todo video recalca la oferta y el llamado a la acción al final.** El paso 5 nunca es un cierre genérico; lleva siempre estos tres elementos:
+@@ -36,6 +45,13 @@ Dura al menos 5 segundos, y más si el video pasa de 30 s. En los formatos narra
+ 
+ Esto ya lo pedía la base («el CTA lleva la oferta local» [base §1]; el CTA se dice mirando a cámara [método §9.1]); lo nuevo es que es obligatorio en todos los formatos y que la oferta va también escrita [regla de Reditus].
+ 
++Detalles del cierre [ganadores oct-2026]:
++
++- El mínimo de 5 segundos coincide con lo observado: el cierre dura 5,1 s de mediana y ocupa el 18 % del video [medido en 32 de 36 que tienen cierre].
++- El llamado dice DÓNDE tocar («abajo», «en el enlace», «en el botón») [15 de los 27 con llamado].
++- Cuando el cliente da una urgencia real, las dos formas más vistas son existencias y plazo, en una frase justo antes del llamado [existencias 8 de 36; plazo 10 de 36]. Sin dato del cliente, no hay urgencia.
++- La oferta entra en el último tramo del video [primera mención al 74 % de la duración, mediana de 24 con oferta].
++
+ ## 2. Reglas del guion
+ 
+ - El hook es lo más importante: se le dedica la mayor parte del tiempo y se reescribe hasta lograr el «efecto wow» [método §1, §3].
+@@ -49,6 +65,10 @@ Esto ya lo pedía la base («el CTA lleva la oferta local» [base §1]; el CTA s
+ - No se copian identidad, textos ni marcas de las referencias: solo formato, encuadre y ritmo [base §1].
+ - Precios, cifras, testimonios y resultados nunca se inventan: si el cliente no los dio, van entre [corchetes] para completar [propuesta, coherente con base §1].
+ 
++- El tramo del dolor (pasos 2 y 3) se cuenta en unos 8 segundos y con el problema a la vista en la toma, no con una persona hablando sola [ganadores oct-2026 · 8,4 s de mediana en los 15 de 36 que lo tienen].
++- La prueba del paso 4 es una demostración que se ve mientras se explica; una cifra real del cliente va además escrita en pantalla [ganadores oct-2026 · 35 de 36 apoyan lo que dicen con una demostración o un dato].
++- El tope de 24 palabras por clip de 8 s (180 por minuto) queda en la parte alta de lo observado: no pasarlo [ganadores oct-2026 · 182 palabras por minuto de mediana; la mitad entre 148 y 202].
++
+ ## 3. Reglas visuales y de generación
+ 
+ - Vertical 9:16, MP4 [base §1].
+@@ -70,9 +90,27 @@ Esto ya lo pedía la base («el CTA lleva la oferta local» [base §1]; el CTA s
+ - Subtítulos limpios, en una línea, junto a la cara; hechos con Captions [método §8].
+ - Para Colombia, un género musical local en vez de un trend genérico [base §1].
+ 
++- En el cuerpo del video, un cambio de imagen cada 2,5–4 s; los cortes de menos de 1 s se reservan para la apertura [ganadores oct-2026 · 2,6 cortes cada 10 s de mediana, plano medio 3,3 s]. Confirma la regla de la toma de apoyo cada 3 s.
++- Subtítulos: frases de 2 a 6 palabras, blancas con contorno, entre el centro y el tercio inferior, sin tapar el producto [ganadores oct-2026 · por frases 15 de 25; base blanca 22 de 25; sin caja 17 de 25; centro-bajo o abajo 17 de 25]. La palabra resaltada en caja o en color es la variante más vista en demostraciones con voz en off [7 de 25].
++- Título de apoyo: arriba y centrado, durante los primeros 5–10 s, repitiendo o completando el gancho; después se quita o cambia [ganadores oct-2026 · título en 18 de 36; arriba en 14 de 18; solo en la apertura en 11 de 18].
++- La voz queda unos 10 dB por encima de la música, coherente con el 70/30 [ganadores oct-2026 · mediana de 13 anuncios con fondo y voz]. Del tempo y del género no hay conclusión: no se pudo oír el audio.
++- Duración orientativa por categoría: hogar, moda, mascotas y tecnología, 25–35 s; salud y belleza, hasta 45–50 s [ganadores oct-2026 · medianas de 26 a 35 s y de 48 a 62 s, en grupos de 5 a 7 anuncios].
++
+ ## 5. Investigación de mercado
+ 
+ - Sale de las referencias que manda el cliente y de TikTok / Meta Ads Library [base §1].
+ - De la investigación deben salir: dolor funcional y emocional, cliente ideal, objeciones, creencias, mecanismo, ángulos y oferta [método §2].
+ - Se buscan patrones que se repiten y se hace más de eso [método §1].
+ - La base no trae métricas de rendimiento (CTR, ROAS, retención): ningún formato de este repositorio afirma cifras [base, aviso inicial].
++
++
++## 6. Observado en anuncios longevos y NO adoptado
++
++Se vio en la muestra de oct-2026 y contradice la estructura. No es regla. Queda anotado para decisión del dueño:
++
++- Sin ningún corte en los 3 primeros segundos: entre 18 y 21 de 36.
++- Sin tramo de dolor: 21 de 36.
++- Sin oferta en el video: 12 de 36. Sin llamado: 9 de 36. Sin cierre: 4 de 36.
++- Oferta o precio en la primera frase: 6 de 36.
++- Urgencia que no se puede comprobar: 10 de 36.
++- Voz sin subtítulos: 8 de 33. Sin voz: 3 de 36. Más de 60 s: 9 de 36.
+\ No newline at end of file

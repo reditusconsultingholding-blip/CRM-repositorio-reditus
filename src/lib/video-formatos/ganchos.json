@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "investigado": "2026-10-13",
-  "comoSeInvestigo": "Búsqueda web de qué aperturas de anuncios verticales (TikTok, Reels, Shorts) están funcionando en 2026 + práctica de producción de Reditus. Las fuentes son guías de agencias y proveedores (orientativas, no estudios independientes). Coinciden en: el primer segundo y medio decide; interrupción visual en el primer cuadro; cortes de 0,5 a 1 s; acercamientos bruscos; texto + sonido + imagen juntos en el primer golpe; problema antes que producto.",
+  "comoSeInvestigo": "Búsqueda web de qué aperturas de anuncios verticales (TikTok, Reels, Shorts) están funcionando en 2026 + práctica de producción de Reditus. Las fuentes son guías de agencias y proveedores (orientativas, no estudios independientes). Coinciden en: el primer segundo y medio decide; interrupción visual en el primer cuadro; cortes de 0,5 a 1 s; acercamientos bruscos; texto + sonido + imagen juntos en el primer golpe; problema antes que producto. · v2 (13-oct-2026): se suman 36 anuncios de video de producto físico que llevaban entre 48 y 615 días activos en la Biblioteca de anuncios de Meta (España). La señal es longevidad y repetición, no ventas. En cada gancho, `observado` dice cuántas veces se vio. La apertura que definió el dueño (golpe de 1 s + tres tomas cortas) NO cambia: lo observado solo afina detalles.",
   "fuentes": [
     "https://segwise.ai/blog/video-ad-hooks-drive-conversions",
     "https://segwise.ai/blog/anatomy-top-performing-video-ad-frame-by-frame",
@@ -9,13 +9,25 @@
     "https://ecommercefastlane.com/ugc-hooks-for-ecommerce/",
     "https://jetfuel.agency/short-form-video-ads-for-dtc-brands-tiktok-reels-and-shorts-strategy-that-drives-revenue-in-2026/",
     "https://www.vidovo.com/blog/ugc-hook-examples-how-brands-can-create-better-ugc-ads-in-the-first-3-seconds",
-    "https://adligator.com/blog/facebook-ad-creative-trends-2026"
+    "https://adligator.com/blog/facebook-ad-creative-trends-2026",
+    "https://www.facebook.com/ads/library/ (España, solo video, activos; 36 anuncios; detalle en supernova/conocimiento/videos-ia/anuncios-ganadores/2026-10/PATRONES.md)"
   ],
   "reglas": [
     "Se recrea el TIPO de toma con el producto real del cliente. Nunca se copia material, marcas, música, creadores ni personas de terceros.",
     "Una cifra o una afirmación solo se usa si figura en la página del producto o la dio el cliente.",
-    "El golpe dura 1 segundo. Lo siguen tres tomas de menos de 1 segundo. Todo sale de UN clip de 8 s en cuatro momentos."
+    "El golpe dura 1 segundo. Lo siguen tres tomas de menos de 1 segundo. Todo sale de UN clip de 8 s en cuatro momentos.",
+    "El producto real se ve desde el primer cuadro del golpe, haciendo algo. [observado: 30 de 36]",
+    "La primera palabra de la voz y el primer texto entran con el primer cuadro; la única excepción es «Sonido que se siente». [observado: voz antes de 0,5 s en 32 de 33; texto en los 3 primeros segundos en 30 de 36]",
+    "Las tres tomas cortas que siguen al golpe muestran la MISMA acción desde otro ángulo o más cerca, no imágenes sin relación. [lectura de la muestra: en los anuncios que no cortan, la acción avanza sin romperse]",
+    "El texto del gancho en pantalla sigue en 5 palabras o menos; la frase dicha puede terminar hasta el segundo 5, ya sobre la primera toma del cuerpo. [observado: la primera frase termina entre 3,5 y 6,5 s en 21 de 36]"
   ],
+  "observacion": {
+    "fecha": "2026-10-13",
+    "muestra": 36,
+    "senal": "longevidad (48 a 615 días activos) y repetición del creativo; no hay datos de ventas",
+    "sinGanchoDelBanco": 18,
+    "noAdoptado": "Entre 18 y 21 de 36 no hacen ningún corte en los 3 primeros segundos. Contradice la apertura en tomas cortas y NO se adopta; queda anotado para decisión del dueño."
+  },
   "ganchos": [
     {
       "id": "pov-situacion",
@@ -42,7 +54,13 @@
         "móvil",
         "celular"
       ],
-      "transicion": "flash"
+      "transicion": "flash",
+      "observado": {
+        "veces": 2,
+        "de": 36,
+        "nota": "El dolor se ve en el primer cuadro (una vez marcado con un resplandor sobre la zona, otra con el síntoma en un animal). Ninguno fue en primera persona estricta."
+      },
+      "ajuste": "Variante vista: el dolor se señala con un gráfico simple sobre la zona (resplandor, círculo) en vez de dramatizarlo con la cara."
     },
     {
       "id": "cambio-de-mundo",
@@ -67,7 +85,13 @@
         "tinte",
         "pantalla"
       ],
-      "transicion": "flash"
+      "transicion": "flash",
+      "observado": {
+        "veces": 1,
+        "de": 36,
+        "nota": "Una escena que cambia de luz y color al encender el producto."
+      },
+      "ajuste": ""
     },
     {
       "id": "objeto-cae",
@@ -89,7 +113,13 @@
         "herramienta",
         "accesorio"
       ],
-      "transicion": "zoom"
+      "transicion": "zoom",
+      "observado": {
+        "veces": 0,
+        "de": 36,
+        "nota": "No visto en la muestra. Se conserva: es parte de la apertura que definió el dueño."
+      },
+      "ajuste": ""
     },
     {
       "id": "mano-atrapa",
@@ -109,7 +139,13 @@
         "gym",
         "viaje"
       ],
-      "transicion": "zoom"
+      "transicion": "zoom",
+      "observado": {
+        "veces": 0,
+        "de": 36,
+        "nota": "No visto en la muestra. Se conserva: es parte de la apertura que definió el dueño."
+      },
+      "ajuste": ""
     },
     {
       "id": "pantalla-partida",
@@ -132,7 +168,13 @@
         "sueño",
         "ojeras"
       ],
-      "transicion": "barrido"
+      "transicion": "barrido",
+      "observado": {
+        "veces": 3,
+        "de": 36,
+        "nota": "Las 3 veces fue un antes y después SEGUIDO en la misma toma o en dos tomas, no una pantalla partida literal."
+      },
+      "ajuste": "Variante vista: antes y después seguidos (primero el problema 1 s, luego el producto en el mismo encuadre), cuando la pantalla partida no se entiende en medio segundo."
     },
     {
       "id": "destape",
@@ -152,7 +194,13 @@
         "sorpresa",
         "combo"
       ],
-      "transicion": "deslizar"
+      "transicion": "deslizar",
+      "observado": {
+        "veces": 3,
+        "de": 36,
+        "nota": "Abrir la caja o sacar el producto del empaque con las manos, ya en el primer cuadro."
+      },
+      "ajuste": "Lo visto: el destape no se queda en el empaque; a los 2–3 s el producto ya está funcionando."
     },
     {
       "id": "tapado-de-camara",
@@ -173,7 +221,13 @@
         "maquillaje",
         "puesto"
       ],
-      "transicion": "glitch"
+      "transicion": "glitch",
+      "observado": {
+        "veces": 0,
+        "de": 36,
+        "nota": "No visto en la muestra. Se conserva: es parte de la apertura que definió el dueño."
+      },
+      "ajuste": ""
     },
     {
       "id": "asmr-fuerte",
@@ -195,7 +249,13 @@
         "cierre",
         "masaje"
       ],
-      "transicion": "corte"
+      "transicion": "corte",
+      "observado": {
+        "veces": 1,
+        "de": 36,
+        "nota": "El producto sonando (un juguete que habla) antes de que entre la voz."
+      },
+      "ajuste": ""
     },
     {
       "id": "texto-contradice",
@@ -216,7 +276,13 @@
         "nunca",
         "dieta"
       ],
-      "transicion": "glitch"
+      "transicion": "glitch",
+      "observado": {
+        "veces": 2,
+        "de": 36,
+        "nota": "Las 2 veces como «duda de lo que se dice de este producto y lo comprueba»: persona con el producto en la mano y la advertencia escrita arriba."
+      },
+      "ajuste": "Variante vista («lo probé por ti»): el texto pone en duda lo que se promete de este TIPO de producto y la demostración responde. Sin nombrar a nadie."
     },
     {
       "id": "cifra-real",
@@ -237,7 +303,13 @@
         "comprobado",
         "clínicamente"
       ],
-      "transicion": "zoom"
+      "transicion": "zoom",
+      "observado": {
+        "veces": 3,
+        "de": 36,
+        "nota": "Un plazo, una cantidad o una comparación de precio dicha en la primera frase y escrita arriba. Nunca la cifra sola a pantalla completa."
+      },
+      "ajuste": "Lo visto: la cifra va escrita arriba mientras el producto ya se está usando debajo."
     },
     {
       "id": "reaccion",
@@ -256,7 +328,13 @@
         "sorpresa",
         "recomiendo"
       ],
-      "transicion": "zoom"
+      "transicion": "zoom",
+      "observado": {
+        "veces": 2,
+        "de": 36,
+        "nota": "La reacción de quien lo usa (una persona, un bebé) con el producto en cuadro."
+      },
+      "ajuste": ""
     },
     {
       "id": "pregunta-tres-palabras",
@@ -274,7 +352,107 @@
         "salud",
         "servicio"
       ],
-      "transicion": "fundido"
+      "transicion": "fundido",
+      "observado": {
+        "veces": 3,
+        "de": 36,
+        "nota": "Ninguna pregunta fue de 3 palabras: tuvieron de 4 a 15. La pregunta se dice entera y en pantalla va resumida."
+      },
+      "ajuste": "Lo visto: la voz puede decir la pregunta larga; el texto en pantalla sigue corto (hasta 5 palabras)."
+    },
+    {
+      "id": "ya-en-marcha",
+      "nombre": "Ya en marcha",
+      "cuando": "El producto se entiende viéndolo trabajar: herramientas y aparatos, prendas puestas, limpieza y orden, cuidado del pelo y la piel, productos para mascotas o niños.",
+      "como": "El video abre a mitad del gesto, con el producto ya funcionando. Sin presentación, sin producto quieto y sin persona saludando.",
+      "promptImagen": "Primer plano de {producto} ya en pleno uso sobre lo que resuelve ({dolor}), a mitad del gesto, con las manos o el cuerpo en movimiento y el efecto del producto visible en la misma imagen. Luz natural de casa.",
+      "promptClip": "0–1 s GOLPE: {producto} ya en acción a mitad del gesto, con el cambio que produce a la vista; 2–3 s el mismo gesto desde otro ángulo, más cerca; 4–5 s primerísimo plano del detalle de {producto} que hace el trabajo; 6–7 s el resultado terminado, plano abierto.",
+      "frase": "Mira cómo lo hace",
+      "riesgos": "El efecto mostrado debe ser el real del producto. Si el gesto no se entiende en medio segundo, usar otro gancho.",
+      "palabras": [
+        "cepillo",
+        "faja",
+        "aspiradora",
+        "limpia",
+        "limpieza",
+        "plancha",
+        "masajeador",
+        "organizador",
+        "arnés",
+        "juguete",
+        "herramienta",
+        "puesto",
+        "alisa",
+        "corrector"
+      ],
+      "transicion": "corte",
+      "observado": {
+        "veces": 15,
+        "de": 36,
+        "nota": "La apertura más repetida de la muestra. En 30 de 36 el producto está en el primer cuadro."
+      },
+      "ajuste": ""
+    },
+    {
+      "id": "prueba-rara",
+      "nombre": "Prueba rara",
+      "cuando": "El producto supera una prueba física que se entiende sin palabras: amortigua, succiona, sujeta, resiste, absorbe, no deja marca.",
+      "como": "Un experimento casero que no se espera, en el primer cuadro: el producto frente a algo que no debería aguantar, o al lado de la alternativa de siempre.",
+      "promptImagen": "Plano cercano de una prueba casera a punto de ocurrir: {producto} sobre una mesa junto a la alternativa de siempre, y una mano a punto de someterlos a la misma prueba que delata el problema ({dolor}).",
+      "promptClip": "0–1 s GOLPE: la prueba ocurre de golpe sobre la alternativa de siempre y falla a la vista; 2–3 s la misma prueba sobre {producto}, que la supera; 4–5 s primerísimo plano de {producto} intacto; 6–7 s {producto} en su uso normal, plano medio.",
+      "frase": "¿Funcionará?",
+      "riesgos": "Solo pruebas que el producto real supera de verdad y que el cliente confirma. La alternativa es genérica: sin marcas ni logos de terceros. Nada peligroso.",
+      "palabras": [
+        "amortigua",
+        "resiste",
+        "succión",
+        "potencia",
+        "absorbe",
+        "aguanta",
+        "impermeable",
+        "antideslizante",
+        "plantilla",
+        "almohada",
+        "paño",
+        "soporta"
+      ],
+      "transicion": "zoom",
+      "observado": {
+        "veces": 4,
+        "de": 36,
+        "nota": "Experimento o acción inesperada en el primer cuadro; en 2 de los 4, comparando con la alternativa."
+      },
+      "ajuste": ""
+    },
+    {
+      "id": "responde-comentario",
+      "nombre": "Responde a un comentario",
+      "cuando": "Hay una objeción real y repetida (talla, precio, «¿y en mi caso?») que el cliente entregó o que figura en sus reseñas.",
+      "como": "La objeción aparece escrita arriba en un recuadro sencillo y la persona, o el producto en uso, la responde en el mismo cuadro.",
+      "promptImagen": "Persona real y natural mirando a cámara en su casa con {producto} en la mano, a punto de responder una duda sobre {dolor}. Tercio superior del encuadre limpio para un recuadro de texto.",
+      "promptClip": "0–1 s GOLPE: la persona levanta {producto} hacia la cámara con gesto de «te lo enseño»; 2–3 s {producto} en uso respondiendo la duda, otro ángulo; 4–5 s primerísimo plano del detalle que la resuelve; 6–7 s la persona asiente a cámara con {producto} visible.",
+      "frase": "¿Y si no sirve?",
+      "riesgos": "La objeción tiene que ser real: dada por el cliente o tomada de sus reseñas. Sin nombres ni fotos de personas, y con un recuadro propio que no imite la interfaz de ninguna red.",
+      "palabras": [
+        "talla",
+        "duda",
+        "caro",
+        "precio",
+        "reseña",
+        "opiniones",
+        "pregunta",
+        "sirve",
+        "funciona",
+        "copa",
+        "tono"
+      ],
+      "transicion": "corte",
+      "observado": {
+        "veces": 3,
+        "de": 36,
+        "nota": "Las 3 veces la objeción era de talla, de tono o de precio, y la respuesta ocupaba todo el video."
+      },
+      "ajuste": ""
     }
   ]
 }
