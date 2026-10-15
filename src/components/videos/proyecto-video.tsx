@@ -18,6 +18,7 @@ import {
   guardarEdicion,
   cambiarGancho,
   revisarCoherenciaPlan,
+  reabrirIntentosProyecto,
   crearVariaciones,
   seguirProyecto,
   consultarProyecto,
@@ -380,6 +381,16 @@ export function ProyectoVideoPanel({ paso, onPaso, guardado, activo, puedeAproba
               <Button size="sm" onClick={() => setRevision({ tipo: "clip", n: primeraPorAprobar("clip") ?? 1 })}>
                 <Check /> Revisar
               </Button>
+            ) : auto.parada.codigo === "tope-intentos" ? (
+              esCeo ? (
+                <Button size="sm" disabled={ocupado} onClick={async () => {
+                  if (await confirmar("Las piezas que llegaron al tope vuelven a tener intentos y el proyecto sigue solo. Cada intento nuevo cuesta.", { titulo: "¿Reabrir los intentos?", si: "Sí, reabrir" })) void correr("reabrir", () => reabrirIntentosProyecto(id));
+                }}>
+                  <RotateCcw /> {accion === "reabrir" ? "Reabriendo…" : "Reabrir intentos"}
+                </Button>
+              ) : (
+                <span className="text-sm text-muted-foreground">Solo el CEO puede reabrir los intentos.</span>
+              )
             ) : (
               <Button size="sm" disabled={ocupado} onClick={() => void correr("seguir", () => seguirProyecto(id))}>
                 <Play /> {accion === "seguir" ? "Siguiendo…" : "Seguir"}

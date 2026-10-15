@@ -210,7 +210,11 @@ export type NotaCriterio = "ok" | "duda" | "mal" | "no-aplica";
 export type RevisionIA = { veredicto: Veredicto; motivo: string; criterios: Partial<Record<Criterio | CriterioClip, NotaCriterio>>; fecha: string };
 
 /** Por qué se detuvo el modo directo. Cada una dice qué falta y se resuelve con un botón. */
-export const CODIGOS_PARADA = ["imagen-dudosa", "revisar-clips", "tope-intentos", "tope-diario", "tope-gasto", "servidor", "fallo", "datos"] as const;
+export const CODIGOS_PARADA = ["imagen-dudosa", "revisar-clips", "tope-intentos", "tope-diario", "tope-gasto", "servidor", "fallo", "datos", "saldo"] as const;
+
+/** El proveedor no generó por falta de saldo o de cuota (Kie 402, «insufficient», «balance», «quota»). No es culpa de la pieza: no cuenta como intento. */
+export const esFalloDeSaldo = (texto: string) => /\b402\b|insufficient|sin saldo|\bbalance\b|quota|cuota|cr[eé]ditos? insuficientes/i.test(texto);
+export const TEXTO_SIN_SALDO = "Kie sin saldo: recarga y pulsa «Seguir». Lo que falló por falta de saldo no gastó intentos y se vuelve a pedir.";
 export type CodigoParada = (typeof CODIGOS_PARADA)[number];
 export type Parada = { codigo: CodigoParada; texto: string; fecha: string };
 
@@ -1093,6 +1097,14 @@ export function plegarTrabajos(original: ProyectoVideo, trabajos: TrabajoVideo[]
   };
   let guardar = false;
   let finalNuevo: string | null = null;
+  // Sin saldo en el proveedor: el intento no cuenta y el modo automático se detiene (no reintenta solo).
+  const sinSaldo = (pieza: Pieza) => {
+    pieza.intentos = Math.max(0, pieza.intentos - 1);
+    if (p.auto.parada?.codigo !== "saldo") {
+      p.auto = { ...p.auto, parada: { codigo: "saldo", texto: TEXTO_SIN_SALDO, fecha: new Date().toISOString() } };
+      anotar(p, "Modo directo detenido: el proveedor no tiene saldo. Los intentos fallidos por saldo no cuentan.");
+    }
+  };
   for (const t of [...trabajos].sort((a, b) => a.id.localeCompare(b.id))) {
     if (!t.etapa) continue;
     if (t.etapa === "armado") {
@@ -1137,10 +1149,12 @@ export function plegarTrabajos(original: ProyectoVideo, trabajos: TrabajoVideo[]
           pieza.estado = "fallo";
           pieza.nota = rep.error.slice(0, 600);
           anotar(p, `Escena ${e.n}: falló ${campo === "imagen" ? "la imagen" : "el clip"}: ${pieza.nota}`, rep.fecha || undefined);
+          if (esFalloDeSaldo(rep.error)) sinSaldo(pieza);
           guardar = true;
         } else if (TERMINADO(t)) {
           pieza.estado = "fallo";
           pieza.nota = (t.estado === "fallo" ? t.motivo || "El servidor no pudo con este trabajo." : "El servidor terminó sin entregar esta escena.").slice(0, 600);
+          if (t.estado === "fallo" && esFalloDeSaldo(t.motivo)) sinSaldo(pieza);
           guardar = true;
         } else if (TOMADO(t)) pieza.estado = "generando";
       }

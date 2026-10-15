@@ -69,6 +69,7 @@ import { ConvertirEnProyecto } from "./proyecto-video";
 import { ClonarAnuncio } from "./clonar-anuncio";
 import { CAMBIOS_VACIOS } from "@/lib/clonacion-video";
 import { EstudioVideo } from "./estudio-video";
+import { GaleriaFormatos } from "./galeria-formatos";
 import { useConfirmar } from "./progreso-video";
 import { ListaProyectos } from "./proyectos-lista";
 import { AprendizajesVideos } from "./aprendizajes";
@@ -571,6 +572,24 @@ export function CrearVideo(props: Props) {
     setDatos((d) => ({ ...d, referencias: d.referencias.map((r, j) => (j === i ? { ...r, ...cambio } : r)) }));
   }
 
+  /** Cambiar de formato con un guion ya escrito: se avisa que el guion y el plan se reescriben (las fotos y la investigación se quedan). */
+  async function elegirFormato(slug: string) {
+    if (slug === datos.formato) return;
+    const nuevo = formatos.find((f) => f.slug === slug);
+    const conPlan = !!vigenteActual?.proyecto;
+    if (guion.trim() && datos.formato) {
+      const si = await confirmar(
+        `Al pasar a «${nuevo?.nombre ?? slug}», ${conPlan ? "el guion y el plan de escenas se reescriben" : "el guion se reescribe"} con «Generar todo». Las fotos del producto y la investigación se conservan.`,
+        { titulo: "¿Cambiar de formato?", si: "Sí, cambiar" },
+      );
+      if (!si) return;
+      set("formato", slug);
+      toast.info(`Formato: ${nuevo?.nombre ?? slug}. Pulsa «Generar todo» para reescribir el guion${conPlan ? " y el plan" : ""}.`, { duration: 8000 });
+      return;
+    }
+    set("formato", slug);
+  }
+
   async function confirmarReemplazo() {
     return !guion.trim() || (await confirmar("Ya hay un guion escrito. Se reemplaza por una versión nueva.", { titulo: "¿Reemplazar el guion?", si: "Sí, reemplazar" }));
   }
@@ -947,25 +966,23 @@ export function CrearVideo(props: Props) {
           )}
 
           <div className="flex flex-col gap-2">
-            <span className={ETIQUETA}>
-              {datos.formatosRecomendados.length ? "Formatos recomendados para este producto" : "Formato"}
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {(datos.formatosRecomendados.length ? datos.formatosRecomendados : formato ? [formato.slug] : [])
-                .map((slug) => formatos.find((f) => f.slug === slug))
-                .filter((f): f is FormatoTarjeta => !!f)
-                .map((f) => (
-                  <Button key={f.slug} variant={f.slug === datos.formato ? "default" : "outline"} onClick={() => set("formato", f.slug)}>
-                    {f.nombre}
-                  </Button>
-                ))}
-              {!formato && !datos.formatosRecomendados.length && (
-                <span className="text-xs text-muted-foreground">Investiga para ver recomendaciones, o elige cualquiera en el paso 01.</span>
-              )}
-              {formato && !datos.formatosRecomendados.includes(formato.slug) && datos.formatosRecomendados.length > 0 && (
-                <Chip>Elegido a mano: {formato.nombre}</Chip>
-              )}
-            </div>
+            <GaleriaFormatos
+              formatos={formatos}
+              elegido={datos.formato}
+              recomendados={datos.formatosRecomendados}
+              porque={(slug) => porqueDeFormato(datos.analisisProducto, slug)}
+              titulo={modo === "clonar" ? "Formato de destino (opcional)" : "Formato del video"}
+              ayuda={
+                modo === "clonar"
+                  ? "Si quieres, el clon puede salir en otro formato con la misma estructura. Si no eliges, se usa el más cercano al anuncio."
+                  : datos.formatosRecomendados.length
+                    ? "La investigación marcó los recomendados; puedes elegir cualquiera. Todos venden: gancho, dolor, el producto real resolviendo, prueba y cierre con llamado."
+                    : "Elige uno, o investiga primero para ver cuáles le van mejor a este producto."
+              }
+              disabled={!!ocupado}
+              onElegir={(slug) => void elegirFormato(slug)}
+            />
+            {formato && !datos.formatosRecomendados.includes(formato.slug) && datos.formatosRecomendados.length > 0 && <Chip>Elegido a mano: {formato.nombre}</Chip>}
             {formato && porqueDeFormato(datos.analisisProducto, formato.slug) && (
               <p className="text-xs leading-relaxed text-muted-foreground" data-porque-formato>
                 <strong className="font-medium text-foreground">Por qué {formato.nombre}:</strong> {porqueDeFormato(datos.analisisProducto, formato.slug)}

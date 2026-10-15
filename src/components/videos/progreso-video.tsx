@@ -76,7 +76,8 @@ export function useConfirmar(): [(texto: string, opciones?: { titulo?: string; s
     setPregunta(null);
   };
   const nodo = pregunta ? (
-    <Dialog open onOpenChange={(abierto) => !abierto && cerrar(false)}>
+    // Al pulsar «Sí», el diálogo también avisa que se cierra: se deja ganar al botón (el «no» espera un instante).
+    <Dialog open onOpenChange={(abierto) => !abierto && window.setTimeout(() => cerrar(false), 0)}>
       <DialogContent className="sm:max-w-md" data-confirmar>
         <DialogHeader className="pr-8">
           <DialogTitle>{pregunta.titulo}</DialogTitle>

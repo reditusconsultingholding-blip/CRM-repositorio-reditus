@@ -17,6 +17,7 @@ import {
   MAX_FOTOS_PROYECTO,
   TONOS_MUSICA,
   COLOR_HEX,
+  esFalloDeSaldo,
   leerEdicion,
   anotar,
   leerVoz,
@@ -493,6 +494,36 @@ export async function reabrirIntentos(id: string, n: number, tipo: TipoPieza): P
   });
 }
 
+/**
+ * «Reabrir intentos» (CEO), desde la parada de tope: todas las piezas que llegaron al tope sin quedar
+ * listas vuelven a 0 intentos y el proyecto sigue solo. Cada nuevo intento cuesta.
+ */
+export async function reabrirIntentosProyecto(id: string): Promise<EstadoProyecto | { error: string }> {
+  return bajoCandado(id, async () => {
+    const x = await abrirProyecto(id);
+    if ("error" in x) return x;
+    if (x.profile.role !== "ceo") return { error: "Solo el CEO puede reabrir los intentos." };
+    const { p } = x;
+    const reabiertas: string[] = [];
+    p.escenas = p.escenas.map((e) => {
+      if (e.tipo !== "generada") return e;
+      const y = { ...e };
+      for (const campo of ["imagen", "clip"] as const) {
+        const pieza = y[campo];
+        if (pieza.intentos >= p.topeIntentos && pieza.estado !== "aprobada" && pieza.estado !== "por-aprobar" && !piezaEnCurso(pieza)) {
+          y[campo] = { ...pieza, intentos: 0, autoRegenerada: false };
+          reabiertas.push(`${campo === "imagen" ? "imagen" : "clip"} de la escena ${e.n}`);
+        }
+      }
+      return y;
+    });
+    if (!reabiertas.length) return { ...estado(x), aviso: "Ninguna pieza está en el tope de intentos." };
+    anotar(p, `Intentos reabiertos por ${x.profile.name}: ${reabiertas.join(", ")}.`);
+    p.auto = { ...p.auto, activo: true, parada: null };
+    return guardar(x, p, `Intentos reabiertos (${reabiertas.length}). El proyecto sigue solo; cada intento nuevo cuesta.`);
+  });
+}
+
 // ----------------------------------------------------------- corregir ----
 
 /**
@@ -614,6 +645,8 @@ export async function seguirProyecto(id: string): Promise<EstadoProyecto | { err
     if ("error" in x) return x;
     const { p } = x;
     if (p.final.estado === "fallo") p.final = { ...p.final, estado: "pendiente" };
+    // Las piezas que fallaron por falta de saldo se vuelven a pedir: su intento no cuenta.
+    for (const e of p.escenas) for (const campo of ["imagen", "clip"] as const) if (e[campo].estado === "fallo" && esFalloDeSaldo(e[campo].nota) && e[campo].intentos >= p.topeIntentos) e[campo] = { ...e[campo], intentos: p.topeIntentos - 1 };
     p.auto = { ...p.auto, activo: true, parada: null };
     const r = await guardar(x, p);
     if ("error" in r) return r;
